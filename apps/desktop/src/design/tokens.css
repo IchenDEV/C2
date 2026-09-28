@@ -305,6 +305,10 @@
   --ds-focus-offset: var(--ds-foundation-space-2);
   --ds-elevation-surface: none;
   --ds-elevation-raised: 0 2px 8px rgb(16 24 40 / 4%);
+  --ds-composer-elevation:
+    0 0 0 0.5px
+      color-mix(in oklch, var(--ds-color-text) 12%, var(--ds-color-canvas)),
+    0 8px 24px rgb(16 24 40 / 10%), 0 2px 6px rgb(16 24 40 / 4%);
   --ds-elevation-modal: 0 12px 36px rgb(16 24 40 / 12%);
 
   /* Shared material for menu-like transient layers. It remains mostly opaque so text contrast is
@@ -399,6 +403,10 @@
   --ds-color-chart-6: var(--ds-foundation-light-chart-6);
   --ds-elevation-surface: none;
   --ds-elevation-raised: 0 2px 8px rgb(16 24 40 / 4%);
+  --ds-composer-elevation:
+    0 0 0 0.5px
+      color-mix(in oklch, var(--ds-color-text) 12%, var(--ds-color-canvas)),
+    0 8px 24px rgb(16 24 40 / 10%), 0 2px 6px rgb(16 24 40 / 4%);
   --ds-elevation-modal: 0 12px 36px rgb(16 24 40 / 12%);
   --ds-material-raised-background: color-mix(
     in oklch,
@@ -468,6 +476,10 @@
   --ds-color-chart-6: var(--ds-foundation-dark-chart-6);
   --ds-elevation-surface: none;
   --ds-elevation-raised: 0 2px 8px rgb(0 0 0 / 12%);
+  --ds-composer-elevation:
+    0 0 0 0.5px
+      color-mix(in oklch, var(--ds-color-text) 16%, var(--ds-color-canvas)),
+    0 8px 24px rgb(0 0 0 / 28%), 0 2px 6px rgb(0 0 0 / 12%);
   --ds-elevation-modal: 0 16px 40px rgb(0 0 0 / 28%);
   --ds-material-raised-background: color-mix(
     in oklch,

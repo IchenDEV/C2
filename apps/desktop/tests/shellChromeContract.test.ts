@@ -99,12 +99,12 @@ describe("shell chrome contract", () => {
   });
 
   test("keeps one composer control row with the session chips in it", () => {
-    const spacer = composer.indexOf('<div className="flex-1" />');
+    const spacer = composer.indexOf("data-composer-actions");
     const chips = composer.indexOf("<SessionControls");
     expect(chips).toBeGreaterThan(-1);
     expect(chips).toBeLessThan(spacer);
     expect(composer).toContain(
-      '"flex min-w-0 items-center gap-0.5",\n                docMode'
+      '"flex min-w-0 flex-wrap items-end gap-1",\n                docMode'
     );
     expect(composer).not.toContain('"flex flex-col gap-1"');
     expect(composer.match(/<SessionControls/gu)).toHaveLength(1);

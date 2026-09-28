@@ -319,6 +319,10 @@ size.
 
 Workspace window chrome uses a 32px drag strip and scoped 40px workspace pane headers. Right-panel tabs and its close control share the window strip through the shell titlebar host, track the dock width, and leave no inner dock header. The focused task title reuses the existing title projection in the window strip; feature pages leave that title empty. Search and the sidebar toggle live in the window strip, aligned with the expanded sidebar and reserving at least 96px before controls for native window buttons. The task list has no duplicate header or product wordmark. Below 48rem, toolbar actions retain accessible names while dropping visible labels; the selected dock tab keeps its label even when inactive tabs become icons. Settings and Scene Studio retain their own header geometry.
 
+Left workspace controls, icon navigation and task sidebar share the session toolbar’s muted foreground for labels and icons. Hover and selected rows use neutral fills, selection markers and visible keyboard focus; status badges retain semantic colors.
+
+Neutral composer configuration, action and checkout controls use the same muted foreground, including hover/open states. Warning chips, voice recording and the filled submit action retain their semantic colors.
+
 Session titlebar tools form one quiet monochrome toolbar. Icons and labels keep the muted foreground
 across rest, hover, open, and pressed states; hover may add a neutral surface and keyboard focus
 adds the standard ring. A real open or pressed state may use only a neutral fill. Titlebar actions
@@ -336,17 +340,19 @@ Elevation communicates a real layer and never changes on hover:
 | role | use |
 | --- | --- |
 | `elevation-surface` | no shadow; compatibility role for cards, inputs, and persistent panels |
-| `elevation-raised` | 0 2px 8px, 4% light / 12% dark; one restrained short shadow for menu, popover, tooltip, floating main workspace, composer and right tool panel |
+| `elevation-raised` | 0 2px 8px, 4% light / 12% dark; one restrained short shadow for menu, popover, tooltip, floating main workspace and right tool panel |
+| `composer-elevation` | constant 0.5px neutral edge plus 0 8px 24px and 0 2px 6px shadows; compact composer and document toolbar only |
 | `elevation-modal` | one restrained wider shadow for dialog, blocking overlay |
 
-Persistent titlebars, sidebars, cards, inputs, and panels are flat by default. The workspace composer (including its document-mode control bar) and right tool panel are explicit floating surfaces: use the existing raised background and elevation, constant across focus and hover. The right panel uses the shared raised Card with an 8px outer gutter included in its reserved width; closing it leaves no gutter. The main workspace shares its 16px rounded, clipped boundary and 8px inset, using the same raised shadow as the right panel and composer. Keep its reading background unchanged. Other surfaces use tonal planes, spacing,
+Persistent titlebars, sidebars, cards, inputs, and panels are flat by default. The workspace composer (including its document-mode control bar) and right tool panel are explicit floating surfaces. The composer uses the canvas surface in light mode (white in the default palette), the raised surface in dark mode, and its own composer elevation token for a 0.5px neutral edge plus fixed soft shadow. The right tool panel uses the existing raised background and elevation. Both remain constant across focus and hover. The right panel uses the shared raised Card with an 8px outer gutter included in its reserved width; closing it leaves no gutter. The main workspace shares its 16px rounded, clipped boundary and 8px inset, using the same raised shadow as the right panel. Keep its reading background unchanged. Other surfaces use tonal planes, spacing,
 and contextual structural separators. Settings pages separate major groups with page-section spacing. Related rows share one tonal module
 with internal hairlines; they do not become a stack of individually elevated cards. Choice tiles
 such as appearance schemes and themes use tonal hover and a semantic selected ring without surface
 elevation. Popovers and dialogs retain only the restrained elevation assigned to their real layer.
 
-Static borders and decorative rings are forbidden. The complete whitelist is:
+Static borders and decorative rings are forbidden outside the following whitelist:
 
+- the composer’s constant 0.5px neutral edge, explicitly requested with its white surface (the composer elevation token also owns its fixed soft shadow);
 - neutral keyboard focus;
 - error or warning status;
 - table, diff, code, or document content structure;

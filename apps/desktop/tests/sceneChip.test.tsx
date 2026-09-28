@@ -281,7 +281,7 @@ describe("SceneChip", () => {
       row?.querySelector('button[title="Reasoning"]')?.textContent
     ).toContain("Extra High Effort");
     expect(row?.querySelector('input[type="range"]')).toBeNull();
-    expect(row?.textContent).not.toContain("Ask first");
+    expect(row?.textContent).toContain("Ask first");
     expect(row?.textContent).not.toContain("Memory on");
     expect(row?.textContent).not.toContain("No worktree");
 
@@ -374,9 +374,14 @@ describe("SceneChip", () => {
     expect(picker?.querySelector("[data-provider-rail]")).toBeNull();
     const providerSwitcher = picker?.querySelector("[data-provider-switcher]");
     expect(providerSwitcher).toBeTruthy();
-    expect(providerSwitcher?.textContent).toContain("Codex");
+    expect(
+      providerSwitcher?.querySelector('button[aria-label="Codex"]')
+    ).toBeTruthy();
+    expect(providerSwitcher?.getAttribute("aria-orientation")).toBe("vertical");
     expect(providerSwitcher?.textContent).not.toContain("OpenAI Codex");
-    expect(providerSwitcher?.textContent).toContain("Grok");
+    expect(
+      providerSwitcher?.querySelector('button[aria-label="Grok"]')
+    ).toBeTruthy();
     expect(
       picker?.querySelector('input[aria-label="Search models"]')
     ).toBeTruthy();
@@ -641,7 +646,7 @@ describe("SceneChip", () => {
     );
 
     expect(rendered.container.textContent).not.toContain("Develop");
-    expect(rendered.container.textContent).not.toContain("Ask first");
+    expect(rendered.container.textContent).toContain("Ask first");
 
     click(button(rendered.container, "Show session settings"));
     await flush();

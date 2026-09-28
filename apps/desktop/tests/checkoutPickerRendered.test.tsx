@@ -137,9 +137,9 @@ describe("CheckoutBar", () => {
       const checkoutBar = rendered.container.querySelector(
         "[data-checkout-bar]"
       );
-      expect(checkoutBar?.className).toContain("mx-2");
-      expect(checkoutBar?.className).toContain("mb-2");
-      expect(checkoutBar?.className).not.toContain("-mt-");
+      expect(checkoutBar?.className).toContain("mx-4");
+      expect(checkoutBar?.className).toContain("pt-5");
+      expect(checkoutBar?.className).toContain("-mt-4");
 
       const sourceControl = button(
         rendered.container,
