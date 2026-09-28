@@ -8,8 +8,8 @@ Make controls compact, reading comfortable, navigation identifiable and repeated
 
 ## Shape and hierarchy
 
-- Minimum control/menu-item radius: **12px**, explicitly confirmed by the user. Cards and dialogs: **16px**. Main composer: **24px**. Circular controls remain circular; small marks naturally clamp their radius.
-- Persistent content surfaces are flat. Menus and dialogs may use the shared elevation/material. Hover and press never translate, scale, glow or increase shadow.
+- Minimum control/menu-item radius: **12px**, explicitly confirmed by the user. Cards and dialogs: **16px**. Main composer: **24px**. Standalone icon-only buttons are fully circular at every size; text buttons keep the control radius. Responsive toolbar buttons become circular when their label is hidden; joined split-button segments retain their shared outline. Small marks naturally clamp their radius.
+- Persistent content surfaces are flat, except the floating main workspace, composer and right tool panel, which use the shared raised elevation. Menus and dialogs may use the shared elevation/material. Hover and press never translate, scale, glow or increase shadow.
 - Keep one primary action per local group. Use a neutral surface for ordinary controls and C2 blue for primary actions and links. Success, warning and destructive colors convey actual status.
 - Page title, explanatory copy, content and action appear in that order. Headings and actions use the same content alignment grid.
 
@@ -63,7 +63,30 @@ Use the existing 2/4/6/8/12/16/24/32px scale: icon/text 6–8px, related control
 - Compact composition remains a bounded input card. Expansion must reuse the same editor tree and preserve its draft.
 - Settings use a consistent 24px page inset, aligned trailing controls and section grouping. Narrow content columns stack controls below labels.
 - Session names lead the rail. Supporting text is bounded to one line; status, age and provider remain aligned. Routine row actions appear on hover/focus. External resource groups default collapsed only when no saved preference exists.
+- The Files surface shows document tabs only when documents are open or an editor needs a route back to the tree. Its search/action toolbar uses 32px controls with 8px padding and no extra folder-only navigation row.
 - File/diff/terminal panels retain task-appropriate density; shared chrome and controls follow this standard without constraining code to a prose column.
+
+## Workspace layout
+
+The main workspace has a 32px window drag strip with the focused task title above three independent regions: a persistent
+48px icon navigation, the resizable task sidebar, and the content workspace with its optional dock.
+The window strip owns search and the sidebar toggle; no product wordmark is displayed there or in the task list. The sidebar starts with new task and quick chat, followed by project/task organization. Global destinations
+and utilities remain reachable when the task list is collapsed. Narrow windows show the task list
+over the workspace below the window strip; dock width calculations reserve the icon navigation.
+Workspace pane headers share a 40px height. Right-panel tabs and the close control live in the global 32px window strip, aligned to the panel width, leaving no inner dock header. Both use a 28px control height with 2px vertical clearance. Toolbar labels collapse to named icons below 48rem so task titles remain readable; the selected tool tab retains its text at narrow widths. Native window controls retain their existing placement. Settings and Scene Studio retain their existing dedicated page layouts.
+
+New installations start in compact mode; saved document-mode preferences remain unchanged. The
+checkout context sits above the compact input. An empty compact workspace centers its greeting in the space above the bottom composer. The same
+composer/editor tree serves compact and document modes so layout changes preserve the draft. Short
+windows scroll without clipping the input; conversations retain their transcript scroll behavior.
+
+The workspace chrome stays quiet: toolbar actions use shared Ghost states, the composer keeps a
+constant low elevation when focused, and an unopened right panel offers a centered single-column
+list with descriptions available on hover or focus. Keep normal text contrast, persistent selected
+states and visible keyboard focus; muted styling does not mean dimming usable controls. Preserve
+the established shell regions and reserve decorative color for meaningful state. New-task panes omit a duplicate local title. Plugin actions above the composer or transcript are flat named Ghost controls with descriptions on hover or keyboard focus, rather than nested cards.
+
+The compact composer and document-mode control bar use a constant raised surface. The right tool panel floats within an 8px gutter using the shared raised Card, retaining resize and collapse behavior. Gutters are included in its reserved width and disappear when closed. The main workspace uses the same 16px rounded, clipped boundary and 8px outer inset. Adjacent workspace and dock surfaces share one 8px gap instead of summing their margins. Checkout context has an 8px inset within the input width; related plugin/context rows use 8px vertical spacing. The main workspace, right tool panel and composer share the same constant raised shadow token: 0 2px 8px, 4% opacity in light mode and 12% in dark mode. Sidebars retain flat elevation.
 
 ## Application rules
 

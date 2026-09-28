@@ -128,8 +128,9 @@ export function SessionHeaderActions({
         type="button"
         variant="ghost"
         size="compact"
-        className="session-header-action-main bg-fill-rest text-foreground hover:bg-fill-hover hover:text-foreground"
+        className="session-header-action-main"
         aria-label={t("header.addAction")}
+        title={t("header.addAction")}
         onClick={onAddAction}
       >
         <Plus
@@ -147,7 +148,7 @@ export function SessionHeaderActions({
           type="button"
           variant="ghost"
           size="compact"
-          className="session-header-action-main bg-fill-rest text-foreground hover:bg-fill-hover hover:text-foreground max-w-36"
+          className="session-header-action-main max-w-36"
           aria-label={action.name || action.id}
           title={action.kind === "prompt" ? action.prompt : action.command}
           onClick={() => onRunAction?.(action)}
@@ -216,8 +217,9 @@ export function SessionHeaderActions({
               type="button"
               variant="ghost"
               size="compact"
-              className="session-header-action-main bg-fill-rest text-foreground hover:bg-fill-hover hover:text-foreground"
+              className="session-header-action-main"
               aria-label={t("header.open")}
+              title={t("header.open")}
             >
               <Folder
                 className="session-header-action-icon text-muted-foreground size-4"
@@ -254,8 +256,7 @@ export function SessionHeaderActions({
         menuAlign="end"
         menuLabel={t("git.next.moreActions")}
         className="session-header-git-action"
-        primaryClassName="session-header-action-main bg-fill-rest text-foreground hover:bg-fill-hover hover:text-foreground disabled:opacity-60"
-        menuButtonClassName="bg-fill-rest text-muted-foreground hover:bg-fill-hover hover:text-muted-foreground disabled:opacity-60"
+        primaryClassName="session-header-action-main"
       />
     </div>
   );

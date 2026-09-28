@@ -226,6 +226,8 @@
   --ds-control-field: var(--ds-foundation-control-36);
   --ds-navigation-row-height: var(--ds-foundation-control-32);
   --ds-layout-titlebar-height: var(--ds-foundation-chrome-46);
+  --ds-workspace-windowbar-height: var(--ds-foundation-control-32);
+  --ds-workspace-header-height: var(--ds-foundation-chrome-40);
 
   /* Semantic motion. */
   --ds-motion-feedback: var(--ds-foundation-motion-120);
@@ -302,7 +304,7 @@
   --ds-focus-width: var(--ds-foundation-space-2);
   --ds-focus-offset: var(--ds-foundation-space-2);
   --ds-elevation-surface: none;
-  --ds-elevation-raised: 0 4px 12px rgb(16 24 40 / 8%);
+  --ds-elevation-raised: 0 2px 8px rgb(16 24 40 / 4%);
   --ds-elevation-modal: 0 12px 36px rgb(16 24 40 / 12%);
 
   /* Shared material for menu-like transient layers. It remains mostly opaque so text contrast is
@@ -396,7 +398,7 @@
   --ds-color-chart-5: var(--ds-foundation-light-chart-5);
   --ds-color-chart-6: var(--ds-foundation-light-chart-6);
   --ds-elevation-surface: none;
-  --ds-elevation-raised: 0 4px 12px rgb(16 24 40 / 8%);
+  --ds-elevation-raised: 0 2px 8px rgb(16 24 40 / 4%);
   --ds-elevation-modal: 0 12px 36px rgb(16 24 40 / 12%);
   --ds-material-raised-background: color-mix(
     in oklch,
@@ -465,7 +467,7 @@
   --ds-color-chart-5: var(--ds-foundation-dark-chart-5);
   --ds-color-chart-6: var(--ds-foundation-dark-chart-6);
   --ds-elevation-surface: none;
-  --ds-elevation-raised: 0 4px 14px rgb(0 0 0 / 22%);
+  --ds-elevation-raised: 0 2px 8px rgb(0 0 0 / 12%);
   --ds-elevation-modal: 0 16px 40px rgb(0 0 0 / 28%);
   --ds-material-raised-background: color-mix(
     in oklch,

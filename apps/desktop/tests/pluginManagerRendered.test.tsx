@@ -416,7 +416,8 @@ describe("PluginManagerPage", () => {
         ?.getAttribute("aria-label")
     ).toBe("Plugin actions");
     expect(view.container.textContent).toContain("Review workspace");
-    click(button(view.container, "Run"));
+    expect(view.container.textContent).not.toContain(contribution.description);
+    click(button(view.container, "Review Tools: Review workspace"));
     await flush();
     expect(invoked).toEqual([contribution]);
 
@@ -466,7 +467,7 @@ describe("PluginManagerPage", () => {
       const action =
         region.querySelector(
           `button[aria-label="Review Tools: Action ${order}"]`
-        ) ?? button(region, order === 3 ? "Run" : `Action ${order}`);
+        ) ?? button(region, `Action ${order}`);
       expect(action).not.toBeNull();
       if (slot === "session.header") {
         expect(action.dataset.variant).toBe("ghost");

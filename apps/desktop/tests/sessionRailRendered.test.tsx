@@ -102,12 +102,10 @@ function renderRail(overrides = {}) {
           deviceConnectionsOpen={false}
           onOpenDeviceConnections={() => {}}
           newHint="⌘N"
-          searchHint="⌘K"
-          onOpenSearch={() => {}}
+          onOpenTasks={() => {}}
           onOpenSettings={() => {}}
           collapsed={false}
           overlay={false}
-          onToggleCollapse={() => {}}
           width={320}
           onWidth={() => {}}
           taskBoardOpen={false}
@@ -568,49 +566,22 @@ describe("SessionRail row layout", () => {
     view.unmount();
   });
 
-  test("keeps collapse aligned in the title row and exposes search as a labeled launcher", () => {
-    activateDom();
-    const opened = [];
-    const view = renderRail({ onOpenSearch: () => opened.push("search") });
-    const header = view.container.querySelector("[data-rail-header]");
-    const collapse = header?.querySelector(
-      'button[aria-label="Collapse the sidebar"]'
-    );
-    const search = view.container.querySelector("[data-rail-search]");
-
-    expect(view.container.textContent).not.toContain("C2");
-    expect(search).toBeTruthy();
-    expect(header?.querySelector("[data-rail-search]")).toBeNull();
-    expect(collapse).toBeTruthy();
-    expect(collapse?.classList.contains("mr-2")).toBe(true);
-    expect(search?.textContent).toContain("Search chats");
-    expect(search?.querySelector("kbd")?.textContent).toBe("⌘K");
-
-    click(search);
-    expect(opened).toEqual(["search"]);
-
-    view.unmount();
-  });
-
-  test("lets the search launcher stretch between equal rail insets without overflowing", () => {
+  test("starts the task list without a duplicate window header", () => {
     activateDom();
     const view = renderRail();
-    const search = view.container.querySelector("[data-rail-search]");
-
-    expect(search?.classList.contains("mx-2")).toBe(true);
-    expect(search?.classList.contains("w-auto")).toBe(true);
-    expect(search?.classList.contains("w-full")).toBe(false);
-
+    expect(view.container.querySelector("[data-rail-header]")).toBeNull();
+    expect(view.container.textContent).not.toContain("CodeTwo");
+    expect(view.container.querySelector("[data-task-actions]")).not.toBeNull();
     view.unmount();
   });
 
-  test("groups primary features into Codex-aligned labeled navigation rows", () => {
+  test("keeps labeled global navigation and utilities outside the collapsed task list", () => {
     activateDom();
     const opened = [];
     const view = renderRail({
+      collapsed: true,
       taskBoardOpen: true,
-      automationsOpen: true,
-      onNew: () => opened.push("new"),
+      onOpenTasks: () => opened.push("chats"),
       onOpenPullRequests: () => opened.push("pull-requests"),
       onOpenTaskBoard: () => opened.push("tasks"),
       onOpenAutomations: () => opened.push("scheduled"),
@@ -618,77 +589,27 @@ describe("SessionRail row layout", () => {
       onOpenUsage: () => opened.push("usage"),
       onOpenSettings: () => opened.push("settings"),
     });
-    const features = view.container.querySelector("[data-rail-features]");
-    const rows = [
-      ...(features?.querySelectorAll(
-        ':scope > [data-rail-feature="new-task"] > button:first-child, :scope > [data-rail-feature]:not([data-rail-feature="new-task"]) > [data-slot="navigation-row"]'
-      ) ?? []),
-    ];
-    const sessionScroll = view.container.querySelector(
-      "[data-rail-session-scroll]"
-    );
-    const utilities = view.container.querySelector("[data-rail-utilities]");
-    const utilityButtons = [
-      ...(utilities?.querySelectorAll(
-        ':scope > [data-rail-feature] > [data-slot="rail-utility-button"]'
-      ) ?? []),
-    ];
-
-    expect(
-      rows.map((row) => {
-        const copy = row.cloneNode(true) as HTMLElement;
-        copy
-          .querySelectorAll('[role="progressbar"] [role="presentation"]')
-          .forEach((node) => node.remove());
-        return copy.textContent?.replaceAll(/\s+/g, " ").trim();
-      })
-    ).toEqual([
-      "New task",
+    const navigation = view.container.querySelector("[data-app-navigation]");
+    const sidebar = view.container.querySelector("aside");
+    expect(sidebar?.getAttribute("aria-hidden")).toBe("true");
+    expect(sidebar?.hasAttribute("inert")).toBe(true);
+    expect(sidebar?.contains(navigation)).toBe(false);
+    const buttons = [...navigation.querySelectorAll("button")];
+    expect(buttons.map((button) => button.getAttribute("aria-label"))).toEqual([
+      "Chats",
       "Pull requests",
       "Task board",
       "Scheduled tasks",
       "Plugins",
-    ]);
-    expect(
-      utilityButtons.map((button) => button.getAttribute("aria-label"))
-    ).toEqual([
       "Settings",
       "Codex · Weekly limit · 42% left · Open Usage settings",
     ]);
-    expect(utilities?.dataset.layout).toBe("icon-toolbar");
-    expect(sessionScroll?.nextElementSibling).toBe(utilities);
     expect(
-      features
-        ?.querySelector(
-          '[data-rail-feature="task-board"] [data-slot="navigation-row"]'
-        )
-        ?.getAttribute("aria-current")
-    ).toBe("page");
-    expect(
-      features
-        ?.querySelector(
-          '[data-rail-feature="scheduled-tasks"] [data-slot="navigation-row"]'
-        )
-        ?.getAttribute("aria-current")
-    ).toBe("page");
-    expect(
-      features
-        ?.querySelector(
-          '[data-rail-feature="task-board"] [data-slot="navigation-row-leading"]'
-        )
-        ?.getAttribute("class")
-    ).toContain("text-current");
-    expect(
-      features
-        ?.querySelector(
-          '[data-rail-feature="pull-requests"] [data-slot="navigation-row-leading"]'
-        )
-        ?.getAttribute("class")
-    ).toContain("text-muted-foreground");
-    expect(view.container.textContent).not.toContain("gpt-5.6-sol");
-    for (const row of [...rows, ...utilityButtons]) click(row);
+      buttons.filter((button) => button.getAttribute("aria-current") === "page")
+    ).toEqual([buttons[2]]);
+    for (const button of buttons) click(button);
     expect(opened).toEqual([
-      "new",
+      "chats",
       "pull-requests",
       "tasks",
       "scheduled",
@@ -697,31 +618,14 @@ describe("SessionRail row layout", () => {
       "usage",
     ]);
     expect(
-      features?.querySelector('[data-rail-feature="mission-control"]')
-    ).toBeNull();
-    const quotaButton = utilities?.querySelector(
-      '[data-rail-feature="usage"] [data-slot="rail-utility-button"]'
-    );
-    expect(quotaButton?.getAttribute("aria-label")).toBe(
-      "Codex · Weekly limit · 42% left · Open Usage settings"
-    );
-    expect(quotaButton?.querySelector('[role="progressbar"]')).toBeNull();
+      view.container.querySelector("[data-rail-utilities]")?.dataset.layout
+    ).toBe("icon-column");
     expect(
-      utilities?.querySelector(
-        '[data-rail-feature="usage"] [data-quota-provider]'
-      )?.dataset.quotaProvider
-    ).toBe("codex");
-    for (const row of rows.slice(1)) {
-      expect(row.dataset.slot).toBe("navigation-row");
-      expect(row.className).toContain("min-h-navigation-row");
-      expect(row.className).toContain("rounded-control");
-    }
-    for (const button of utilityButtons) {
-      expect(button.className).toContain("size-control");
-      expect(button.className).toContain("rounded-full");
-      expect(button.textContent?.trim()).toBe("");
-    }
-
+      sidebar?.querySelector('[data-rail-feature="new-task"]')
+    ).toBeTruthy();
+    expect(
+      navigation?.querySelector('[data-rail-feature="new-task"]')
+    ).toBeNull();
     view.unmount();
   });
 
@@ -1507,7 +1411,7 @@ describe("SessionRail empty projects", () => {
       },
     });
 
-    expect(view.container.textContent).toContain("No projects yet");
+    expect(view.container.textContent).not.toContain("No projects yet");
     const addButton = [...view.container.querySelectorAll("button")].find(
       (item) => item.textContent?.trim() === "Add a project…"
     );

@@ -34,6 +34,7 @@ function renderDock(
     <I18nProvider>
       <Dock
         open={open}
+        titlebarHost={null}
         tab={tab}
         availableSurfaces={availableSurfaces}
         onTab={onTab}
@@ -56,6 +57,60 @@ function renderDock(
 }
 
 describe("Dock plugin component gate", () => {
+  test("portals tab controls into the shell while retaining selection and close behavior", async () => {
+    activateDom();
+    const host = dom.document.createElement("div");
+    dom.document.body.append(host);
+    const selected = [];
+    let closed = 0;
+    const render = (open, tab) => (
+      <I18nProvider>
+        <Dock
+          open={open}
+          tab={tab}
+          titlebarHost={host}
+          width={440}
+          onWidth={() => {}}
+          availableSurfaces={["trajectory", "files"]}
+          onTab={(value) => selected.push(value)}
+          onClose={() => {
+            closed += 1;
+          }}
+          content={{
+            trajectory: <div>Timeline content</div>,
+            files: <div>File content</div>,
+          }}
+        />
+      </I18nProvider>
+    );
+    const view = mount(render(true, "trajectory"));
+    await flush();
+    expect(view.container.querySelector("[data-dock-titlebar]")).toBeNull();
+    expect(host.querySelectorAll('[role="tab"]')).toHaveLength(2);
+    const files = [...host.querySelectorAll('[role="tab"]')].find(
+      (tab) => tab.textContent === "Files"
+    );
+    click(files);
+    await flush();
+    expect(selected).toEqual(["files"]);
+    view.rerender(render(true, "files"));
+    await flush();
+    expect(files.getAttribute("aria-selected")).toBe("true");
+    expect(view.container.textContent).toContain("File content");
+    expect(host.textContent).not.toContain("File content");
+    click(button(host, "Close panel"));
+    expect(closed).toBe(1);
+    view.rerender(render(false, null));
+    await flush();
+    expect(host.querySelector("button")).toBeNull();
+    view.rerender(render(true, "home"));
+    await flush();
+    expect(host.querySelectorAll("button")).toHaveLength(1);
+    expect(view.container.textContent).toContain("Open a panel");
+    view.unmount();
+    host.remove();
+  });
+
   test("preserves the document measure after accounting for an inline rail", () => {
     expect(dockMaxWidth(1280, 288)).toBe(372);
     expect(dockMaxWidth(800)).toBe(300);
@@ -99,18 +154,22 @@ describe("Dock plugin component gate", () => {
     await flush();
 
     const cards = [
-      ...view.container.querySelectorAll(".dock-surface-grid > button"),
+      ...view.container.querySelectorAll(
+        '.dock-surface-list [data-slot="navigation-row"]'
+      ),
     ];
     expect(cards[2]?.textContent).toContain("Terminal");
-    expect(cards[3]?.getAttribute("aria-label")).toBe("Side chat");
-    expect(cards[6]?.getAttribute("aria-label")).toBe("PR");
-    expect(
-      cards.every((card) => card.classList.contains("dock-surface-card"))
-    ).toBe(true);
-    expect(cards.every((card) => card.classList.contains("bg-card"))).toBe(
+    expect(cards[3]?.textContent).toBe("Side chat");
+    expect(cards[6]?.textContent).toBe("PR");
+    expect(cards.every((card) => card.dataset.slot === "navigation-row")).toBe(
       true
     );
-    expect(cards.every((card) => card.classList.contains("p-3"))).toBe(true);
+    expect(cards.every((card) => !card.classList.contains("bg-card"))).toBe(
+      true
+    );
+    expect(
+      cards.every((card) => card.classList.contains("min-h-navigation-row"))
+    ).toBe(true);
     expect(
       cards.every((card) => !card.className.includes("ring-foreground"))
     ).toBe(true);
@@ -149,7 +208,10 @@ describe("Dock plugin component gate", () => {
     const panel = view.container.querySelector('[data-dock-placement="right"]');
     expect(panel).not.toBeNull();
     expect(panel?.classList.contains("dock-panel-side")).toBe(true);
-    expect(panel?.classList.contains("border-l")).toBe(true);
+    expect(panel?.classList.contains("border-l")).toBe(false);
+    const surface = panel?.querySelector('[data-slot="card"]');
+    expect(surface?.getAttribute("data-variant")).toBe("raised");
+    expect(surface?.classList.contains("m-2")).toBe(true);
     expect(panel?.getAttribute("style")).toMatch(/^width: \d+px;$/u);
     expect(panel?.getAttribute("style")).not.toContain("height");
     expect(
@@ -184,7 +246,8 @@ describe("Dock plugin component gate", () => {
     await flush();
 
     expect(home.container.textContent).toContain("Execution trajectory");
-    expect(home.container.textContent).toContain(
+    expect(home.container.textContent).toContain("Open a panel");
+    expect(home.container.textContent).not.toContain(
       "Inspect the session timeline"
     );
     home.unmount();

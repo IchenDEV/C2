@@ -525,7 +525,24 @@ html[data-appearance-pointer-cursors="false"]
     );
     box-shadow: inset calc(-1 * var(--hairline-width)) 0 0 var(--sidebar-border);
   }
-  .session-rail [data-rail-header] {
+  /* Keep native controls in their own strip; compact only the workspace headers. */
+  .workspace-titlebar {
+    height: var(--ds-workspace-windowbar-height);
+  }
+  .workspace-shell {
+    --ds-titlebar-height: var(--ds-workspace-header-height);
+  }
+  /* Native controls occupy the window strip, independently of the task sidebar. */
+  html[data-platform="macos"] .workspace-shell .window-controls-safe-main,
+  html[data-platform="macos"]
+    .workspace-shell
+    .window-controls-safe-compact-main {
+    padding-left: 1rem;
+  }
+  .workspace-shell .session-rail[data-overlay] {
+    background: var(--sidebar);
+  }
+  .workspace-shell .glass-rail {
     box-shadow: none;
   }
   .session-rail:not([data-dragging]) {
@@ -586,9 +603,22 @@ html[data-appearance-pointer-cursors="false"]
   .dock-content-split {
     box-shadow: inset 1px 0 var(--border);
   }
+  .dock-tabs {
+    scrollbar-width: none;
+  }
+  .dock-tabs::-webkit-scrollbar {
+    display: none;
+  }
   @container dock (max-width: 359px) {
     .dock-tab-label {
       display: none;
+    }
+    [data-slot="tabs-trigger"][data-active] .dock-tab-label {
+      display: inline;
+    }
+    .dock-tabs [data-slot="tabs-trigger"]:not([data-active]) {
+      width: var(--ds-control-mini);
+      padding-inline: 0;
     }
   }
   /* One managed material for menu-like transient layers. Shared primitives and the few external
@@ -1708,41 +1738,6 @@ pre {
   }
 }
 
-/* The dock picker changes anatomy at its real container width, independently of the window. */
-.dock-surface-picker {
-  padding: 18vh 1.5rem 1.5rem;
-}
-
-.dock-surface-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.75rem;
-  margin-top: 1.5rem;
-}
-
-.dock-surface-card {
-  min-width: 0;
-  flex-direction: column;
-}
-
-.dock-surface-card > span {
-  min-width: 0;
-}
-
-@container dock (max-width: 359px) {
-  .dock-surface-picker {
-    padding-top: 1.5rem;
-  }
-
-  .dock-surface-grid {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .dock-surface-card {
-    flex-direction: row;
-  }
-}
-
 /* Header actions retain their accessible names while shedding labels before the title collapses. */
 .session-header {
   container: session-header / inline-size;
@@ -1783,6 +1778,8 @@ pre {
 .session-header-context-main,
 .session-header-plugin-action,
 .session-header-layout-main {
+  height: var(--ds-control-normal);
+  border-radius: 50%;
   flex: 0 0 var(--ds-control-normal);
   width: var(--ds-control-normal);
   min-width: var(--ds-control-normal);
@@ -1792,12 +1789,13 @@ pre {
   padding-left: 0;
 }
 
-@container session-header (max-width: 36rem) {
+@container session-header (max-width: 48rem) {
   .session-header-action-label {
     display: none;
   }
 
   .session-header-action-main {
+    height: var(--ds-control-normal);
     flex: 0 0 var(--ds-control-normal);
     width: var(--ds-control-normal);
     min-width: var(--ds-control-normal);
@@ -1806,6 +1804,10 @@ pre {
     padding-right: 0;
     padding-left: 0;
     background: transparent;
+  }
+
+  .session-header-action-main:not(.rounded-r-none) {
+    border-radius: 50%;
   }
 }
 
@@ -1829,4 +1831,16 @@ pre {
     min-width: 0;
     overflow: auto;
   }
+}
+
+/* Inactive dock tabs become icon-only below this width; match their circular hit surface. */
+@container dock (max-width: 359px) {
+  .dock-tabs [data-slot="tabs-trigger"]:not([data-active]) {
+    border-radius: 50%;
+  }
+}
+
+/* Tabs share the window-strip icon baseline, leaving 2px above and below. */
+[data-dock-titlebar] .dock-tabs {
+  height: var(--ds-control-mini);
 }

@@ -33,11 +33,11 @@ const buttonVariants = cva(
         xs: "h-control-mini rounded-control text-metadata gap-1 px-2 has-[>svg]:px-1.5 [&_svg:not([class*='size-'])]:size-3",
         sm: "h-control-mini gap-inline px-surface-inset has-[>svg]:px-module-inset",
         lg: "h-control-field rounded-control px-6 has-[>svg]:px-4",
-        icon: "size-control",
+        icon: "size-control rounded-full",
         "icon-xs":
-          "size-control-mini rounded-control [&_svg:not([class*='size-'])]:size-3",
-        "icon-sm": "size-control",
-        "icon-lg": "size-control-field",
+          "size-control-mini rounded-full [&_svg:not([class*='size-'])]:size-3",
+        "icon-sm": "size-control rounded-full",
+        "icon-lg": "size-control-field rounded-full",
         row: "min-h-navigation-row gap-module-inset px-module-inset py-control-group [&_[data-slot=navigation-row-meta]]:text-callout [&_[data-slot=navigation-row-meta]]:text-muted-foreground [&_[data-slot=selectable-row-description]]:text-callout [&_[data-slot=selectable-row-description]]:text-muted-foreground [&_[data-slot=selectable-row-meta]]:text-callout [&_[data-slot=selectable-row-meta]]:text-muted-foreground w-full justify-start text-start font-normal whitespace-normal",
       },
       focusStyle: {

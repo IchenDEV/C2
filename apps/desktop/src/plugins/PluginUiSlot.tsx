@@ -126,37 +126,42 @@ export function PluginUiSlot({
     );
   }
 
-  if (slot === "transcript.before") {
+  if (slot === "transcript.before" || slot === "composer.above") {
     return (
       <section
         data-plugin-ui-slot={slot}
         aria-label="Plugin actions"
-        className="pb-3"
+        className={slot === "composer.above" ? "shrink-0 px-6" : "pb-3"}
       >
-        <div className="rounded-module bg-card/70 ring-foreground/[0.07] flex flex-wrap items-center gap-1.5 p-2 ring-1">
+        <div className="mx-auto flex w-full max-w-3xl flex-wrap items-center gap-1">
           {contributions.map((contribution) => {
             const key = `${contribution.pluginId}:${contribution.id}`;
             return (
-              <Button
-                key={key}
-                type="button"
-                variant="ghost"
-                size="compact"
-                title={
-                  contribution.description ||
-                  `${contribution.pluginName}: ${contribution.label}`
-                }
-                aria-label={`${contribution.pluginName}: ${contribution.label}`}
-                disabled={busy !== null}
-                onClick={() => void invoke(contribution)}
-              >
-                {busy === key ? (
-                  <Spinner data-icon="inline-start" />
-                ) : (
-                  <Puzzle data-icon="inline-start" />
-                )}
-                {contribution.label}
-              </Button>
+              <Tooltip key={key}>
+                <TooltipTrigger
+                  render={
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="compact"
+                      className="text-muted-foreground"
+                      aria-label={`${contribution.pluginName}: ${contribution.label}`}
+                      disabled={busy !== null}
+                      onClick={() => void invoke(contribution)}
+                    >
+                      {busy === key ? (
+                        <Spinner data-icon="inline-start" />
+                      ) : (
+                        <Puzzle data-icon="inline-start" />
+                      )}
+                      {contribution.label}
+                    </Button>
+                  }
+                />
+                <TooltipContent>
+                  {contribution.description || contribution.label}
+                </TooltipContent>
+              </Tooltip>
             );
           })}
         </div>
@@ -203,51 +208,6 @@ export function PluginUiSlot({
           );
         })}
       </div>
-    );
-  }
-
-  if (slot === "composer.above") {
-    return (
-      <section
-        data-plugin-ui-slot={slot}
-        aria-label="Plugin actions"
-        className="shrink-0 px-6 pt-3 pb-2"
-      >
-        <div className="mx-auto flex w-full max-w-3xl flex-col gap-2">
-          {contributions.map((contribution) => {
-            const key = `${contribution.pluginId}:${contribution.id}`;
-            return (
-              <div
-                key={key}
-                className="rounded-module bg-card ring-foreground/[0.07] flex flex-wrap items-center gap-3 px-4 py-3 ring-1"
-              >
-                <Puzzle
-                  className="text-muted-foreground size-4 shrink-0"
-                  aria-hidden="true"
-                />
-                <div className="min-w-0 flex-1">
-                  <p className="text-body font-medium">{contribution.label}</p>
-                  {contribution.description ? (
-                    <p className="text-callout text-muted-foreground mt-0.5">
-                      {contribution.description}
-                    </p>
-                  ) : null}
-                </div>
-                <Button
-                  type="button"
-                  size="compact"
-                  variant="secondary"
-                  disabled={busy !== null}
-                  onClick={() => void invoke(contribution)}
-                >
-                  {busy === key ? <Spinner data-icon="inline-start" /> : null}
-                  Run
-                </Button>
-              </div>
-            );
-          })}
-        </div>
-      </section>
     );
   }
 

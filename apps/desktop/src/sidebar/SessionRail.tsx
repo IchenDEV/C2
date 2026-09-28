@@ -9,7 +9,6 @@ import {
 } from "react";
 import type { HTMLAttributes, ReactElement, ReactNode } from "react";
 
-import { NavigationRow } from "@/components/business/navigation-row";
 import { ActivityOrb } from "@/components/ui/activity-orb";
 import { Button } from "@/components/ui/button";
 import {
@@ -68,13 +67,12 @@ import {
   GitPullRequest,
   GripVertical,
   Hash,
+  MessageSquare,
   MessageSquarePlus,
   MoreHorizontal,
-  PanelLeft,
   Pencil,
   Pin,
   Plus,
-  Search,
   Settings,
   SquareKanban,
   SquarePen,
@@ -178,6 +176,8 @@ const projectRowSensors = [
   KeyboardSensor,
 ];
 
+export const APP_NAV_WIDTH = 48;
+
 function RailUtilityButton({
   label,
   selected = false,
@@ -197,25 +197,21 @@ function RailUtilityButton({
         render={
           <Button
             type="button"
-            variant="ghost"
-            size="icon-sm"
+            variant="selectable"
+            size="icon"
             data-slot="rail-utility-button"
             data-selected={selected ? "true" : "false"}
             aria-current={selected ? "page" : undefined}
             aria-label={label}
             aria-busy={busy || undefined}
             onClick={onSelect}
-            className={cn(
-              "text-muted-foreground hover:text-foreground rounded-full",
-              selected &&
-                "bg-primary/15 text-primary hover:bg-primary/20 hover:text-primary"
-            )}
+            className="shrink-0"
           >
             {children}
           </Button>
         }
       />
-      <TooltipContent side="top">{label}</TooltipContent>
+      <TooltipContent side="right">{label}</TooltipContent>
     </Tooltip>
   );
 }
@@ -265,6 +261,7 @@ export function SessionRail({
   runningSessions,
   onSelect,
   onNew,
+  onOpenTasks,
   quickChatOpen,
   onToggleQuickChat,
   onRename,
@@ -280,12 +277,9 @@ export function SessionRail({
   deviceConnectionsOpen,
   onOpenDeviceConnections,
   newHint,
-  searchHint,
-  onOpenSearch,
   onOpenSettings,
   collapsed,
   overlay,
-  onToggleCollapse,
   width,
   onWidth,
   taskBoardOpen,
@@ -318,6 +312,7 @@ export function SessionRail({
   onSelect: (id: string) => void;
   /** Opens the default Task-owned draft. */
   onNew: () => void;
+  onOpenTasks: () => void;
   /** App-lifetime quick chat that stays outside the tracked task list. */
   quickChatOpen: boolean;
   onToggleQuickChat: () => void;
@@ -341,15 +336,12 @@ export function SessionRail({
   deviceConnectionsOpen: boolean;
   onOpenDeviceConnections: () => void;
   newHint: string;
-  /** The palette's shortcut, shown in the search box. */
-  searchHint: string;
-  onOpenSearch: () => void;
+  /** The palette's shortcut, included in the search tooltip. */
   onOpenSettings: () => void;
   /** Collapsed: the rail animates to zero width; the main header grows an expand button. */
   collapsed: boolean;
   /** Narrow layouts take the rail out of the flex row and show it above the session column. */
   overlay: boolean;
-  onToggleCollapse: () => void;
   /** Rail width in px — dragged by the right-edge grip, persisted by the caller. */
   width: number;
   onWidth: (n: number) => void;
@@ -2136,459 +2128,447 @@ export function SessionRail({
   };
 
   return (
-    <aside
-      aria-hidden={collapsed}
-      data-collapsed={collapsed ? "" : undefined}
-      data-dragging={dragging ? "" : undefined}
-      className={cn(
-        "session-rail glass-rail relative flex shrink-0 flex-col overflow-hidden",
-        overlay && "fixed inset-y-0 left-0 z-50 shadow-2xl",
-        gone && "invisible"
-      )}
-      style={{ width: collapsed ? 0 : applied }}
-    >
-      <DragDropRoot
-        onDragStart={handleSidebarDragStart}
-        onDragOver={handleSidebarDragOver}
-        onDragEnd={handleSidebarDragEnd}
+    <>
+      <nav
+        data-app-navigation
+        aria-label={t("rail.features")}
+        className="bg-sidebar flex shrink-0 flex-col items-center gap-2 overflow-y-auto py-2"
+        style={{ width: APP_NAV_WIDTH }}
       >
-        {/* Pinned to the open width so the content doesn't reflow while the pane sweeps. */}
-        <div
-          className="session-rail-content flex min-h-0 flex-1 flex-col"
-          style={{ width: applied }}
-        >
-          {!collapsed && (
-            <div
-              className="rail-grip"
-              aria-label={t("rail.resize")}
-              title={t("rail.resize")}
-              {...resizeHandle}
-            />
-          )}
-
-          {/* ---- 1 · title ---------------------------------------------------------------------- */}
-          {/* Keep the collapse control in the title row, with enough clearance for macOS traffic
-          lights. Search gets a full-width launcher below; all panes share the same 46px baseline. */}
-          <div
-            data-rail-header
-            className="window-titlebar window-controls-safe-rail electrobun-webkit-app-region-drag flex shrink-0 items-center gap-1 pr-2"
+        <div data-rail-feature="tasks">
+          <RailUtilityButton
+            label={t("files.chatsGroup")}
+            selected={
+              !taskBoardOpen &&
+              !pullRequestsOpen &&
+              !automationsOpen &&
+              !pluginManagerOpen &&
+              !dockerOpen
+            }
+            onSelect={onOpenTasks}
           >
-            <div className="electrobun-webkit-app-region-drag min-w-0 flex-1" />
-            <Tooltip>
-              <TooltipTrigger
-                render={
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="text-muted-foreground mr-2 size-7 shrink-0"
-                    aria-label={t("rail.collapse")}
-                    onClick={onToggleCollapse}
-                  >
-                    <PanelLeft className="size-4" />
-                  </Button>
-                }
-              />
-              <TooltipContent side="right">{t("rail.collapse")}</TooltipContent>
-            </Tooltip>
-          </div>
-
-          <Button
-            type="button"
-            variant="selectable"
-            size="row"
-            focusStyle="inset"
-            data-rail-search
-            className="h-control bg-fill-quiet text-muted-foreground mx-2 mb-1 w-auto shrink-0 gap-2 px-2"
-            aria-label={t("rail.searchChats")}
-            onClick={onOpenSearch}
-          >
-            <Search className="size-3.5 shrink-0" aria-hidden />
-            <span className="min-w-0 flex-1 truncate">
-              {t("rail.searchChats")}
-            </span>
-            {searchHint ? (
-              <kbd className="rounded-micro bg-background/45 text-callout text-muted-foreground shrink-0 px-1.5 py-0.5 font-mono">
-                {searchHint}
-              </kbd>
-            ) : null}
-          </Button>
-
-          {/* ---- 2 · features ------------------------------------------------------------------- */}
-          <div
-            data-rail-features
-            role="navigation"
-            aria-label={t("rail.features")}
-            className="flex flex-col gap-0.5 px-2 pb-1"
-          >
-            <div
-              data-rail-feature="new-task"
-              role="group"
-              aria-label={t("rail.newTask")}
-              className="group/new-task h-control rounded-control text-foreground/75 hover:bg-fill-hover hover:text-foreground focus-within:bg-fill-hover focus-within:text-foreground flex min-w-0 items-center transition-colors"
+            <MessageSquare className="size-4" />
+          </RailUtilityButton>
+        </div>
+        <div data-rail-features className="flex flex-col items-center gap-2">
+          <div data-rail-feature="pull-requests">
+            <RailUtilityButton
+              label={t("pullRequests.title")}
+              selected={pullRequestsOpen}
+              onSelect={onOpenPullRequests}
             >
-              <Button
-                type="button"
-                variant="ghost"
-                size="row"
-                focusStyle="inset"
-                className="h-full min-w-0 flex-1 gap-2 pr-1 pl-2"
-                title={`${t("rail.newTask")} ${newHint}`}
-                onClick={onNew}
+              <GitPullRequest className="size-4" />
+            </RailUtilityButton>
+          </div>
+          <div data-rail-feature="task-board">
+            <RailUtilityButton
+              label={t("taskboard.title")}
+              selected={taskBoardOpen}
+              onSelect={onOpenTaskBoard}
+            >
+              <SquareKanban className="size-4" />
+            </RailUtilityButton>
+          </div>
+          <div data-rail-feature="scheduled-tasks">
+            <RailUtilityButton
+              label={t("automations.tasks")}
+              selected={automationsOpen}
+              onSelect={onOpenAutomations}
+            >
+              <CalendarClock className="size-4" />
+            </RailUtilityButton>
+          </div>
+          <div data-rail-feature="plugins">
+            <RailUtilityButton
+              label={t("pluginHub.plugins")}
+              selected={pluginManagerOpen}
+              onSelect={onOpenMarket}
+            >
+              <Blocks className="size-4" />
+            </RailUtilityButton>
+          </div>
+          {dockerAvailable ? (
+            <div data-rail-feature="docker">
+              <RailUtilityButton
+                label={t("docker.title")}
+                selected={dockerOpen}
+                onSelect={onOpenDocker}
               >
-                <SquarePen
-                  className="text-muted-foreground size-4 shrink-0"
-                  aria-hidden
-                />
-                <span className="min-w-0 flex-1 truncate">
-                  {t("rail.newTask")}
-                </span>
-              </Button>
-              <Tooltip>
-                <TooltipTrigger
-                  render={
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon-xs"
-                      data-rail-quick-chat
-                      className={cn(
-                        "size-control-mini rounded-control text-muted-foreground hover:bg-fill-hover hover:text-foreground group-hover/new-task:text-foreground mr-2",
-                        quickChatOpen && "bg-fill-hover text-foreground"
-                      )}
-                      aria-label={t("quickChat.toggle")}
-                      aria-pressed={quickChatOpen}
-                      onClick={onToggleQuickChat}
-                    >
-                      <MessageSquarePlus className="size-4" aria-hidden />
-                    </Button>
-                  }
-                />
-                <TooltipContent side="right">
-                  {t("quickChat.title")}
-                </TooltipContent>
-              </Tooltip>
+                <Container className="size-4" />
+              </RailUtilityButton>
             </div>
-            <div data-rail-feature="pull-requests">
-              <NavigationRow
-                label={t("pullRequests.title")}
-                leading={<GitPullRequest className="size-4" />}
-                current={pullRequestsOpen}
-                onSelect={onOpenPullRequests}
-              />
-            </div>
-            <div data-rail-feature="task-board">
-              <NavigationRow
-                label={t("taskboard.title")}
-                leading={<SquareKanban className="size-4" />}
-                current={taskBoardOpen}
-                onSelect={onOpenTaskBoard}
-              />
-            </div>
-            <div data-rail-feature="scheduled-tasks">
-              <NavigationRow
-                label={t("automations.tasks")}
-                leading={<CalendarClock className="size-4" />}
-                current={automationsOpen}
-                onSelect={onOpenAutomations}
-              />
-            </div>
-            <div data-rail-feature="plugins">
-              <NavigationRow
-                label={t("pluginHub.plugins")}
-                leading={<Blocks className="size-4" />}
-                current={pluginManagerOpen}
-                onSelect={onOpenMarket}
-              />
-            </div>
-            {dockerAvailable ? (
-              <div data-rail-feature="docker">
-                <NavigationRow
-                  label={t("docker.title")}
-                  leading={<Container className="size-4" />}
-                  current={dockerOpen}
-                  onSelect={onOpenDocker}
-                />
-              </div>
-            ) : null}
-            {pluginActions}
-          </div>
-
-          {/* ---- 3 · Tasks ---------------------------------------------------------------------- */}
-          <ScrollArea data-rail-session-scroll className="min-h-0 flex-1">
-            <div
-              data-session-list
-              data-session-selection="instant"
-              className="px-2 pb-4"
+          ) : null}
+        </div>
+        {/* ---- 4 · utilities ------------------------------------------------------------------ */}
+        <div
+          data-rail-utilities
+          data-layout="icon-column"
+          className="mt-auto flex shrink-0 flex-col items-center gap-2 pb-2"
+        >
+          <div data-rail-feature="settings">
+            <RailUtilityButton
+              label={t("header.settings")}
+              onSelect={onOpenSettings}
             >
-              {resourceSections}
-              {recent.length === 0 &&
-              archived.length === 0 &&
-              projectEntries.length === 0 &&
-              taskSections.sections.length === 0 &&
-              creatingSectionFor === undefined ? (
-                <div className="flex flex-col items-start gap-2 px-2 py-3">
-                  <p className="text-callout text-muted-foreground">
-                    {t("rail.projectsEmpty")}
-                  </p>
+              <Settings className="size-4" aria-hidden="true" />
+            </RailUtilityButton>
+          </div>
+          <div data-rail-feature="usage">
+            <RailUtilityButton
+              label={quickQuotaTitle}
+              busy={quickQuotaLoading}
+              onSelect={onOpenUsage}
+            >
+              {quickQuotaLoading ? (
+                <ActivityOrb
+                  state="searching"
+                  visualSize={14}
+                  aria-hidden="true"
+                />
+              ) : (
+                <ChartNoAxesColumn
+                  data-quota-provider={quickQuota?.provider}
+                  className="size-4"
+                  aria-hidden="true"
+                />
+              )}
+            </RailUtilityButton>
+          </div>
+          {deviceConnectionsAvailable ? (
+            <div data-rail-feature="device-connections">
+              <RailUtilityButton
+                label={t("rail.deviceConnections")}
+                selected={deviceConnectionsOpen}
+                onSelect={onOpenDeviceConnections}
+              >
+                <Smartphone
+                  data-device-connections-icon="phone"
+                  className="size-4"
+                  aria-hidden="true"
+                />
+              </RailUtilityButton>
+            </div>
+          ) : null}
+        </div>
+      </nav>
+      <aside
+        aria-hidden={collapsed}
+        data-overlay={overlay ? "" : undefined}
+        {...(collapsed ? { inert: "" } : {})}
+        data-collapsed={collapsed ? "" : undefined}
+        data-dragging={dragging ? "" : undefined}
+        className={cn(
+          "session-rail glass-rail relative flex shrink-0 flex-col overflow-hidden",
+          overlay && "shadow-modal absolute inset-y-0 z-50",
+          gone && "invisible"
+        )}
+        style={{
+          width: collapsed ? 0 : applied,
+          left: overlay ? APP_NAV_WIDTH : undefined,
+        }}
+      >
+        <DragDropRoot
+          onDragStart={handleSidebarDragStart}
+          onDragOver={handleSidebarDragOver}
+          onDragEnd={handleSidebarDragEnd}
+        >
+          {/* Pinned to the open width so the content doesn't reflow while the pane sweeps. */}
+          <div
+            className="session-rail-content flex min-h-0 flex-1 flex-col"
+            style={{ width: applied }}
+          >
+            {!collapsed && (
+              <div
+                className="rail-grip"
+                aria-label={t("rail.resize")}
+                title={t("rail.resize")}
+                {...resizeHandle}
+              />
+            )}
+
+            {/* ---- 2 · features ------------------------------------------------------------------- */}
+            <div
+              data-task-actions
+              className="flex flex-col gap-0.5 px-2 pt-2 pb-1"
+            >
+              <div
+                data-rail-feature="new-task"
+                role="group"
+                aria-label={t("rail.newTask")}
+                className="group/new-task h-control rounded-control text-foreground/75 hover:bg-fill-hover hover:text-foreground focus-within:bg-fill-hover focus-within:text-foreground flex min-w-0 items-center transition-colors"
+              >
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="row"
+                  focusStyle="inset"
+                  className="h-full min-w-0 flex-1 gap-2 pr-1 pl-2"
+                  title={`${t("rail.newTask")} ${newHint}`}
+                  onClick={onNew}
+                >
+                  <SquarePen
+                    className="text-muted-foreground size-4 shrink-0"
+                    aria-hidden
+                  />
+                  <span className="min-w-0 flex-1 truncate">
+                    {t("rail.newTask")}
+                  </span>
+                </Button>
+                <Tooltip>
+                  <TooltipTrigger
+                    render={
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-xs"
+                        data-rail-quick-chat
+                        className={cn(
+                          "size-control-mini text-muted-foreground hover:bg-fill-hover hover:text-foreground group-hover/new-task:text-foreground mr-2",
+                          quickChatOpen && "bg-fill-hover text-foreground"
+                        )}
+                        aria-label={t("quickChat.toggle")}
+                        aria-pressed={quickChatOpen}
+                        onClick={onToggleQuickChat}
+                      >
+                        <MessageSquarePlus className="size-4" aria-hidden />
+                      </Button>
+                    }
+                  />
+                  <TooltipContent side="right">
+                    {t("quickChat.title")}
+                  </TooltipContent>
+                </Tooltip>
+              </div>
+              {pluginActions}
+            </div>
+
+            {/* ---- 3 · Tasks ---------------------------------------------------------------------- */}
+            <ScrollArea data-rail-session-scroll className="min-h-0 flex-1">
+              <div
+                data-session-list
+                data-session-selection="instant"
+                className="px-2 pb-4"
+              >
+                {resourceSections}
+                {recent.length === 0 &&
+                archived.length === 0 &&
+                projectEntries.length === 0 &&
+                taskSections.sections.length === 0 &&
+                creatingSectionFor === undefined ? (
                   <Button
                     type="button"
-                    variant="secondary"
-                    size="compact"
+                    variant="ghost"
+                    size="row"
+                    focusStyle="inset"
+                    className="text-muted-foreground h-control gap-2 px-2"
                     onClick={onAddProject}
                   >
-                    <FolderPlus className="size-4" />
+                    <Plus className="size-4" aria-hidden />
                     {t("rail.addProject")}
                   </Button>
-                </div>
-              ) : (
-                <>
-                  <SidebarDropZone
-                    location={{ kind: "sections" }}
-                    accept="section"
-                  >
-                    {({ ref, isDropTarget }) => (
-                      <div
-                        ref={ref}
-                        data-task-section-list
-                        data-sidebar-drop-target={
-                          isDropTarget ? "true" : undefined
-                        }
-                      >
-                        {taskSections.sections.map(renderManualSection)}
-                      </div>
-                    )}
-                  </SidebarDropZone>
-                  {rootProjects.length > 0 || dragItem?.kind === "project" ? (
-                    <Collapsible
-                      open={allProjectsOpen || dragItem?.kind === "project"}
-                      onOpenChange={setAllProjectsOpen}
-                    >
-                      <div data-default-project-group>
-                        <div className="min-h-control-mini flex items-center pt-2 pr-2 pb-1">
-                          <CollapsibleTrigger
-                            render={
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="compact"
-                                focusStyle="inset"
-                              />
-                            }
-                            data-default-project-toggle
-                            title={t(
-                              allProjectsOpen
-                                ? "rail.hideSection"
-                                : "rail.showSection",
-                              { name: t("rail.allProjects") }
-                            )}
-                            className="text-foreground/55 hover:text-foreground min-w-0 flex-1 justify-start gap-1 font-normal"
-                          >
-                            <span className="truncate">
-                              {t("rail.allProjects")}
-                            </span>
-                            <ChevronRight
-                              className={cn(
-                                "size-3.5 shrink-0 transition-transform",
-                                (allProjectsOpen ||
-                                  dragItem?.kind === "project") &&
-                                  "rotate-90"
-                              )}
-                              aria-hidden="true"
-                            />
-                          </CollapsibleTrigger>
-                          <TooltipButton
-                            label={t("rail.addProject")}
-                            variant="ghost"
-                            size="icon-xs"
-                            className="text-muted-foreground hover:text-foreground"
-                            onClick={onAddProject}
-                          >
-                            <FolderPlus className="size-4" />
-                          </TooltipButton>
-                        </div>
-                        <CollapsibleContent data-default-project-content>
-                          <SidebarDropZone
-                            location={{ kind: "projects", sectionId: null }}
-                            accept="project"
-                            collisionPriority={
-                              rootProjects.length === 0 ? 2 : 0
-                            }
-                          >
-                            {({ ref, isDropTarget }) => (
-                              <div
-                                ref={ref}
-                                data-project-list="root"
-                                data-sidebar-drop-target={
-                                  isDropTarget ? "true" : undefined
-                                }
-                                className={cn(
-                                  rootProjects.length === 0 && "min-h-control"
-                                )}
-                              >
-                                {rootProjects.map(renderProject)}
-                              </div>
-                            )}
-                          </SidebarDropZone>
-                        </CollapsibleContent>
-                      </div>
-                    </Collapsible>
-                  ) : null}
-                  {creatingSectionFor === undefined ? null : (
-                    <div data-task-section-creation className="px-2 pt-2 pb-1">
-                      <Input
-                        autoFocus
-                        size="compact"
-                        aria-label={t("rail.sectionName")}
-                        placeholder={t("rail.sectionName")}
-                        className="h-control-mini text-body"
-                        value={sectionDraft}
-                        onChange={(event) =>
-                          setSectionDraft(event.target.value)
-                        }
-                        onBlur={commitSectionCreation}
-                        onKeyDown={(event) => {
-                          if (event.key === "Enter") {
-                            event.preventDefault();
-                            commitSectionCreation();
-                          } else if (event.key === "Escape") {
-                            event.preventDefault();
-                            setCreatingSectionFor(undefined);
-                            setSectionDraft("");
-                          }
-                        }}
-                      />
-                    </div>
-                  )}
-                  {unsectioned.length > 0 || dragItem?.kind === "task" ? (
+                ) : (
+                  <>
                     <SidebarDropZone
-                      location={{
-                        kind: "tasks",
-                        sectionId: null,
-                        projectPath: null,
-                      }}
-                      accept="task"
+                      location={{ kind: "sections" }}
+                      accept="section"
                     >
                       {({ ref, isDropTarget }) => (
                         <div
                           ref={ref}
-                          data-unsectioned-tasks
+                          data-task-section-list
                           data-sidebar-drop-target={
                             isDropTarget ? "true" : undefined
                           }
-                          className={cn(
-                            "flex flex-col gap-0.5 pt-1",
-                            unsectioned.length === 0 && "min-h-control-mini"
-                          )}
                         >
-                          {unsectioned.map((session) =>
-                            sessionRow(session, false)
-                          )}
+                          {taskSections.sections.map(renderManualSection)}
                         </div>
                       )}
                     </SidebarDropZone>
-                  ) : null}
-                  {archived.length > 0 && (
-                    <Collapsible
-                      open={archivedOpen}
-                      onOpenChange={setArchivedOpen}
-                    >
-                      <CollapsibleTrigger
-                        render={
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="compact"
-                            focusStyle="inset"
-                          />
-                        }
-                        data-rail-archive-toggle
-                        title={
-                          archivedOpen
-                            ? t("rail.hideArchived")
-                            : t("rail.showArchived")
-                        }
-                        className="text-foreground/55 hover:text-foreground justify-start gap-1 font-normal"
+                    {rootProjects.length > 0 || dragItem?.kind === "project" ? (
+                      <Collapsible
+                        open={allProjectsOpen || dragItem?.kind === "project"}
+                        onOpenChange={setAllProjectsOpen}
                       >
-                        <span>{t("rail.groupArchived")}</span>
-                        <ChevronRight
-                          className={cn(
-                            "size-3.5 shrink-0 transition-transform",
-                            archivedOpen && "rotate-90"
-                          )}
-                          aria-hidden="true"
-                        />
-                        <span className="text-foreground/40 font-normal">
-                          {archived.length}
-                        </span>
-                      </CollapsibleTrigger>
-                      <CollapsibleContent
-                        data-rail-archive-list
-                        className="rail-archive-panel"
-                      >
-                        <div className="flex flex-col gap-0.5">
-                          {archived.map((session) => sessionRow(session, true))}
+                        <div data-default-project-group>
+                          <div className="min-h-control-mini flex items-center pt-2 pr-2 pb-1">
+                            <CollapsibleTrigger
+                              render={
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="compact"
+                                  focusStyle="inset"
+                                />
+                              }
+                              data-default-project-toggle
+                              title={t(
+                                allProjectsOpen
+                                  ? "rail.hideSection"
+                                  : "rail.showSection",
+                                { name: t("rail.allProjects") }
+                              )}
+                              className="text-foreground/55 hover:text-foreground min-w-0 flex-1 justify-start gap-1 font-normal"
+                            >
+                              <span className="truncate">
+                                {t("rail.allProjects")}
+                              </span>
+                              <ChevronRight
+                                className={cn(
+                                  "size-3.5 shrink-0 transition-transform",
+                                  (allProjectsOpen ||
+                                    dragItem?.kind === "project") &&
+                                    "rotate-90"
+                                )}
+                                aria-hidden="true"
+                              />
+                            </CollapsibleTrigger>
+                            <TooltipButton
+                              label={t("rail.addProject")}
+                              variant="ghost"
+                              size="icon-xs"
+                              className="text-muted-foreground hover:text-foreground"
+                              onClick={onAddProject}
+                            >
+                              <FolderPlus className="size-4" />
+                            </TooltipButton>
+                          </div>
+                          <CollapsibleContent data-default-project-content>
+                            <SidebarDropZone
+                              location={{ kind: "projects", sectionId: null }}
+                              accept="project"
+                              collisionPriority={
+                                rootProjects.length === 0 ? 2 : 0
+                              }
+                            >
+                              {({ ref, isDropTarget }) => (
+                                <div
+                                  ref={ref}
+                                  data-project-list="root"
+                                  data-sidebar-drop-target={
+                                    isDropTarget ? "true" : undefined
+                                  }
+                                  className={cn(
+                                    rootProjects.length === 0 && "min-h-control"
+                                  )}
+                                >
+                                  {rootProjects.map(renderProject)}
+                                </div>
+                              )}
+                            </SidebarDropZone>
+                          </CollapsibleContent>
                         </div>
-                      </CollapsibleContent>
-                    </Collapsible>
-                  )}
-                </>
-              )}
-            </div>
-          </ScrollArea>
-
-          {/* ---- 4 · utilities ------------------------------------------------------------------ */}
-          <div
-            data-rail-utilities
-            data-layout="icon-toolbar"
-            className="min-h-control-field flex shrink-0 items-center gap-1 px-3 py-1.5"
-          >
-            <div data-rail-feature="settings">
-              <RailUtilityButton
-                label={t("header.settings")}
-                onSelect={onOpenSettings}
-              >
-                <Settings className="size-4" aria-hidden="true" />
-              </RailUtilityButton>
-            </div>
-            <div data-rail-feature="usage">
-              <RailUtilityButton
-                label={quickQuotaTitle}
-                busy={quickQuotaLoading}
-                onSelect={onOpenUsage}
-              >
-                {quickQuotaLoading ? (
-                  <ActivityOrb
-                    state="searching"
-                    visualSize={14}
-                    aria-hidden="true"
-                  />
-                ) : (
-                  <ChartNoAxesColumn
-                    data-quota-provider={quickQuota?.provider}
-                    className="size-4"
-                    aria-hidden="true"
-                  />
+                      </Collapsible>
+                    ) : null}
+                    {creatingSectionFor === undefined ? null : (
+                      <div
+                        data-task-section-creation
+                        className="px-2 pt-2 pb-1"
+                      >
+                        <Input
+                          autoFocus
+                          size="compact"
+                          aria-label={t("rail.sectionName")}
+                          placeholder={t("rail.sectionName")}
+                          className="h-control-mini text-body"
+                          value={sectionDraft}
+                          onChange={(event) =>
+                            setSectionDraft(event.target.value)
+                          }
+                          onBlur={commitSectionCreation}
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter") {
+                              event.preventDefault();
+                              commitSectionCreation();
+                            } else if (event.key === "Escape") {
+                              event.preventDefault();
+                              setCreatingSectionFor(undefined);
+                              setSectionDraft("");
+                            }
+                          }}
+                        />
+                      </div>
+                    )}
+                    {unsectioned.length > 0 || dragItem?.kind === "task" ? (
+                      <SidebarDropZone
+                        location={{
+                          kind: "tasks",
+                          sectionId: null,
+                          projectPath: null,
+                        }}
+                        accept="task"
+                      >
+                        {({ ref, isDropTarget }) => (
+                          <div
+                            ref={ref}
+                            data-unsectioned-tasks
+                            data-sidebar-drop-target={
+                              isDropTarget ? "true" : undefined
+                            }
+                            className={cn(
+                              "flex flex-col gap-0.5 pt-1",
+                              unsectioned.length === 0 && "min-h-control-mini"
+                            )}
+                          >
+                            {unsectioned.map((session) =>
+                              sessionRow(session, false)
+                            )}
+                          </div>
+                        )}
+                      </SidebarDropZone>
+                    ) : null}
+                    {archived.length > 0 && (
+                      <Collapsible
+                        open={archivedOpen}
+                        onOpenChange={setArchivedOpen}
+                      >
+                        <CollapsibleTrigger
+                          render={
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="compact"
+                              focusStyle="inset"
+                            />
+                          }
+                          data-rail-archive-toggle
+                          title={
+                            archivedOpen
+                              ? t("rail.hideArchived")
+                              : t("rail.showArchived")
+                          }
+                          className="text-foreground/55 hover:text-foreground justify-start gap-1 font-normal"
+                        >
+                          <span>{t("rail.groupArchived")}</span>
+                          <ChevronRight
+                            className={cn(
+                              "size-3.5 shrink-0 transition-transform",
+                              archivedOpen && "rotate-90"
+                            )}
+                            aria-hidden="true"
+                          />
+                          <span className="text-foreground/40 font-normal">
+                            {archived.length}
+                          </span>
+                        </CollapsibleTrigger>
+                        <CollapsibleContent
+                          data-rail-archive-list
+                          className="rail-archive-panel"
+                        >
+                          <div className="flex flex-col gap-0.5">
+                            {archived.map((session) =>
+                              sessionRow(session, true)
+                            )}
+                          </div>
+                        </CollapsibleContent>
+                      </Collapsible>
+                    )}
+                  </>
                 )}
-              </RailUtilityButton>
-            </div>
-            {deviceConnectionsAvailable ? (
-              <div data-rail-feature="device-connections" className="ml-auto">
-                <RailUtilityButton
-                  label={t("rail.deviceConnections")}
-                  selected={deviceConnectionsOpen}
-                  onSelect={onOpenDeviceConnections}
-                >
-                  <Smartphone
-                    data-device-connections-icon="phone"
-                    className="size-4"
-                    aria-hidden="true"
-                  />
-                </RailUtilityButton>
               </div>
-            ) : null}
+            </ScrollArea>
           </div>
-        </div>
-      </DragDropRoot>
-    </aside>
+        </DragDropRoot>
+      </aside>
+    </>
   );
 }

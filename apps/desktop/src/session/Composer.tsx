@@ -93,8 +93,6 @@ interface ComposerProps {
     dirty: number;
     onOpen: () => void;
   } | null;
-  /** Empty-thread centre stage: the card narrows to the reference's hero measure. */
-  hero?: boolean;
   /** Full-page authoring: the document takes the whole column and the transcript steps aside. */
   docMode: boolean;
   onDocMode: (v: boolean) => void;
@@ -237,7 +235,7 @@ export function CheckoutBar({
   return (
     <div
       data-checkout-bar
-      className="mx-page min-h-control-field rounded-module bg-fill-quiet text-metadata text-muted-foreground relative z-0 mt-2 flex min-w-0 items-center px-1 py-1"
+      className="min-h-control-field rounded-module bg-fill-quiet text-metadata text-muted-foreground relative z-0 mx-2 mb-2 flex min-w-0 items-center px-1 py-1"
     >
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger
@@ -1395,7 +1393,7 @@ export function SessionControls({
   configOptions: ConfigOptionInfo[];
   onConfigOption: (configId: string, value: string) => void;
   modelChangeDisabled?: boolean;
-  /** The checkout bar already owns this choice when it is rendered below the composer. */
+  /** The checkout bar already owns this choice when it is rendered above the composer. */
   showWorktreePicker?: boolean;
 }) {
   const t = useT();
@@ -1495,7 +1493,6 @@ export function Composer({
   children,
   config,
   checkout,
-  hero,
   docMode,
   onDocMode,
   boundsRef,
@@ -1894,7 +1891,7 @@ export function Composer({
         "composer-mode-transition flex flex-col",
         // min-w-0: in document mode the composer sits in a row beside the transcript panel and
         // must be able to shrink, or the panel gets pushed off the module's edge.
-        docMode ? "min-h-0 min-w-0 flex-1" : "shrink-0 px-6 pt-3 pb-6"
+        docMode ? "min-h-0 min-w-0 flex-1" : "shrink-0 px-6 pt-2 pb-6"
       )}
     >
       <div
@@ -1906,6 +1903,11 @@ export function Composer({
           docMode ? "min-h-0 flex-1" : "mx-auto w-full max-w-3xl"
         )}
       >
+        {/* Execution location and source control are adjacent but distinct: changing where a fresh
+            session runs must never be confused with inspecting the current branch. */}
+        {!docMode && checkout && (
+          <CheckoutBar config={config} checkout={checkout} />
+        )}
         {/* No `overflow-hidden`: BlockNote's drag/insert handles render just outside the text
             column, and clipping them takes the block gutter away. The compact card paints its own
             surface so its background can never drift away from the editor in WebKit. */}
@@ -1916,17 +1918,13 @@ export function Composer({
               ? // Expanded, the composer *is* the page: no card, no border, the app's own surface.
                 // `relative` anchors the floating control bar below.
                 "min-h-0 flex-1"
-              : "rounded-composer bg-card shadow-surface duration-feedback ease-enter focus-within:shadow-raised transition-shadow"
+              : "rounded-composer bg-raised shadow-raised"
           )}
         >
           <div
             className={cn(
               "min-h-0 overflow-y-auto",
-              docMode
-                ? "bn-doc-mode flex-1"
-                : hero === true
-                  ? "min-h-28 py-3"
-                  : "py-2"
+              docMode ? "bn-doc-mode flex-1" : "min-h-16 py-2"
             )}
             style={docMode ? undefined : { maxHeight: applied }}
           >
@@ -2038,7 +2036,7 @@ export function Composer({
               className={cn(
                 "flex min-w-0 items-center gap-0.5",
                 docMode
-                  ? "rounded-composer bg-surface shadow-surface pointer-events-auto mx-auto w-full max-w-3xl p-2"
+                  ? "rounded-composer bg-raised shadow-raised pointer-events-auto mx-auto w-full max-w-3xl p-2"
                   : // Keep every outer edge 8px from the controls. The 24px surface radius then
                     // shares its bottom-right centre with the circular send/stop control.
                     "p-2"
@@ -2048,12 +2046,6 @@ export function Composer({
             </div>
           </div>
         </div>
-
-        {/* Execution location and source control are adjacent but distinct: changing where a fresh
-            session runs must never be confused with inspecting the current branch. */}
-        {!docMode && checkout && (
-          <CheckoutBar config={config} checkout={checkout} />
-        )}
       </div>
     </section>
   );

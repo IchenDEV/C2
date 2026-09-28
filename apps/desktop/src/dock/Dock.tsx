@@ -1,7 +1,10 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import type { ReactNode } from "react";
+import { createPortal } from "react-dom";
 
+import { NavigationRow } from "@/components/business/navigation-row";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import {
   Activity,
   FolderTree,
@@ -42,7 +45,7 @@ const DOCK_SURFACES = [
   "pull-request",
 ] as const satisfies readonly DockSurface[];
 
-/** The picker's cards, in the order a coding session tends to want them. */
+/** Panel choices share one list order across picker and tabs. */
 interface DockSurfaceDefinition {
   id: DockSurface;
   icon: typeof Globe;
@@ -53,6 +56,8 @@ interface DockSurfaceDefinition {
 interface DockProps {
   /** Whether the dock is expanded. It stays mounted while closed so shells survive. */
   open: boolean;
+  /** Shell-owned titlebar destination; null until the window strip mounts. */
+  titlebarHost: HTMLElement | null;
   /** null while closed; the last surface stays rendered underneath the collapse animation. */
   tab: DockTab | null;
   onTab: (surface: DockSurface) => void;
@@ -135,6 +140,7 @@ export function shouldOverlayRailForDock(
 /** Right-side container for navigation, sizing, animation, and caller-supplied surface content. */
 export function Dock({
   open,
+  titlebarHost,
   tab,
   onTab,
   onClose,
@@ -221,31 +227,74 @@ export function Dock({
     },
   });
 
-  const renderSurfaceCard = ({
+  const renderSurfaceRow = ({
     id,
     icon: Icon,
     titleKey,
     descKey,
   }: DockSurfaceDefinition) => (
-    <Button
+    <NavigationRow
       key={id}
-      type="button"
-      variant="ghost"
-      size="row"
-      focusStyle="inset"
-      aria-label={t(titleKey)}
-      onClick={() => onTab(id)}
-      className="dock-surface-card gap-module-inset rounded-module bg-card items-start p-3"
-    >
-      <Icon className="text-muted-foreground size-4" />
-      <span>
-        <span className="text-body block font-semibold">{t(titleKey)}</span>
-        <span className="text-callout text-muted-foreground mt-0.5 block">
-          {t(descKey)}
-        </span>
-      </span>
-    </Button>
+      label={t(titleKey)}
+      leading={<Icon className="size-4" />}
+      tooltip={t(descKey)}
+      onSelect={() => onTab(id)}
+    />
   );
+
+  const header = open ? (
+    <div
+      data-dock-titlebar
+      data-orientation="horizontal"
+      className={cn(
+        "dock-panel-side group/tabs electrobun-webkit-app-region-drag h-full min-w-0 shrink-0 overflow-hidden",
+        dragging && "dock-panel-dragging"
+      )}
+      style={{
+        width: applied,
+        height: "var(--ds-workspace-windowbar-height)",
+      }}
+    >
+      <div className="electrobun-webkit-app-region-drag flex h-full min-w-0 items-center gap-1 px-2">
+        {shown === "home" ? (
+          <div className="flex-1" />
+        ) : (
+          <TabsList
+            variant="toolbar"
+            className="dock-tabs min-w-0 flex-1 justify-start overflow-x-auto"
+          >
+            {visibleSurfaces.map(({ id, icon: Icon, titleKey }) => (
+              <TabsTrigger
+                key={id}
+                value={id}
+                title={
+                  autoTab === id
+                    ? `${t(titleKey)} · ${t("dockFollow.auto")}`
+                    : t(titleKey)
+                }
+              >
+                <Icon className="size-3.5" />
+                <span className="dock-tab-label">{t(titleKey)}</span>
+                {autoTab === id && (
+                  <span className="bg-primary size-1.5 animate-pulse rounded-full" />
+                )}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+        )}
+        <Button
+          variant="ghost"
+          size="icon-xs"
+          onClick={onClose}
+          title={t("dock.close")}
+          aria-label={t("dock.close")}
+        >
+          <X className="size-3.5" />
+        </Button>
+      </div>
+    </div>
+  ) : null;
+  const titlebar = titlebarHost ? createPortal(header, titlebarHost) : null;
 
   return (
     <aside
@@ -257,7 +306,7 @@ export function Dock({
           window.dispatchEvent(new Event("resize"));
       }}
       className={cn(
-        "glass-panel dock-panel dock-panel-side relative flex shrink-0 flex-col overflow-hidden border-l",
+        "dock-panel dock-panel-side relative flex shrink-0 flex-col overflow-hidden",
         // The open/close sweep. Animating the real width moves the document column in the same
         // motion — the old mount-time slide left the layout to snap, which read as an animation
         // cut off halfway. It belongs to open/close only: while the grip is held, the width is the
@@ -276,38 +325,21 @@ export function Dock({
       />
 
       {/* Pin the animated dimension so panel content does not reflow while it sweeps. */}
-      <div
-        className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
-        style={{ width: applied }}
+      <Card
+        variant="raised"
+        className="m-2 min-h-0 min-w-0 flex-1 gap-0 overflow-hidden py-0"
+        style={{ width: applied - 16 }}
       >
         {shown === "home" ? (
           <>
-            {/* The fixed shell titlebar keeps this empty state on the workspace and rail baseline. */}
-            <div
-              data-dock-titlebar
-              className="window-titlebar electrobun-webkit-app-region-drag flex items-center gap-1 px-3"
-            >
-              <div className="electrobun-webkit-app-region-drag flex-1" />
-              <Button
-                variant="ghost"
-                size="compact"
-                className="w-(--ds-control-normal) px-0"
-                onClick={onClose}
-                title={t("dock.close")}
-              >
-                <X className="size-3.5" />
-              </Button>
-            </div>
-            <div className="dock-surface-picker flex min-h-0 flex-1 items-start justify-center overflow-y-auto">
-              <div className="animate-rise-in w-full max-w-[420px]">
-                <h2 className="text-heading text-center font-semibold">
+            {titlebar}
+            <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-6">
+              <div className="mx-auto my-auto w-full max-w-xs shrink-0">
+                <h2 className="text-body text-center font-medium">
                   {t("dock.openSurface")}
                 </h2>
-                <p className="text-hint text-muted-foreground mt-1 text-center">
-                  {t("dock.openSurfaceHint")}
-                </p>
-                <div className="dock-surface-grid">
-                  {visibleSurfaces.map(renderSurfaceCard)}
+                <div className="dock-surface-list mt-4 flex flex-col gap-1">
+                  {visibleSurfaces.map(renderSurfaceRow)}
                 </div>
               </div>
             </div>
@@ -320,45 +352,7 @@ export function Dock({
             }}
             className="flex min-h-0 min-w-0 flex-1 flex-col gap-0 overflow-hidden"
           >
-            {/* The shared 46px height matches the main header, so this tab row and the breadcrumb
-            share one vertical centre and one continuous bottom border. It drags the window for the
-            same reason: the overlay title bar leaves nothing else to grab. */}
-            <div
-              data-dock-titlebar
-              className="window-titlebar electrobun-webkit-app-region-drag flex min-w-0 shrink-0 items-center gap-1 px-3"
-            >
-              <TabsList
-                variant="toolbar"
-                className="min-w-0 flex-1 justify-start overflow-x-auto"
-              >
-                {visibleSurfaces.map(({ id, icon: Icon, titleKey }) => (
-                  <TabsTrigger
-                    key={id}
-                    value={id}
-                    title={
-                      autoTab === id
-                        ? `${t(titleKey)} · ${t("dockFollow.auto")}`
-                        : t(titleKey)
-                    }
-                  >
-                    <Icon className="size-3.5" />
-                    <span className="dock-tab-label">{t(titleKey)}</span>
-                    {autoTab === id && (
-                      <span className="bg-primary size-1.5 animate-pulse rounded-full" />
-                    )}
-                  </TabsTrigger>
-                ))}
-              </TabsList>
-              <Button
-                variant="ghost"
-                size="compact"
-                className="w-(--ds-control-normal) shrink-0 px-0"
-                onClick={onClose}
-                title={t("dock.close")}
-              >
-                <X className="size-3.5" />
-              </Button>
-            </div>
+            {titlebar}
 
             {visibleSurfaces.map(({ id }) => (
               <TabsContent
@@ -371,7 +365,7 @@ export function Dock({
             ))}
           </Tabs>
         )}
-      </div>
+      </Card>
     </aside>
   );
 }

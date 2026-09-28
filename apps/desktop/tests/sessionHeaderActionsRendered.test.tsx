@@ -107,7 +107,7 @@ describe("SessionHeaderActions", () => {
     view.unmount();
   });
 
-  test("renders independent filled icon-and-label primary actions", () => {
+  test("renders quiet icon-and-label actions with shared interaction states", () => {
     activateDom();
     const { view } = renderActions();
     const group = view.container.querySelector(".session-header-actions");
@@ -122,9 +122,8 @@ describe("SessionHeaderActions", () => {
     for (const label of ["Add action", "Open", "Review changes"]) {
       const action = button(view.container, label);
       expect(action.dataset.variant).toBe("ghost");
-      expect(action.classList.contains("bg-fill-rest")).toBe(true);
+      expect(action.classList.contains("bg-fill-rest")).toBe(false);
       expect(action.classList.contains("hover:bg-fill-hover")).toBe(true);
-      expect(action.classList.contains("text-foreground")).toBe(true);
       expect(
         action.querySelector(".session-header-action-icon")
       ).not.toBeNull();
@@ -217,7 +216,7 @@ describe("SessionHeaderActions", () => {
     );
     expect(
       button(view.container, "Source control unavailable").classList.contains(
-        "disabled:opacity-60"
+        "disabled:opacity-50"
       )
     ).toBe(true);
     expect(

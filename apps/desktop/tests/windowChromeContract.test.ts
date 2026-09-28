@@ -84,7 +84,8 @@ describe("macOS window chrome contract", () => {
     expect(appSource).toContain("displayedRailCollapsed");
     expect(appSource).toContain('"window-controls-safe-main"');
     expect(appSource).toContain(': "pl-4"');
-    expect(railSource).toContain("window-controls-safe-rail");
+    expect(railSource).not.toContain("window-controls-safe-rail");
+    expect(appSource).toContain("data-workspace-titlebar");
     expect(sceneStudioSource).toContain("window-controls-safe-scene");
     expect(styles).toMatch(
       /html\[data-platform="macos"\] \.window-controls-safe-main\s*\{[^}]*padding-left:\s*6rem/su
@@ -108,7 +109,7 @@ describe("macOS window chrome contract", () => {
       /\.macos-window-glass \.glass-rail\s*\{[^}]*--appearance-macos-panel-tint-opacity/su
     );
     expect(appSource).toContain(
-      'className="bg-background @container/workspace flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"'
+      '"bg-background rounded-card shadow-raised @container/workspace m-2 flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"'
     );
   });
 
@@ -170,12 +171,18 @@ describe("macOS window chrome contract", () => {
     );
   });
 
-  test("keeps the empty-session hero safely centered in constrained window heights", () => {
+  test("gives the empty greeting spare space above the bottom composer", () => {
     expect(appSource).toContain(
-      '"hero-scroll-shell pb-page-end order-2 min-h-0 flex-1 flex-col justify-center-safe overflow-y-auto pt-6"'
+      '"hero-scroll-shell order-2 min-h-0 flex-1 flex-col overflow-y-auto"'
     );
+    expect(appSource).toContain("data-workspace-greeting");
     expect(appSource).not.toContain(
-      '"order-2 min-h-0 flex-1 flex-col justify-center pb-page-end"'
+      "else if (railCollapsed) setRailCollapsedRaw(0)"
+    );
+    expect(appSource).toContain('usePersistedNumber("codetwo.docMode", 0)');
+    expect(appSource).toContain("viewportWidth - APP_NAV_WIDTH");
+    expect(appSource).toContain(
+      "reservedWidth={railInlineWidth + APP_NAV_WIDTH}"
     );
   });
 
@@ -188,12 +195,7 @@ describe("macOS window chrome contract", () => {
     );
   });
 
-  test("keeps the rail, workspace, and both dock states on one shared titlebar baseline", () => {
-    const titlebarClasses = Array.from(
-      dockSource.matchAll(/data-dock-titlebar[\s\S]*?className="([^"]+)"/gu),
-      (match) => match[1].split(/\s+/u)
-    );
-
+  test("keeps dock controls in the window strip and workspace actions in the pane header", () => {
     expect(styles).toMatch(
       /\.window-titlebar\s*\{[^}]*height:\s*var\(--ds-titlebar-height\);/su
     );
@@ -209,9 +211,7 @@ describe("macOS window chrome contract", () => {
     expect(sessionHeaderActionsSource).toContain(
       'className="session-header-actions gap-inline flex shrink-0 items-center"'
     );
-    expect(sessionHeaderActionsSource).toContain(
-      "session-header-action-main bg-fill-rest text-foreground hover:bg-fill-hover hover:text-foreground"
-    );
+    expect(sessionHeaderActionsSource).toContain("session-header-action-main");
     expect(styles).not.toMatch(
       /\.session-header-actions\s*\{[^}]*box-shadow:\s*inset 0 0 0 var\(--hairline-width\) var\(--border\);/su
     );
@@ -225,33 +225,25 @@ describe("macOS window chrome contract", () => {
       /\.session-header-context-main,[\s\S]*?\.session-header-plugin-action,[\s\S]*?\.session-header-layout-main\s*\{[^}]*width:\s*var\(--ds-control-normal\);[^}]*justify-content:\s*center;/su
     );
     expect(styles).toMatch(
-      /@container session-header \(max-width: 36rem\)[\s\S]*?\.session-header-action-label\s*\{\s*display:\s*none;/su
+      /@container session-header \(max-width: 48rem\)[\s\S]*?\.session-header-action-label\s*\{\s*display:\s*none;/su
     );
     expect(appSource).toMatch(
       /<EnvironmentPopover[\s\S]*?<SessionHeaderActions[\s\S]*?<PaneLayoutToolbar/u
     );
     expect(appSource).toContain('viewLabel={t("pane.viewMenu")}');
-    expect(railSource).toContain(
-      'className="window-titlebar window-controls-safe-rail electrobun-webkit-app-region-drag flex shrink-0 items-center gap-1 pr-2"'
-    );
-    expect(styles).toMatch(
-      /\.session-rail \[data-rail-header\]\s*\{[^}]*box-shadow:\s*none;/su
-    );
+    expect(railSource).not.toContain("data-rail-header");
+    expect(appSource).toContain("data-workspace-navigation");
+    expect(appSource).not.toContain("railExpandAction");
     expect(styles).toMatch(
       /\.glass-rail\s*\{[^}]*box-shadow:\s*inset calc\(-1 \* var\(--hairline-width\)\) 0 0 var\(--sidebar-border\);/su
     );
-    expect(titlebarClasses).toHaveLength(2);
-    expect(
-      titlebarClasses.every((classes) => classes.includes("window-titlebar"))
-    ).toBe(true);
-    expect(
-      titlebarClasses.every((classes) => !classes.includes("py-2.5"))
-    ).toBe(true);
-    expect(
-      titlebarClasses.every((classes) => !classes.includes("border-b"))
-    ).toBe(true);
-    expect(dockSource).toContain('size="compact"');
-    expect(dockSource).toContain('className="w-(--ds-control-normal) px-0"');
+    expect(appSource).toContain("data-dock-titlebar-host");
+    expect(appSource).toContain("titlebarHost={dockTitlebarHost}");
+    expect(dockSource).toContain("createPortal(header, titlebarHost)");
+    expect(dockSource).toContain(
+      'height: "var(--ds-workspace-windowbar-height)"'
+    );
+    expect(dockSource).toContain('size="icon-xs"');
     expect(dockSource).toContain("onClick={onClose}");
   });
 
