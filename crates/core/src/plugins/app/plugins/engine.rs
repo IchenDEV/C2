@@ -730,26 +730,6 @@ fn register_commands(
         }
     })?;
 
-    #[derive(Deserialize)]
-    struct GoalArgs {
-        session: String,
-        action: String,
-        #[serde(default)]
-        objective: Option<String>,
-    }
-    let goals = engine.clone();
-    ctx.command("engine.goal", move |args| {
-        let engine = goals.clone();
-        async move {
-            let args: GoalArgs = take_args(args)?;
-            engine
-                .control_goal(&args.session, &args.action, args.objective)
-                .await
-                .map_err(PluginError::new)?;
-            Ok(Value::Bool(true))
-        }
-    })?;
-
     let draining_engine = engine.clone();
     let draining_bus = bus.clone();
     let mut queue_events = bus.subscribe();

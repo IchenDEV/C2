@@ -37,7 +37,6 @@ function renderEnvironment(onRefresh = () => {}, preview = null, props = {}) {
         onAddProject={() => {}}
         onOpenSourceControl={() => {}}
         onOpenSettings={() => {}}
-        turns={[]}
         preview={preview}
         {...props}
       />
@@ -118,6 +117,8 @@ describe("EnvironmentPopover layout", () => {
     expect(content?.textContent).toContain("Changes");
     expect(content?.textContent).toContain("Local");
     expect(content?.textContent).toContain("Commit or push");
+    expect(content?.querySelector("[data-task-plan-panel]")).toBeNull();
+    expect(content?.textContent).not.toContain("Current tasks");
     expect(content?.textContent).not.toContain("Checkpoint now");
     expect(content?.textContent).not.toContain("Copy path");
     expect(content?.textContent).not.toContain("Tools");
@@ -189,66 +190,6 @@ describe("EnvironmentPopover layout", () => {
     expect(preview?.dataset.artifactId).toBe("browser-shot-2");
     expect(preview?.textContent).toContain("Browser Use");
     expect(preview?.textContent).toContain("Open example.com");
-    view.unmount();
-  });
-
-  test("shows the current task list inside the environment popover", async () => {
-    activateDom();
-    const turn = {
-      id: 1,
-      accepted: true,
-      streamBoundaryKnown: true,
-      prompt: "Implement task progress",
-      text: "",
-      textDeltas: [],
-      observedTextDeltas: 0,
-      observedThoughtDeltas: 0,
-      pendingTextDeltaSkips: 0,
-      pendingThoughtDeltaSkips: 0,
-      thoughts: [],
-      tools: [],
-      plan: [
-        { content: "Inspect the event path", status: "completed" },
-        { content: "Add tasks to quick info", status: "in_progress" },
-        { content: "Run renderer checks", status: "pending" },
-      ],
-      startedAt: 1,
-    };
-    const view = renderEnvironment(() => {}, null, { turns: [turn] });
-
-    const trigger = view.container.querySelector(
-      '[aria-label="Project environment"]'
-    );
-    await reactAct(async () => {
-      trigger?.dispatchEvent(
-        new dom.window.PointerEvent("pointerdown", {
-          bubbles: true,
-          cancelable: true,
-          button: 0,
-          pointerId: 4,
-        })
-      );
-      trigger?.dispatchEvent(
-        new dom.window.MouseEvent("click", { bubbles: true, cancelable: true })
-      );
-    });
-    await flush();
-
-    const content = dom.document.body.querySelector(
-      '[data-slot="popover-content"]'
-    );
-    const tasks = content?.querySelector("[data-task-plan-panel]");
-    expect(tasks).toBeTruthy();
-    expect(tasks?.textContent).toContain("Current tasks");
-    expect(tasks?.textContent).toContain("Step 2 / 3");
-    expect(tasks?.querySelectorAll("[data-task-plan-status]")).toHaveLength(3);
-    expect(
-      tasks?.querySelector('[data-task-plan-status="in_progress"]')?.textContent
-    ).toContain("Add tasks to quick info");
-    expect(
-      view.container.querySelector('[data-dock-placement="right"]')
-    ).toBeNull();
-
     view.unmount();
   });
 });

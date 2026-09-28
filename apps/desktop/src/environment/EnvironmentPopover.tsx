@@ -32,12 +32,10 @@ import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
 
 import { getArtifact } from "../bridge";
-import type { GitStatus, PlanEntry, Project } from "../bridge";
+import type { GitStatus, Project } from "../bridge";
 import { GitSyncStatus } from "../git/GitSyncStatus";
 import { useT } from "../i18n";
-import { TaskPlanPanel } from "../session/TaskPlanPanel";
 import type { InteractiveToolPreview } from "../session/toolActivity";
-import type { Turn } from "../session/turns";
 
 function EnvironmentRow({
   icon: Icon,
@@ -204,10 +202,6 @@ export function EnvironmentPopover({
   onAddProject,
   onOpenSourceControl,
   onOpenSettings,
-  turns,
-  onOpenPlanAsDocument,
-  onPinPlanArtifact,
-  canPinPlan = false,
   preview = null,
   suppressed = false,
 }: {
@@ -221,10 +215,6 @@ export function EnvironmentPopover({
   onAddProject: () => void;
   onOpenSourceControl: () => void;
   onOpenSettings: () => void;
-  turns: readonly Turn[];
-  onOpenPlanAsDocument?: (entries: PlanEntry[]) => void;
-  onPinPlanArtifact?: (markdown: string) => void;
-  canPinPlan?: boolean;
   preview?: InteractiveToolPreview | null;
   /** Keeps the mounted session workspace from leaking this portal over another full-page surface. */
   suppressed?: boolean;
@@ -391,27 +381,6 @@ export function EnvironmentPopover({
           label={t("environment.commitOrPush")}
           onClick={openSourceControl}
           disabled={!isRepo}
-        />
-
-        <TaskPlanPanel
-          turns={turns}
-          onOpenPlanAsDocument={
-            onOpenPlanAsDocument
-              ? (entries) => {
-                  setOpen(false);
-                  onOpenPlanAsDocument(entries);
-                }
-              : undefined
-          }
-          onPinPlanArtifact={
-            onPinPlanArtifact
-              ? (markdown) => {
-                  setOpen(false);
-                  onPinPlanArtifact(markdown);
-                }
-              : undefined
-          }
-          canPinPlan={canPinPlan}
         />
 
         {preview && (

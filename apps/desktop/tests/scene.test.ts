@@ -4,7 +4,6 @@ import {
   MEMORY_PRESET_POLICY,
   escalationNeeded,
   nextSceneInRing,
-  sceneCollaborationChoice,
   sceneCustomized,
   sceneTitle,
   softApplyPending,
@@ -30,7 +29,6 @@ const live: LivePosture = {
   mode: "ask",
   memoryRead: "inherit",
   memoryWrite: "inherit",
-  planFirst: false,
   provider: "claude_code",
   model: "m1",
 };
@@ -42,10 +40,8 @@ describe("sceneCustomized", () => {
 
   test("only fields the scene sets participate", () => {
     const s = scene({ execution: { session_mode: "ask" } });
-    // Memory/plan/provider all differ from nothing — the scene doesn't set them.
-    expect(
-      sceneCustomized(s, { ...live, planFirst: true, provider: "codex" })
-    ).toBe(false);
+    // Memory/provider all differ from nothing — the scene doesn't set them.
+    expect(sceneCustomized(s, { ...live, provider: "codex" })).toBe(false);
     expect(sceneCustomized(s, { ...live, mode: "auto_edit" })).toBe(true);
   });
 
@@ -70,7 +66,6 @@ describe("softApplyPending (binding matrix)", () => {
       execution: {
         session_mode: "read_only",
         memory_preset: "standard",
-        plan_first: true,
         providers: ["codex"],
         model: "m2",
         reasoning_effort: "high",
@@ -88,31 +83,6 @@ describe("softApplyPending (binding matrix)", () => {
   test("a matching live value is not pending", () => {
     const s = scene({ execution: { providers: ["claude_code"], model: "m1" } });
     expect(softApplyPending(s, live)).toEqual([]);
-  });
-});
-
-describe("sceneCollaborationChoice", () => {
-  const options = [
-    {
-      id: "collaboration_mode",
-      category: "collaboration_mode",
-      choices: [{ id: "default" }, { id: "plan" }],
-    },
-  ];
-
-  test("maps scene plan posture onto the provider-native values", () => {
-    expect(sceneCollaborationChoice(options, true)).toEqual({
-      configId: "collaboration_mode",
-      value: "plan",
-    });
-    expect(sceneCollaborationChoice(options, false)).toEqual({
-      configId: "collaboration_mode",
-      value: "default",
-    });
-  });
-
-  test("fails closed when the provider does not advertise collaboration mode", () => {
-    expect(sceneCollaborationChoice([], true)).toBeNull();
   });
 });
 

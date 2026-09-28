@@ -22,8 +22,8 @@ use axum::{Json, Router};
 use chrono::{DateTime, Duration, SecondsFormat, Utc};
 use codetwo_core::event::ModelChoice;
 use codetwo_core::{
-    builtin_models, default_registry, DocBlock, Engine, Event, ExecutionPolicy, Op, Part,
-    PendingInputKind, PermissionMode, ProviderId, Role, SandboxPolicy, Session, SessionRunState,
+    default_registry, DocBlock, Engine, Event, ExecutionPolicy, Op, Part, PendingInputKind,
+    PermissionMode, ProviderId, Role, SandboxPolicy, Session, SessionRunState,
     MAX_TRANSCRIPT_TURNS,
 };
 use futures_util::{SinkExt, StreamExt};
@@ -35,8 +35,7 @@ use tokio::sync::{broadcast, Mutex as AsyncMutex};
 use crate::{AuthState, WS_TICKET_TTL};
 
 const T3_CONTRACT_VERSION: &str = "0.0.33-codetwo.1";
-const PLAN_SKILL_ID: &str = "plan-first";
-const PLAN_PROMPT_PREFIX: &str = "[skill:plan-first]\n\n";
+const LEGACY_PLAN_PROMPT_PREFIX: &str = "[skill:plan-first]\n\n";
 const ACCESS_TOKEN_TTL_DAYS: i64 = 30;
 const TOKEN_EXCHANGE_GRANT: &str = "urn:ietf:params:oauth:grant-type:token-exchange";
 const BOOTSTRAP_TOKEN_TYPE: &str = "urn:t3:params:oauth:token-type:environment-bootstrap";
@@ -71,8 +70,6 @@ struct CompatibilityMetadata {
     #[serde(default)]
     aliases: HashMap<String, String>,
     #[serde(default)]
-    interaction_modes: HashMap<String, String>,
-    #[serde(default)]
     command_receipts: Vec<PersistedCommandReceipt>,
 }
 
@@ -81,7 +78,6 @@ impl Default for CompatibilityMetadata {
         Self {
             version: COMPATIBILITY_STATE_VERSION,
             aliases: HashMap::new(),
-            interaction_modes: HashMap::new(),
             command_receipts: Vec::new(),
         }
     }
@@ -132,11 +128,6 @@ fn validate_compatibility(metadata: &CompatibilityMetadata) -> Result<(), String
     let unique_core_ids: HashSet<&str> = metadata.aliases.values().map(String::as_str).collect();
     if unique_core_ids.len() != metadata.aliases.len() {
         return Err("multiple public thread ids map to the same C2 session".into());
-    }
-    if metadata.interaction_modes.iter().any(|(thread_id, mode)| {
-        thread_id.trim().is_empty() || !matches!(mode.as_str(), "default" | "plan")
-    }) {
-        return Err("invalid persisted T3 interaction mode".into());
     }
     if metadata.command_receipts.len() > MAX_PERSISTED_COMMAND_RECEIPTS
         || metadata
@@ -327,11 +318,6 @@ impl T3CompatState {
             .persist(path)
             .map(|_| ())
             .map_err(|error| error.error.to_string())
-    }
-
-    fn mark_updated(&self) {
-        let sequence = self.sequence.fetch_add(1, Ordering::SeqCst) + 1;
-        let _ = self.updates.send(CoreUpdate { sequence });
     }
 
     fn persist_command_receipt(&self, command_id: &str, sequence: u64) -> Result<(), String> {
@@ -579,36 +565,10 @@ impl T3CompatState {
         let mut seen = HashSet::new();
         let mut values = Vec::new();
 
-        for provider in default_registry() {
+        for (provider, models) in self.engine.provider_catalog() {
             let instance_id = provider_slug(&provider.id);
             seen.insert(instance_id.clone());
             let installed = provider.is_available();
-            let mut models = builtin_models(&provider.id);
-            for session in sessions
-                .iter()
-                .filter(|session| session.provider == provider.id)
-            {
-                if let Some(model) = session
-                    .model
-                    .as_ref()
-                    .filter(|model| !model.trim().is_empty())
-                {
-                    if !models.iter().any(|choice| choice.id == *model) {
-                        models.push(ModelChoice {
-                            id: model.clone(),
-                            name: model.clone(),
-                            description: None,
-                        });
-                    }
-                }
-            }
-            if models.is_empty() {
-                models.push(ModelChoice {
-                    id: "default".into(),
-                    name: "Default".into(),
-                    description: None,
-                });
-            }
             values.push(provider_value(
                 &instance_id,
                 &provider.display_name,
@@ -618,23 +578,18 @@ impl T3CompatState {
             ));
         }
 
-        // Keep already-existing custom-provider threads decodable even though the public Engine
-        // API does not expose its private provider registry.
+        // Keep historical threads decodable after their integration is removed. A saved thread
+        // does not establish that its provider or model is currently available.
         for session in sessions {
             let instance_id = provider_slug(&session.provider);
             if !seen.insert(instance_id.clone()) {
                 continue;
             }
-            let model = session.model.clone().unwrap_or_else(|| "default".into());
             values.push(provider_value(
                 &instance_id,
                 &provider_display_name(&session.provider),
-                true,
-                vec![ModelChoice {
-                    id: model.clone(),
-                    name: model,
-                    description: None,
-                }],
+                false,
+                Vec::new(),
                 &checked_at,
             ));
         }
@@ -662,62 +617,18 @@ impl T3CompatState {
             .unwrap_or_else(|| public_id.to_string())
     }
 
-    fn interaction_mode(&self, public_id: &str) -> String {
-        self.compatibility
-            .lock()
-            .unwrap()
-            .interaction_modes
-            .get(public_id)
-            .cloned()
-            .unwrap_or_else(|| "default".into())
-    }
-
-    fn validate_interaction_mode(mode: &str) -> Result<&str, String> {
+    fn validate_interaction_mode(mode: &str) -> Result<(), String> {
         match mode {
-            "default" | "plan" => Ok(mode),
+            "default" => Ok(()),
             _ => Err(format!("unsupported T3 interaction mode: {mode}")),
         }
     }
 
-    fn set_interaction_mode(&self, public_id: &str, mode: &str) -> Result<bool, String> {
+    fn persist_thread_identity(&self, public_id: &str, core_id: &str) -> Result<(), String> {
         if self.compatibility_load_error.is_some() {
             return Err(compatibility_unavailable_message());
         }
-        let mode = Self::validate_interaction_mode(mode)?;
-        let changed = {
-            let mut compatibility = self.compatibility.lock().unwrap();
-            if compatibility
-                .interaction_modes
-                .get(public_id)
-                .is_some_and(|current| current == mode)
-            {
-                false
-            } else {
-                compatibility
-                    .interaction_modes
-                    .insert(public_id.to_string(), mode.to_string());
-                true
-            }
-        };
-        if changed {
-            self.persist_compatibility().map_err(|error| {
-                format!("could not persist the T3 mobile interaction mode: {error}")
-            })?;
-        }
-        Ok(changed)
-    }
-
-    fn persist_thread_identity(
-        &self,
-        public_id: &str,
-        core_id: &str,
-        interaction_mode: &str,
-    ) -> Result<(), String> {
-        if self.compatibility_load_error.is_some() {
-            return Err(compatibility_unavailable_message());
-        }
-        let interaction_mode = Self::validate_interaction_mode(interaction_mode)?;
-        let (previous_alias, previous_mode) = {
+        let previous_alias = {
             let mut compatibility = self.compatibility.lock().unwrap();
             if compatibility
                 .aliases
@@ -728,13 +639,9 @@ impl T3CompatState {
             {
                 return Err("C2 session is already mapped to another T3 thread".into());
             }
-            let previous_alias = compatibility
+            compatibility
                 .aliases
-                .insert(public_id.to_string(), core_id.to_string());
-            let previous_mode = compatibility
-                .interaction_modes
-                .insert(public_id.to_string(), interaction_mode.to_string());
-            (previous_alias, previous_mode)
+                .insert(public_id.to_string(), core_id.to_string())
         };
         if let Err(error) = self.persist_compatibility() {
             // Do not let a failed durable write turn into an in-memory-only alias that a retry
@@ -748,16 +655,6 @@ impl T3CompatState {
                 }
                 None => {
                     compatibility.aliases.remove(public_id);
-                }
-            }
-            match previous_mode {
-                Some(previous) => {
-                    compatibility
-                        .interaction_modes
-                        .insert(public_id.to_string(), previous);
-                }
-                None => {
-                    compatibility.interaction_modes.remove(public_id);
                 }
             }
             return Err(format!(
@@ -806,7 +703,6 @@ impl T3CompatState {
 
     fn thread_shell(&self, session: &Session, updated_at: &str) -> Value {
         let public_id = self.public_thread_id(&session.id);
-        let interaction_mode = self.interaction_mode(&public_id);
         let project = project_path(session, &self.cwd);
         let created_at = millis_iso(session.created_at);
         let (latest_turn, status, active_turn_id, last_error) =
@@ -819,7 +715,7 @@ impl T3CompatState {
             "title": nonempty(&session.title, "Untitled session"),
             "modelSelection": model_selection(session),
             "runtimeMode": runtime_mode(session.permission_mode, session.sandbox_policy),
-            "interactionMode": interaction_mode,
+            "interactionMode": "default",
             "branch": Value::Null,
             "worktreePath": session.worktree_path,
             "latestTurn": latest_turn,
@@ -875,8 +771,8 @@ impl T3CompatState {
                 Part::Prompt { text, .. } => {
                     flush_assistant_message(&mut messages, &session.id, &mut assistant_message);
                     // C2's display projection is intentionally capped at 400 characters. T3
-                    // mobile expects the complete authored message, and the adapter-owned planning
-                    // skill must stay hidden from that user-visible text.
+                    // mobile expects the complete authored message. Hide legacy adapter-owned
+                    // planning markers in old transcripts.
                     let text = t3_user_prompt(&text);
                     messages.push(message_value(
                         external_message_ids
@@ -939,16 +835,7 @@ impl T3CompatState {
                         "createdAt": at,
                     }));
                 }
-                Part::Plan { entries } => activities.push(json!({
-                    "id": format!("codetwo-plan-{}-{}", session.id, entry.seq),
-                    "tone": "info",
-                    "kind": "assistant.plan",
-                    "summary": "Plan",
-                    "payload": { "entries": entries },
-                    "turnId": Value::Null,
-                    "sequence": entry.seq.max(0),
-                    "createdAt": at,
-                })),
+                Part::Plan { .. } => {}
             }
         }
         flush_assistant_message(&mut messages, &session.id, &mut assistant_message);
@@ -1036,6 +923,12 @@ impl T3CompatState {
         let command_type = required_string(&command, "type")?;
         match command_type.as_str() {
             "thread.turn.start" => {
+                Self::validate_interaction_mode(
+                    command
+                        .get("interactionMode")
+                        .and_then(Value::as_str)
+                        .unwrap_or("default"),
+                )?;
                 let public_id = required_string(&command, "threadId")?;
                 let text = command
                     .pointer("/message/text")
@@ -1068,19 +961,7 @@ impl T3CompatState {
                 } else {
                     self.create_thread(command_id, &public_id, &command).await?
                 };
-                // A preceding `thread.interaction-mode.set` is authoritative. Queued turns can
-                // carry stale composer state, so existing turns never mutate the durable mode.
-                let interaction_mode = self.interaction_mode(&public_id);
-                let mut doc = vec![DocBlock::Text { text }];
-                if interaction_mode == "plan" {
-                    doc.insert(
-                        0,
-                        DocBlock::Skill {
-                            skill_id: PLAN_SKILL_ID.into(),
-                            params: HashMap::new(),
-                        },
-                    );
-                }
+                let doc = vec![DocBlock::Text { text }];
                 self.submit_prompt_and_wait(core_id, doc, command_id.to_string(), message_id)
                     .await?;
             }
@@ -1128,9 +1009,7 @@ impl T3CompatState {
                     return Err(format!("unknown thread: {public_id}"));
                 }
                 let mode = required_string(&command, "interactionMode")?;
-                if self.set_interaction_mode(&public_id, &mode)? {
-                    self.mark_updated();
-                }
+                Self::validate_interaction_mode(&mode)?;
             }
             "thread.meta.update" => {
                 let thread_id = self.core_thread_id(&required_string(&command, "threadId")?);
@@ -1208,7 +1087,7 @@ impl T3CompatState {
             .or_else(|| command.get("interactionMode"))
             .and_then(Value::as_str)
             .unwrap_or("default");
-        let interaction_mode = Self::validate_interaction_mode(interaction_mode)?;
+        Self::validate_interaction_mode(interaction_mode)?;
 
         // NewSession and this receipt share one SQLite transaction. If the process died before
         // the JSON alias/model projection landed, replay repairs those projections without
@@ -1231,15 +1110,7 @@ impl T3CompatState {
                             .await?;
                     }
                 }
-                let recovered_mode = self
-                    .compatibility
-                    .lock()
-                    .unwrap()
-                    .interaction_modes
-                    .get(public_id)
-                    .cloned()
-                    .unwrap_or_else(|| interaction_mode.to_string());
-                self.persist_thread_identity(public_id, &core_id, &recovered_mode)?;
+                self.persist_thread_identity(public_id, &core_id)?;
                 return Ok(core_id);
             }
         }
@@ -1301,7 +1172,7 @@ impl T3CompatState {
             // first Prompt observes the model chosen in T3's create-thread bootstrap payload.
             self.set_model_and_verify(core_id.clone(), model).await?;
         }
-        self.persist_thread_identity(public_id, &core_id, interaction_mode)?;
+        self.persist_thread_identity(public_id, &core_id)?;
         Ok(core_id)
     }
 
@@ -2158,7 +2029,7 @@ fn flush_assistant_message(
 
 fn t3_user_prompt(canonical: &str) -> String {
     canonical
-        .strip_prefix(PLAN_PROMPT_PREFIX)
+        .strip_prefix(LEGACY_PLAN_PROMPT_PREFIX)
         .unwrap_or(canonical)
         .to_string()
 }
@@ -2262,11 +2133,6 @@ fn model_selection(session: &Session) -> Value {
         .model
         .clone()
         .filter(|model| !model.trim().is_empty())
-        .or_else(|| {
-            builtin_models(&session.provider)
-                .first()
-                .map(|model| model.id.clone())
-        })
         .unwrap_or_else(|| "default".into());
     json!({ "instanceId": provider_slug(&session.provider), "model": model })
 }
@@ -2422,6 +2288,28 @@ fn platform_arch() -> &'static str {
 mod tests {
     use super::*;
 
+    #[tokio::test]
+    async fn provider_projection_uses_registered_integrations_without_invented_models() {
+        let directory = tempfile::tempdir().unwrap();
+        let auth = Arc::new(AuthState::load(Some(directory.path().join("devices.json"))));
+        let provider = codetwo_core::provider::Provider {
+            id: ProviderId::Custom("future-agent".into()),
+            display_name: "Future agent".into(),
+            launch: codetwo_core::provider::LaunchSpec::new(
+                "/missing/future-agent",
+                [] as [&str; 0],
+            ),
+            needs_node: false,
+        };
+        let (engine, rx) = Engine::new(vec![provider], codetwo_core::SkillLibrary::new(Vec::new()));
+        let state = T3CompatState::new(Arc::new(engine), crate::fanout(rx), auth).unwrap();
+        let providers = state.providers();
+        assert_eq!(providers.len(), 1);
+        assert_eq!(providers[0]["displayName"], "Future agent");
+        assert_eq!(providers[0]["installed"], false);
+        assert_eq!(providers[0]["models"], json!([]));
+    }
+
     #[test]
     fn provider_and_runtime_mappings_match_t3_contract_values() {
         assert_eq!(provider_slug(&ProviderId::ClaudeCode), "claudeAgent");
@@ -2470,7 +2358,10 @@ mod tests {
     fn prompt_projection_is_complete_and_hides_the_adapter_plan_marker() {
         let long = "x".repeat(700);
         assert_eq!(t3_user_prompt(&long), long);
-        assert_eq!(t3_user_prompt(&format!("{PLAN_PROMPT_PREFIX}{long}")), long);
+        assert_eq!(
+            t3_user_prompt(&format!("{LEGACY_PLAN_PROMPT_PREFIX}{long}")),
+            long
+        );
     }
 
     #[test]
@@ -2545,15 +2436,25 @@ mod tests {
     }
 
     #[test]
-    fn compatibility_metadata_rejects_invalid_versions_modes_and_aliases() {
+    fn retired_interaction_modes_are_rejected_and_legacy_state_is_ignored() {
+        assert!(T3CompatState::validate_interaction_mode("default").is_ok());
+        assert!(T3CompatState::validate_interaction_mode("plan").is_err());
+        let metadata: CompatibilityMetadata = serde_json::from_value(json!({
+            "version": 1,
+            "aliases": {"thread-1": "core-1"},
+            "interactionModes": {"thread-1": "plan"}
+        }))
+        .unwrap();
+        assert!(validate_compatibility(&metadata).is_ok());
+        let saved = serde_json::to_value(metadata).unwrap();
+        assert_eq!(saved["aliases"]["thread-1"], "core-1");
+        assert!(saved.get("interactionModes").is_none());
+    }
+
+    #[test]
+    fn compatibility_metadata_rejects_invalid_versions_and_aliases() {
         let mut metadata = CompatibilityMetadata::default();
         metadata.version += 1;
-        assert!(validate_compatibility(&metadata).is_err());
-
-        let mut metadata = CompatibilityMetadata::default();
-        metadata
-            .interaction_modes
-            .insert("thread-1".into(), "future-mode".into());
         assert!(validate_compatibility(&metadata).is_err());
 
         let mut metadata = CompatibilityMetadata::default();
@@ -2588,9 +2489,8 @@ mod tests {
         for index in 0..16 {
             let state = state.clone();
             writers.push(tokio::task::spawn_blocking(move || {
-                let mode = if index % 2 == 0 { "default" } else { "plan" };
                 state
-                    .set_interaction_mode(&format!("thread-{index}"), mode)
+                    .persist_thread_identity(&format!("thread-{index}"), &format!("core-{index}"))
                     .unwrap();
             }));
         }
@@ -2604,7 +2504,7 @@ mod tests {
             error.is_none(),
             "persisted metadata did not reload: {error:?}"
         );
-        assert_eq!(reloaded.interaction_modes.len(), 16);
+        assert_eq!(reloaded.aliases.len(), 16);
     }
 
     #[tokio::test]
@@ -2616,7 +2516,7 @@ mod tests {
         let (engine, rx) = Engine::new(Vec::new(), codetwo_core::SkillLibrary::new(Vec::new()));
         let state = T3CompatState::new(Arc::new(engine), crate::fanout(rx), auth).unwrap();
 
-        assert!(state.set_interaction_mode("thread-1", "plan").is_err());
+        assert!(state.persist_thread_identity("thread-1", "core-1").is_err());
         assert_eq!(std::fs::read(&path).unwrap(), b"{not valid JSON");
     }
 }

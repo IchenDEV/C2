@@ -3,15 +3,14 @@
   "name": "develop",
   "version": "1.0.0",
   "title": "Develop",
-  "description": "Plan-first implementation in an isolated worktree, producing a plan and a change summary.",
+  "description": "Implementation in an isolated worktree, producing a plan and a change summary.",
   "localizations": {
     "zh-CN": { "title": "开发", "description": "在隔离 worktree 中计划先行地实现，产出计划与变更摘要。" }
   },
   "execution": {
     "session_mode": "auto_edit",
     "memory_preset": "standard",
-    "worktree": "current",
-    "plan_first": true
+    "worktree": "current"
   },
   "skills": {
     "inline": [

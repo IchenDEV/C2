@@ -9,7 +9,7 @@
 use crate::memory::MemoryReceipt;
 use crate::permission::ExecutionPolicy;
 use crate::provider::ProviderId;
-use crate::session::{PlanEntry, SessionActivity, SessionId};
+use crate::session::{SessionActivity, SessionId};
 use crate::skill::DocBlock;
 use crate::task::TaskId;
 use crate::worktree::ResolvedWorktreeBaseline;
@@ -191,12 +191,6 @@ pub enum Event {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         transcript_seq: Option<i64>,
     },
-    Plan {
-        session: SessionId,
-        entries: Vec<PlanEntry>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        transcript_seq: Option<i64>,
-    },
     /// A permission decision is needed from the user. `options` are `(option_id, label)` pairs.
     PermissionRequest {
         session: SessionId,
@@ -230,7 +224,7 @@ pub enum Event {
         cost_usd: Option<f64>,
     },
     /// The models this session can run on: the agent's own list (reported at `session/new` and
-    /// echoed after a switch), or [`crate::models::builtin_models`] for its provider — emitted as
+    /// echoed after a switch), or the installed CLI catalogue for its provider — emitted as
     /// soon as the session exists — when the agent doesn't implement the (UNSTABLE) ACP model API.
     /// `current` is empty when nothing has been chosen yet.
     Models {
@@ -248,14 +242,9 @@ pub enum Event {
     SessionCapabilities {
         session: SessionId,
         steering: bool,
-        goal: Option<crate::acp::wire::GoalCapabilityInfo>,
         /// True only after this live ACP session advertises the native `/compact` command.
         #[serde(default)]
         compact_context: bool,
-    },
-    GoalChanged {
-        session: SessionId,
-        goal: Option<GoalSnapshot>,
     },
     PromptQueued {
         session: SessionId,
@@ -397,17 +386,6 @@ pub struct ConfigOptionInfo {
     pub category: Option<String>,
     pub current: String,
     pub choices: Vec<ModelChoice>,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct GoalSnapshot {
-    pub objective: String,
-    pub status: String,
-    pub created_at: i64,
-    pub updated_at: i64,
-    pub token_budget: Option<u64>,
-    pub tokens_used: u64,
-    pub time_used_seconds: u64,
 }
 
 #[cfg(test)]

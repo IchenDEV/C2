@@ -8,12 +8,15 @@
 //! - [`kernel`] — Cordis-style reactive plugin runtime: contexts, services, injections, commands.
 //! - [`acp`] — Agent Client Protocol client (JSON-RPC over stdio) used to drive provider CLIs.
 //! - [`provider`] — registry of provider launch specs (Claude Code / Codex / Grok).
-//! - [`models`] — built-in model lists for providers that don't report their own over ACP.
+//! - [`models`] — model catalogues discovered from installed provider runtimes.
 //! - [`session`] — session / message / part model.
 //! - [`skill`] — skill library + the document → prompt compiler (the product differentiator).
 //! - [`permission`] — ask/allow/deny engine and permission modes (incl. YOLO).
 //! - [`event`] — the Op/Event types exchanged with frontends.
 //! - [`error`] — shared error types.
+
+#[cfg(unix)]
+mod unix_process_group;
 
 pub mod kernel;
 pub mod plugins;
@@ -119,7 +122,6 @@ pub use memory::{
     MemoryCanvasRef, MemoryContext, MemoryReceipt, MemoryReceiptItem, MemoryRecord, MemorySettings,
     MemorySourceRef, MemoryStats, MemoryTurnAudit, MemoryTurnProvenance,
 };
-pub use models::builtin_models;
 pub use orchestrator::{
     apply_orchestration_patch, ExecutionPreparation, ExecutionRequest, ExecutionStep,
     ExecutorAssignment, ExecutorOutcome, ExecutorPort, GraphOperation, InMemoryExecutor,

@@ -29,7 +29,6 @@ export interface ComposerDraftPosture {
   mode: PermissionMode;
   sandbox: Sandbox;
   worktreeBase: WorktreeBaselineKind | null;
-  planMode: boolean;
   memoryRead: MemoryAccess;
   memoryWrite: MemoryAccess;
   scene: string | null;
@@ -269,7 +268,6 @@ function parsePosture(value: unknown): ComposerDraftPosture | null {
       posture.worktreeBase === "current" ||
       posture.worktreeBase === "origin_default"
     ) ||
-    typeof posture.planMode !== "boolean" ||
     !isMemoryAccess(posture.memoryRead) ||
     !isMemoryAccess(posture.memoryWrite) ||
     !nullableStringWithin(posture.scene, 512) ||
@@ -286,7 +284,6 @@ function parsePosture(value: unknown): ComposerDraftPosture | null {
     mode: posture.mode,
     sandbox: posture.sandbox,
     worktreeBase: posture.worktreeBase,
-    planMode: posture.planMode,
     memoryRead: posture.memoryRead,
     memoryWrite: posture.memoryWrite,
     scene:

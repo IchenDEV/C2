@@ -1996,15 +1996,6 @@ fn agent_text_after(conn: &Connection, session_id: &str, seq: i64) -> Result<Str
     for row in rows {
         match serde_json::from_str::<Part>(&row?)? {
             Part::Text { text } => answer.push_str(&text),
-            Part::Plan { entries } if answer.is_empty() => {
-                answer.push_str(
-                    &entries
-                        .iter()
-                        .map(|entry| entry.content.as_str())
-                        .collect::<Vec<_>>()
-                        .join("; "),
-                );
-            }
             _ => {}
         }
     }

@@ -62,7 +62,6 @@ export interface SceneExecution {
   session_mode?: SessionMode;
   memory_preset?: MemoryPresetId;
   worktree?: "off" | "current" | "origin_default";
-  plan_first?: boolean;
 }
 
 export interface SceneSkills {
@@ -200,7 +199,6 @@ export interface LivePosture {
   mode: SessionMode;
   memoryRead: MemoryAccess;
   memoryWrite: MemoryAccess;
-  planFirst: boolean;
   provider: string;
   model: string | null;
 }
@@ -227,11 +225,6 @@ export function sceneCustomized(scene: SceneInfo, live: LivePosture): boolean {
     if (preset.read !== live.memoryRead || preset.write !== live.memoryWrite)
       return true;
   }
-  if (
-    execution.plan_first !== undefined &&
-    execution.plan_first !== live.planFirst
-  )
-    return true;
   if (
     execution.providers !== undefined &&
     execution.providers.length > 0 &&
@@ -335,26 +328,6 @@ export function sceneEffortChoice(
   const choice = option.choices.find(
     (c) =>
       c.id.toLowerCase() === wanted || (c.name ?? "").toLowerCase() === wanted
-  );
-  return choice ? { configId: option.id, value: choice.id } : null;
-}
-
-/**
- * Resolve a scene's plan posture through the provider-owned collaboration-mode selector.
- * There is deliberately no fallback prompt/skill: without this native option the scene leaves
- * `plan_first` pending instead of pretending the provider changed modes.
- */
-export function sceneCollaborationChoice(
-  options: readonly EffortOptionLike[],
-  planFirst: boolean
-): { configId: string; value: string } | null {
-  const option = options.find(
-    (o) => o.category === "collaboration_mode" || o.id === "collaboration_mode"
-  );
-  if (!option) return null;
-  const wanted = planFirst ? "plan" : "default";
-  const choice = option.choices.find(
-    (candidate) => candidate.id.toLowerCase() === wanted
   );
   return choice ? { configId: option.id, value: choice.id } : null;
 }

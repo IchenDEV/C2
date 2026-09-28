@@ -23,6 +23,7 @@ export interface SessionConfig {
   onProvider: (v: string) => void;
   /** A running turn or in-flight runtime replacement owns the provider boundary. */
   providerChangeDisabled?: boolean;
+  providerSwitching?: boolean;
   /** A foreign Provider choice replaces the active runtime; null leaves its model unspecified. */
   onProviderModel: (provider: string, model: string | null) => void;
   onReloadProviders: () => void;
@@ -40,8 +41,6 @@ export interface SessionConfig {
   worktreeOptions: WorktreeBaselineOption[];
   worktreeOptionsLoading: boolean;
   onWorktreeBase: (v: WorktreeBaselineKind | null) => void;
-  planMode: boolean;
-  onPlan: (v: boolean) => void;
   /** Component-policy gate for the memory picker and its persistence calls. */
   memoryEnabled: boolean;
   memoryRead: MemoryAccess;

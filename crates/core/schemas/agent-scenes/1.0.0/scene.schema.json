@@ -49,8 +49,7 @@
         "reasoning_effort": { "type": "string" },
         "session_mode": { "enum": ["read_only", "ask", "auto_edit", "full_access"] },
         "memory_preset": { "enum": ["standard", "read_only", "private", "learn_only"] },
-        "worktree": { "enum": ["off", "current", "origin_default"] },
-        "plan_first": { "type": "boolean" }
+        "worktree": { "enum": ["off", "current", "origin_default"] }
       },
       "additionalProperties": false
     },

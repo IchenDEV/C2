@@ -36,7 +36,7 @@ pub struct InitializeResponse {
     pub agent_capabilities: Value,
     #[serde(rename = "authMethods", default)]
     pub auth_methods: Value,
-    /// Provider-owned optional extensions such as native steering and long-running goals.
+    /// Provider-owned optional extensions such as native steering.
     #[serde(rename = "_meta", default)]
     pub meta: Value,
 }
@@ -52,15 +52,8 @@ pub struct AgentInfo {
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub struct GoalCapabilityInfo {
-    pub control_method: String,
-    pub actions: Vec<String>,
-}
-
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct InteractionCapabilities {
     pub steering: bool,
-    pub goal: Option<GoalCapabilityInfo>,
 }
 
 /// The agent capabilities we act on, lifted out of the raw `agentCapabilities` object. Everything
@@ -111,21 +104,7 @@ impl InitializeResponse {
             .pointer("/steering/supported")
             .and_then(Value::as_bool)
             .unwrap_or(false);
-        let goal = self.meta.get("goal").and_then(|goal| {
-            let control_method = goal.get("controlMethod")?.as_str()?.to_string();
-            let actions = goal
-                .get("actions")?
-                .as_array()?
-                .iter()
-                .filter_map(Value::as_str)
-                .map(str::to_string)
-                .collect::<Vec<_>>();
-            (!control_method.is_empty() && !actions.is_empty()).then_some(GoalCapabilityInfo {
-                control_method,
-                actions,
-            })
-        });
-        InteractionCapabilities { steering, goal }
+        InteractionCapabilities { steering }
     }
 }
 
@@ -144,7 +123,7 @@ pub struct NewSessionResponse {
     pub session_id: String,
     /// The agent's selectable models, when it reports any. Marked UNSTABLE in the ACP spec and
     /// absent from most adapters today, so this stays optional and its absence is a normal state —
-    /// the engine then offers [`crate::models::builtin_models`] for the provider instead.
+    /// the engine then offers the installed CLI catalogue for the provider instead.
     #[serde(default)]
     pub models: Option<SessionModelState>,
     /// Session config options (UNSTABLE) — where current adapters report the model selector and
@@ -407,9 +386,8 @@ pub enum SessionUpdate {
     },
     ToolCall(ToolCall),
     ToolCallUpdate(ToolCallUpdate),
-    Plan {
-        entries: Vec<PlanEntry>,
-    },
+    /// Retired provider feature: accept the notification but discard its payload.
+    Plan {},
     /// The agent's config options changed (model switched, effort adjusted, …). Carries the full
     /// replacement set, same as `session/new` and `session/set_config_option` responses.
     ConfigOptionUpdate {
@@ -422,9 +400,7 @@ pub enum SessionUpdate {
         #[serde(rename = "availableCommands", default)]
         available_commands: Vec<AvailableCommand>,
     },
-    /// Provider-owned session metadata. Codex uses `_meta.goal` for live goal snapshots and
-    /// `_meta.codex.threadStatus.type` to delimit turns started outside `session/prompt` (for
-    /// example a goal continuation).
+    /// Provider-owned session metadata, including turn status outside `session/prompt`.
     SessionInfoUpdate {
         #[serde(default, rename = "_meta")]
         meta: Value,
@@ -478,15 +454,6 @@ pub struct ToolCallUpdate {
     pub raw_output: Option<Value>,
     #[serde(default, rename = "_meta")]
     pub meta: Option<Value>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PlanEntry {
-    pub content: String,
-    #[serde(default)]
-    pub priority: Option<String>,
-    #[serde(default)]
-    pub status: Option<String>,
 }
 
 // ---- session/request_permission (agent → client request) -----------------------------------
