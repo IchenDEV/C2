@@ -27,3 +27,5 @@ Targeted corrections cost less to implement, validate and maintain than replacin
 - [x] AC-3: Model discovery has no static fallback catalogue or permanent cache; unknown providers/models are never fabricated by the renderer.
 - [x] AC-4: Provider metadata cannot crash transcript projection; switching has visible pending state and duplicate actions are fenced. Actual renderer checks cover the affected controls.
 - [x] AC-5: Relevant Rust, desktop, documentation and worktree lifecycle checks pass; cleanup and unchecked live-provider boundaries are recorded.
+
+Worktree continuation must distinguish recycled Unix inode numbers using filesystem birth time when available. Legacy receipts and filesystems without birth time retain device/inode and Git provenance checks; that narrower guarantee remains explicit.

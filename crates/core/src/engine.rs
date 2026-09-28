@@ -8037,7 +8037,7 @@ for line in sys.stdin:
 
         let error = validate_session_checkout(&session).await.unwrap_err();
         assert!(
-            error.contains("path identity changed"),
+            error.contains("path identity changed") || error.contains("repository changed"),
             "unexpected error: {error}"
         );
 

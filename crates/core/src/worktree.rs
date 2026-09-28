@@ -460,6 +460,10 @@ pub enum DirectoryIdentity {
     Unix {
         device: u64,
         inode: u64,
+        /// Distinguishes recycled inode numbers when the filesystem exposes a birth time.
+        /// Older records and filesystems without birth times retain device/inode validation.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        birth_time_ns: Option<u64>,
     },
     Windows {
         volume_serial_number: u32,
@@ -487,6 +491,11 @@ impl DirectoryIdentity {
             Ok(Self::Unix {
                 device: metadata.dev(),
                 inode: metadata.ino(),
+                birth_time_ns: metadata
+                    .created()
+                    .ok()
+                    .and_then(|created| created.duration_since(std::time::UNIX_EPOCH).ok())
+                    .and_then(|elapsed| u64::try_from(elapsed.as_nanos()).ok()),
             })
         }
         #[cfg(windows)]
@@ -510,7 +519,25 @@ impl DirectoryIdentity {
             Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(false),
             Err(error) => return Err(error),
         };
-        Ok(*self == actual)
+        Ok(match (self, &actual) {
+            (
+                Self::Unix {
+                    device,
+                    inode,
+                    birth_time_ns,
+                },
+                Self::Unix {
+                    device: actual_device,
+                    inode: actual_inode,
+                    birth_time_ns: actual_birth,
+                },
+            ) => {
+                device == actual_device
+                    && inode == actual_inode
+                    && birth_time_ns.map_or(true, |expected| *actual_birth == Some(expected))
+            }
+            _ => *self == actual,
+        })
     }
 }
 
@@ -1562,11 +1589,46 @@ mod tests {
         );
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn directory_identity_rejects_recycled_inode_birth_time_and_reads_legacy_receipts() {
+        let directory = tempfile::tempdir().unwrap();
+        let identity = DirectoryIdentity::capture(directory.path()).unwrap();
+        let DirectoryIdentity::Unix {
+            device,
+            inode,
+            birth_time_ns,
+        } = identity
+        else {
+            unreachable!();
+        };
+        // Deterministically model inode reuse: same device/inode, different creation time.
+        let recycled = DirectoryIdentity::Unix {
+            device,
+            inode,
+            birth_time_ns: Some(birth_time_ns.unwrap_or(0).saturating_add(1)),
+        };
+        assert!(!recycled.matches_path(directory.path()).unwrap());
+        let legacy: DirectoryIdentity = serde_json::from_value(serde_json::json!({
+            "kind": "unix", "device": device, "inode": inode
+        }))
+        .unwrap();
+        assert!(legacy.matches_path(directory.path()).unwrap());
+
+        // Normal content changes must not invalidate a live session's directory receipt.
+        std::fs::write(directory.path().join("file"), "changed").unwrap();
+        assert!(identity.matches_path(directory.path()).unwrap());
+        let restored: DirectoryIdentity =
+            serde_json::from_value(serde_json::to_value(&identity).unwrap()).unwrap();
+        assert_eq!(restored, identity);
+    }
+
     #[test]
     fn directory_identity_has_stable_wire_shape() {
         let unix = DirectoryIdentity::Unix {
             device: 7,
             inode: 11,
+            birth_time_ns: None,
         };
         assert_eq!(
             serde_json::to_value(unix).unwrap(),

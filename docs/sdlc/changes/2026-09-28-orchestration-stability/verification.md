@@ -62,9 +62,15 @@ ACP launches now create isolated Unix process groups and terminate the owned gro
 
 Unix process groups cover ordinary descendants; descendants that deliberately create a new process group and Windows process-tree ownership are not claimed. Windows retains direct-child cleanup.
 
+## Linux CI ownership regression
+
+[PR #242 CI run 36384177651](https://github.com/IchenDEV/codeTwo/actions/runs/36384177651) passed frontend checks/build and Rust workspace check, then exposed two existing worktree provenance failures on Linux. One assertion required a path-identity error even when the repository-provenance guard correctly rejected the replacement. The other exposed a real false match: the filesystem reused a removed directory's inode and Git reused the admin path, so a distinct worktree passed the old device/inode receipt.
+
+Unix receipts now persist the filesystem birth timestamp when available and require it to match. Old receipts without that optional field retain their existing device/inode and Git provenance checks. Filesystems without birth timestamps retain that narrower guarantee. A deterministic regression models the same inode with a different birth time, confirms content changes keep the identity valid, and round-trips new and old receipts. The existing moved-worktree rejection test remains active; the unrelated-repository assertion accepts either valid rejection layer. `cargo test -p codetwo-core --lib --quiet` passed 553 tests locally. `cargo check --workspace --all-targets` also passed, recorded in `inode-reuse-workspace-check.log`; Linux remote revalidation remains required before merge. No unrelated production execution or approval policy changed.
+
 ## Cleanup
 
-Removed: Task-created `target/` (2.8 GiB at the first handoff; 2.3 GiB rebuilt and removed after each authenticated verification continuation), the empty live-test working directory, per-probe temporary working directories, one-off matrix runner scripts, `apps/desktop/dist/` (48 MiB), and temporary browser harness HTML/TSX under `apps/desktop/.codex/run/orchestration-stability/`. The temporary browser tab was closed and its viewport override reset.
+Removed: PR follow-up `target/` rebuild (1.9 GiB), verified absent after removal.  Task-created `target/` (2.8 GiB at the first handoff; 2.3 GiB rebuilt and removed after each authenticated verification continuation), the empty live-test working directory, per-probe temporary working directories, one-off matrix runner scripts, `apps/desktop/dist/` (48 MiB), and temporary browser harness HTML/TSX under `apps/desktop/.codex/run/orchestration-stability/`. The temporary browser tab was closed and its viewport override reset.
 Retained: `.codex/run/orchestration-stability/` contains small test logs, successful/failed authenticated canary evidence, and light/dark rendered evidence; `apps/desktop/node_modules/` (1.7 GiB) contains installed development dependencies.
 Retention owner: Codex for this change and checkout.
 Cleanup trigger: Review retained evidence on the next continuation and remove disposable logs/captures after this change is reviewed or closed; remove the installed dependencies when this worktree is retired. Provider-managed synthetic session histories and shared package caches are left to their normal lifecycle; no account history is deleted by this task.
