@@ -73,5 +73,5 @@ Evidence: `ls -lh .codex/run/codex-layout-reset`, `du -sh apps/desktop/dist` bef
 
 Approval: local implementation authorized by the request recorded in Intent; PR creation and push authorized by the user’s “pr” request in this chat. Merge approval was not requested.
 Rollback: See plan.md; revert the scoped UI changes without migrating saved state.
-Release: PR delivery requested; creation pending. No merge, publication or release performed.
+Release: Review PR https://github.com/IchenDEV/codeTwo/pull/243 created and pushed. No merge, publication or release performed.
 Feedback: none pending for this bounded renderer change.
