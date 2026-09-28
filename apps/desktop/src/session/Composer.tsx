@@ -35,12 +35,10 @@ import {
   Square,
   Star,
   Store,
-  Target,
   Ticket,
   TriangleAlert,
   X,
 } from "@/components/ui/icons";
-import { Input } from "@/components/ui/input";
 import {
   Popover,
   PopoverContent,
@@ -54,17 +52,9 @@ import {
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
-import { fallbackProviders } from "../bridge";
-import type {
-  ConfigOptionInfo,
-  AppshotCapture,
-  GoalCapabilityInfo,
-  GoalSnapshot,
-  ModelChoice,
-} from "../bridge";
+import type { ConfigOptionInfo, AppshotCapture, ModelChoice } from "../bridge";
 import { briefOfferVisible } from "../editor/slotCard";
 import { useT } from "../i18n";
-import { td } from "../i18n/dynamic";
 import { ProviderIcon } from "../providers/ProviderIcon";
 import { VoiceButton } from "../voice/VoiceButton";
 import { memoryPresetsForProvider } from "./config";
@@ -125,12 +115,6 @@ interface ComposerProps {
   onSteer: () => void;
   onStop: () => void;
   steeringSupported: boolean;
-  goalCapability: GoalCapabilityInfo | null;
-  goal: GoalSnapshot | null;
-  onGoal: (
-    action: "set" | "pause" | "resume" | "clear",
-    objective?: string
-  ) => Promise<void>;
   onAttachFile: () => void;
   onAttachImages: (files: readonly File[]) => void | Promise<void>;
   onInsertSkill: () => void;
@@ -596,169 +580,6 @@ export function MemoryPicker({ config }: { config: SessionConfig }) {
   );
 }
 
-/** A provider-reported collaboration selector. Plan is never synthesized into prompt text. */
-export function CollaborationModePicker({
-  options,
-  onChange,
-}: {
-  options: ConfigOptionInfo[];
-  onChange: (configId: string, value: string) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const option = options.find(
-    (candidate) =>
-      candidate.category === "collaboration_mode" ||
-      candidate.id === "collaboration_mode"
-  );
-  if (!option || option.choices.length < 2) return null;
-  const current = option.choices.find((choice) => choice.id === option.current);
-  return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger
-        render={
-          <Chip
-            aria-label={`${option.name}: ${current?.name ?? option.current}`}
-          >
-            <ListChecks className="size-3.5 shrink-0" />
-            <span>{current?.name ?? option.current}</span>
-            <ChevronDown className="size-3 shrink-0 opacity-50" />
-          </Chip>
-        }
-      />
-      <PopoverContent align="center" side="top" className="w-64 p-1.5">
-        <MenuSection>{option.name}</MenuSection>
-        {option.choices.map((choice) => (
-          <SelectableRow
-            key={choice.id}
-            selected={choice.id === option.current}
-            label={choice.name}
-            description={choice.description}
-            onSelect={() => {
-              onChange(option.id, choice.id);
-              setOpen(false);
-            }}
-          />
-        ))}
-      </PopoverContent>
-    </Popover>
-  );
-}
-
-export function GoalPicker({
-  capability,
-  goal,
-  onGoal,
-}: {
-  capability: GoalCapabilityInfo | null;
-  goal: GoalSnapshot | null;
-  onGoal: (
-    action: "set" | "pause" | "resume" | "clear",
-    objective?: string
-  ) => Promise<void>;
-}) {
-  const t = useT();
-  const [open, setOpen] = useState(false);
-  const [objective, setObjective] = useState("");
-  const [pending, setPending] = useState(false);
-  if (!capability) return null;
-  const run = async (action: "set" | "pause" | "resume" | "clear") => {
-    setPending(true);
-    try {
-      await onGoal(action, action === "set" ? objective.trim() : undefined);
-      if (action === "set") setObjective("");
-    } finally {
-      setPending(false);
-    }
-  };
-  const can = (action: string) => capability.actions.includes(action);
-  return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger
-        render={
-          <Chip
-            aria-label={
-              goal ? `${t("goal.label")}: ${goal.objective}` : t("goal.label")
-            }
-            className={cn(goal && "text-primary hover:text-primary")}
-          >
-            <Target className="size-3.5 shrink-0" />
-            <span className="max-w-32 truncate">
-              {goal?.objective ?? t("goal.label")}
-            </span>
-            <ChevronDown className="size-3 shrink-0 opacity-50" />
-          </Chip>
-        }
-      />
-      <PopoverContent align="center" side="top" className="w-80 p-2">
-        {goal ? (
-          <div className="space-y-2">
-            <div className="px-1">
-              <p className="text-body text-foreground font-medium">
-                {goal.objective}
-              </p>
-              <p className="text-callout text-muted-foreground mt-0.5">
-                {td(t, `goal.status.${goal.status}`)}
-              </p>
-            </div>
-            <div className="flex gap-1.5">
-              {goal.status === "paused" && can("resume") ? (
-                <Button
-                  size="sm"
-                  disabled={pending}
-                  onClick={() => void run("resume")}
-                >
-                  {t("goal.resume")}
-                </Button>
-              ) : can("pause") ? (
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  disabled={pending}
-                  onClick={() => void run("pause")}
-                >
-                  {t("goal.pause")}
-                </Button>
-              ) : null}
-              {can("clear") ? (
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  disabled={pending}
-                  onClick={() => void run("clear")}
-                >
-                  {t("goal.clear")}
-                </Button>
-              ) : null}
-            </div>
-          </div>
-        ) : can("set") ? (
-          <form
-            className="space-y-2"
-            onSubmit={(event) => {
-              event.preventDefault();
-              if (objective.trim()) void run("set");
-            }}
-          >
-            <Input
-              value={objective}
-              onChange={(event) => setObjective(event.currentTarget.value)}
-              placeholder={t("goal.placeholder")}
-              aria-label={t("goal.objective")}
-            />
-            <Button
-              type="submit"
-              size="sm"
-              disabled={pending || !objective.trim()}
-            >
-              {t("goal.start")}
-            </Button>
-          </form>
-        ) : null}
-      </PopoverContent>
-    </Popover>
-  );
-}
-
 const WORKTREE_BASELINES = ["current", "origin_default"] as const;
 
 /** Worktree isolation is a baseline choice, not a boolean: both commit sources stay explicit. */
@@ -915,12 +736,8 @@ export function WorktreePicker({ config }: { config: SessionConfig }) {
  * chip picks the family, the second the effort, and together they resolve to one of the adapter's
  * own ids.
  *
- * Both APIs are optional and many adapters skip both, in which case the flat list is the core's
- * built-in one for that provider rather than the agent's own — same shape either way. Only a
- * provider we have no list for (a custom one) falls through to the note explaining that its CLI
- * config decides. Before a session exists, the main composer only shows providers with an
- * advertised model list; host surfaces may keep the explicit affordance visible while metadata is
- * loading. Provider-owned config options still arrive after session creation.
+ * Both APIs are optional. Before session creation only CLI-discovered choices are available;
+ * otherwise the provider owns its default and can report model/config choices after connection.
  */
 export function ModelPicker({
   models,
@@ -957,11 +774,7 @@ export function ModelPicker({
   const [browseProvider, setBrowseProvider] = useState(provider);
   const modelTriggerRef = useRef<HTMLButtonElement>(null);
   const providerSwitcherEnabled = providerConfig !== undefined;
-  const providerRegistry = providerConfig
-    ? providerConfig.providers.length > 0
-      ? providerConfig.providers
-      : fallbackProviders()
-    : [];
+  const providerRegistry = providerConfig?.providers ?? [];
   const providerChoices = providerConfig
     ? providerRegistry.filter(
         (candidate) =>
@@ -1050,7 +863,9 @@ export function ModelPicker({
   let effortLabel = "";
   let effortRows: PickerRow[] = [];
 
-  if (modelOpt) {
+  if (providerConfig?.providerSwitching === true) {
+    modelLabel = t("composer.switchingProvider");
+  } else if (modelOpt) {
     // Keep the trigger anchored to the active Provider even while the popup browses another one.
     modelLabel =
       (modelOpt.choices.find((c) => c.id === modelOpt.current)?.name ??
@@ -1214,6 +1029,11 @@ export function ModelPicker({
             >
               <ProviderIcon provider={provider} className="size-3.5 shrink-0" />
               <span
+                role={
+                  providerConfig?.providerSwitching === true
+                    ? "status"
+                    : undefined
+                }
                 title={modelLabel}
                 className="text-foreground/80 max-w-28 truncate @lg/composer:max-w-44"
               >
@@ -1261,7 +1081,11 @@ export function ModelPicker({
                       aria-label={displayName}
                       aria-selected={selected}
                       data-selected={selected ? "true" : "false"}
-                      disabled={unavailable}
+                      disabled={
+                        disabled ||
+                        unavailable ||
+                        providerConfig.providersStatus !== "ready"
+                      }
                       className="max-w-40 shrink-0 justify-start px-2 font-normal"
                       onClick={() => {
                         setModelSearch("");
@@ -1516,9 +1340,6 @@ export function Composer({
   onSteer,
   onStop,
   steeringSupported,
-  goalCapability,
-  goal,
-  onGoal,
   onAttachFile,
   onAttachImages,
   onInsertSkill,
@@ -1669,12 +1490,6 @@ export function Composer({
           </p>
         </DropdownMenuContent>
       </DropdownMenu>
-
-      <CollaborationModePicker
-        options={configOptions}
-        onChange={onConfigOption}
-      />
-      <GoalPicker capability={goalCapability} goal={goal} onGoal={onGoal} />
 
       <Statusline
         contextWindow={contextWindow}

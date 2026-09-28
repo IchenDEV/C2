@@ -35,7 +35,6 @@ const KIND_LABEL: Record<TrajectoryKind, StringKey> = {
   reasoning: "trajectory.kind.reasoning",
   tool: "trajectory.kind.tool",
   memory: "trajectory.kind.memory",
-  plan: "trajectory.kind.plan",
   error: "trajectory.kind.error",
 };
 
@@ -51,7 +50,6 @@ const KIND_TONE: Record<TrajectoryKind, string> = {
   reasoning: "bg-muted-foreground",
   tool: "bg-warning",
   memory: "bg-success",
-  plan: "bg-primary/65",
   error: "bg-destructive",
 };
 
@@ -62,7 +60,6 @@ const FILTER_KINDS: (TrajectoryKind | "all")[] = [
   "reasoning",
   "tool",
   "memory",
-  "plan",
   "error",
 ];
 

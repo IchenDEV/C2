@@ -74,13 +74,11 @@ import {
   call,
   compileDoc,
   confirmNative,
-  controlGoal,
   addProject,
   DEFAULT_KEYMAP,
   defaultCwd,
   describeBlock,
   discardSessionWorktree,
-  fallbackProviders,
   getKeymap,
   getAppshot,
   getPromptImage,
@@ -170,7 +168,6 @@ import {
   getSessionAutoScene,
   listPipelines,
   listScenes,
-  recordSceneArtifact,
   sceneSessionPlan,
   sessionPipeline,
   setModel as setSessionModel,
@@ -200,7 +197,6 @@ import type {
   AppshotCapture,
   GitStatus,
   GitHubPullRequest,
-  GoalSnapshot,
   GitHubPullRequestDetail,
   Issue,
   KeymapEntry,
@@ -216,7 +212,6 @@ import type {
   ProviderInfo,
   ProviderQuotaReport,
   PermissionMode,
-  PlanEntry,
   Sandbox,
   SessionActivity,
   SessionInfo,
@@ -373,7 +368,6 @@ import {
   sceneCustomized,
   softApplyPending,
   MEMORY_PRESET_POLICY,
-  sceneCollaborationChoice,
   sceneEffortChoice,
 } from "./session/scene";
 import type { SceneInfo } from "./session/scene";
@@ -416,7 +410,6 @@ import { StageTrack } from "./session/StageTrack";
 // resolver matches the pair case-insensitively without it.
 import { deriveBurnRate } from "./session/statusline.ts";
 import { TaskHandoffDialog } from "./session/TaskHandoffDialog";
-import { planChecklistMarkdown } from "./session/TaskPlanPanel";
 import { TemplateDialog } from "./session/TemplateDialog";
 import {
   activeInteractivePreview,
@@ -858,7 +851,7 @@ const EMPTY_PANE_TRANSCRIPT_STATE: PaneTranscriptState = {
 };
 
 export default function App() {
-  const [providers, setProviders] = useState<ProviderInfo[]>(fallbackProviders);
+  const [providers, setProviders] = useState<ProviderInfo[]>([]);
   const [providersStatus, setProvidersStatus] = useState<
     "loading" | "ready" | "error"
   >("loading");
@@ -889,10 +882,11 @@ export default function App() {
   // Row 2 of every rail entry. Refreshed when a turn ends rather than per streamed chunk — the
   // preview is a glance, and requerying the transcript table on every token would be absurd.
   const [previews, setPreviews] = useState<Record<string, string>>({});
-  const [provider, setProvider] = useState("grok");
+  const [provider, setProvider] = useState("");
   const [providerSwitchingSessions, setProviderSwitchingSessions] = useState<
     Set<string>
   >(() => new Set());
+  const providerSwitchRequestsRef = useRef(new Set<string>());
   const [cwd, setCwd] = useState(".");
   const [mode, setMode] = useState<PermissionMode>("ask");
   const [sandbox, setSandboxState] = useState<Sandbox>("workspace_write");
@@ -907,7 +901,6 @@ export default function App() {
   >([]);
   const [worktreeOptionsLoading, setWorktreeOptionsLoading] = useState(false);
   const worktreeOptionsRequestRef = useRef(0);
-  const [planMode, setPlanMode] = useState(false);
   const [memoryRead, setMemoryRead] = useState<MemoryAccess>("inherit");
   const [memoryWrite, setMemoryWrite] = useState<MemoryAccess>("inherit");
   // The tiling workspace: a recursive split tree plus the id -> content map. `activeSession` is the
@@ -1258,8 +1251,6 @@ export default function App() {
   const autoSceneRef = useRef(false);
   /** Sessions whose scene reasoning_effort has been applied (once options arrived). */
   const sceneEffortAppliedRef = useRef(new Set<string>());
-  /** Last scene plan posture sent through each session's provider-owned collaboration option. */
-  const scenePlanAppliedRef = useRef(new Map<string, boolean>());
   /** Stage binding for the next created session (advance-in-new-session handshake). */
   const pendingPipelineBindRef = useRef<{
     instanceId: string;
@@ -1334,7 +1325,6 @@ export default function App() {
   const [interactionCapabilities, setInteractionCapabilities] = useState<
     Record<string, SessionInteractionCapabilities>
   >({});
-  const [goals, setGoals] = useState<Record<string, GoalSnapshot | null>>({});
   // Provider-reported context windows are session-level state, not transcript parts. Keeping the
   // map keyed by id prevents a late/background provider event from repainting the active session.
   const [contextWindows, setContextWindows] = useState<ContextWindowBySession>(
@@ -1395,7 +1385,6 @@ export default function App() {
     mode,
     sandbox,
     worktreeBase,
-    planMode,
     memoryRead,
     memoryWrite,
     scene: activeSceneName,
@@ -1407,7 +1396,6 @@ export default function App() {
     mode,
     sandbox,
     worktreeBase,
-    planMode,
     memoryRead,
     memoryWrite,
     scene: activeSceneName,
@@ -1717,38 +1705,6 @@ export default function App() {
   const componentEnabledRef = useRef<(id: BuiltinUiComponentId) => boolean>(
     () => false
   );
-  // ---- R4 plan-as-document (docs/archive/scenes-v1/frontend-implementation-plan.md Item 3) ----
-  // Plan markdown waiting on the Replace/Append/Cancel decision because the composer isn't empty.
-  const [planDocPending, setPlanDocPending] = useState<string | null>(null);
-  /** The edited plan IS the next prompt: it opens into this session's composer document. */
-  const openPlanAsDocument = (entries: PlanEntry[]) => {
-    const markdown = planChecklistMarkdown(entries);
-    if (docEmpty) {
-      void insertMarkdownRef.current?.(markdown, "replace");
-      setDocMode(true);
-    } else {
-      setPlanDocPending(markdown);
-    }
-  };
-  const resolvePlanDocPending = (mode: "replace" | "append" | null) => {
-    const markdown = planDocPending;
-    setPlanDocPending(null);
-    if (markdown == null || markdown === "" || !mode) return;
-    void insertMarkdownRef.current?.(markdown, mode);
-    setDocMode(true);
-  };
-  const pinPlanArtifact = (markdown: string) => {
-    if (!componentEnabledRef.current("scenes.surface")) return;
-    const session = activeSessionRef.current;
-    if (session == null || session === "") return;
-    void recordSceneArtifact(session, "plan", markdown).then((record) => {
-      if (record) toast(t("planDoc.pinned"), "success");
-      else toast(t("planDoc.pinFailed"), "error");
-    });
-  };
-  const canPinPlan = (
-    scenes.find((s) => s.reference === activeSceneName)?.artifacts ?? []
-  ).some((artifact) => artifact.kind === "plan");
   // ---- R2 template-from-history (docs/archive/scenes-v1/frontend-implementation-plan.md Item 8) ----
   // Stable so the memoized TurnCards don't re-render on every App render.
   const openTemplateDraft = (promptText: string) => {
@@ -2121,7 +2077,6 @@ export default function App() {
     setMode(posture.mode);
     setSandboxState(posture.sandbox);
     setWorktreeBase(posture.worktreeBase);
-    setPlanMode(posture.planMode);
     memoryReadRef.current = posture.memoryRead;
     memoryWriteRef.current = posture.memoryWrite;
     setMemoryRead(posture.memoryRead);
@@ -2395,7 +2350,6 @@ export default function App() {
     memoryWrite,
     mode,
     pendingAppshots,
-    planMode,
     provider,
     sandbox,
     scheduleActiveComposerDraftSave,
@@ -3135,7 +3089,7 @@ export default function App() {
               }
             }
           }
-          // Connect as soon as the durable shell exists so Plan/Goal capability selectors can be
+          // Connect as soon as the durable shell exists so provider configuration can be
           // provider-authored before the next prompt instead of appearing only after it runs.
           void prepareSession(ev.session).catch(() => {
             /* empty */
@@ -3191,15 +3145,13 @@ export default function App() {
                 }
                 if (originFocused) setActiveSceneName(pendingScene);
                 // Provider-owned config ids do not exist until the session reports its options,
-                // so scene effort and collaboration posture stay pending until that handshake.
+                // so scene effort stays pending until that handshake.
                 const pending: string[] = [];
                 if (
                   scene?.execution?.reasoning_effort != null &&
                   scene?.execution?.reasoning_effort !== ""
                 )
                   pending.push("reasoning_effort");
-                if (scene?.execution?.plan_first !== undefined)
-                  pending.push("plan_first");
                 if (originFocused) setScenePendingFields(pending);
               } else {
                 if (originFocused) {
@@ -3362,16 +3314,13 @@ export default function App() {
             const { [ev.session]: _old, ...rest } = current;
             return rest;
           });
-          setGoals((current) => ({ ...current, [ev.session]: null }));
           sceneEffortAppliedRef.current.delete(ev.session);
-          scenePlanAppliedRef.current.delete(ev.session);
           if (ev.session === activeSessionRef.current) {
             setProvider(nextProvider);
             setModels([]);
             setCurrentModel(nextModel);
             setDefaultModel(null);
             setConfigOptions([]);
-            setPlanMode(false);
             const scene = scenesRef.current.find(
               (candidate) => candidate.reference === activeSceneNameRef.current
             );
@@ -3380,9 +3329,6 @@ export default function App() {
               scene?.execution?.reasoning_effort !== ""
                 ? ["reasoning_effort"]
                 : []),
-              ...(scene?.execution?.plan_first === undefined
-                ? []
-                : ["plan_first"]),
             ]);
           }
           if (canvasProviderRetrySessionRef.current === ev.session) {
@@ -3445,14 +3391,9 @@ export default function App() {
             ...previous,
             [ev.session]: {
               steering: ev.steering,
-              goal: ev.goal,
               compact_context: ev.compact_context ?? false,
             },
           }));
-          return;
-        }
-        if (ev.event === "goal_changed") {
-          setGoals((previous) => ({ ...previous, [ev.session]: ev.goal }));
           return;
         }
         if (
@@ -3549,12 +3490,6 @@ export default function App() {
           if (ev.session !== activeSessionRef.current) return;
           // The agent's set is authoritative — it replaces any optimistic UI state wholesale.
           setConfigOptions(ev.options);
-          const collaboration = ev.options.find(
-            (option) =>
-              option.category === "collaboration_mode" ||
-              option.id === "collaboration_mode"
-          );
-          if (collaboration) setPlanMode(collaboration.current === "plan");
           if (model?.current != null && model?.current !== "") {
             setCurrentModel(model.current);
             // Same rule as `models`: the first report after a reset is the adapter's own pick.
@@ -3584,42 +3519,6 @@ export default function App() {
                   .catch(() => {
                     sceneEffortAppliedRef.current.delete(ev.session);
                   });
-              }
-            }
-          }
-          {
-            // `plan_first` is also provider-owned. A scene can request it, but the request is sent
-            // only after the adapter advertises the collaboration selector and its native values.
-            const scene = scenesRef.current.find(
-              (s) => s.reference === activeSceneNameRef.current
-            );
-            const wanted = scene?.execution?.plan_first;
-            const applied = scenePlanAppliedRef.current.get(ev.session);
-            if (wanted !== undefined && applied !== wanted) {
-              const choice = sceneCollaborationChoice(ev.options, wanted);
-              if (choice) {
-                scenePlanAppliedRef.current.set(ev.session, wanted);
-                if (collaboration?.current === choice.value) {
-                  setScenePendingFields((prev) =>
-                    prev.filter((field) => field !== "plan_first")
-                  );
-                } else {
-                  setPlanMode(wanted);
-                  void setConfigOption(
-                    ev.session,
-                    choice.configId,
-                    choice.value
-                  )
-                    .then(() => {
-                      setScenePendingFields((prev) =>
-                        prev.filter((field) => field !== "plan_first")
-                      );
-                    })
-                    .catch(() => {
-                      scenePlanAppliedRef.current.delete(ev.session);
-                      setPlanMode(collaboration?.current === "plan");
-                    });
-                }
               }
             }
           }
@@ -3890,7 +3789,6 @@ export default function App() {
       memoryWriteRef.current = event.memoryWrite;
       setMemoryRead(event.memoryRead);
       setMemoryWrite(event.memoryWrite);
-      if (event.planFirst !== null) setPlanMode(event.planFirst);
       toast(
         t("scene.autoSwitched", { scene: event.title, reason: event.reason }),
         "success"
@@ -4347,12 +4245,6 @@ export default function App() {
     ) {
       toast(t("toast.modelBusy"), "error");
       return;
-    }
-    if (
-      option?.category === "collaboration_mode" ||
-      configId === "collaboration_mode"
-    ) {
-      setPlanMode(value === "plan");
     }
     if (
       (option?.category === "model" || configId === "model") &&
@@ -6633,7 +6525,6 @@ export default function App() {
       mode: sessionMode(mode, sandbox),
       memoryRead,
       memoryWrite,
-      planFirst: planMode,
       provider,
       model: currentModel,
     };
@@ -6644,44 +6535,6 @@ export default function App() {
       onMemoryPolicyChange(preset.read, preset.write);
     }
     const pending = softApplyPending(scene, live);
-    if (execution?.plan_first !== undefined) {
-      const wanted = execution.plan_first;
-      const choice = sceneCollaborationChoice(configOptions, wanted);
-      if (session == null || session === "" || !choice) {
-        if (!pending.includes("plan_first")) pending.push("plan_first");
-      } else {
-        const previousPlanMode = planMode;
-        scenePlanAppliedRef.current.set(session, wanted);
-        setPlanMode(wanted);
-        setConfigOptions((options) =>
-          options.map((option) =>
-            option.id === choice.configId
-              ? { ...option, current: choice.value }
-              : option
-          )
-        );
-        void setConfigOption(session, choice.configId, choice.value).catch(
-          (error: unknown) => {
-            scenePlanAppliedRef.current.delete(session);
-            setPlanMode(previousPlanMode);
-            setConfigOptions((options) =>
-              options.map((option) =>
-                option.id === choice.configId
-                  ? {
-                      ...option,
-                      current: previousPlanMode ? "plan" : "default",
-                    }
-                  : option
-              )
-            );
-            setScenePendingFields((fields) =>
-              fields.includes("plan_first") ? fields : [...fields, "plan_first"]
-            );
-            toast(t("toast.configFailed", { error: String(error) }), "error");
-          }
-        );
-      }
-    }
     setActiveSceneName(reference);
     setScenePendingFields(pending);
     if (session != null && session !== "") {
@@ -7586,6 +7439,8 @@ export default function App() {
       toast(t("toast.providerSwitchBusy"), "error");
       return;
     }
+    if (providerSwitchRequestsRef.current.has(sessionId)) return;
+    providerSwitchRequestsRef.current.add(sessionId);
     setProviderSwitchingSessions((current) => new Set(current).add(sessionId));
     void switchProvider(sessionId, next, nextModel)
       .catch((error: unknown) => {
@@ -7595,6 +7450,7 @@ export default function App() {
         );
       })
       .finally(() => {
+        providerSwitchRequestsRef.current.delete(sessionId);
         setProviderSwitchingSessions((current) => {
           if (!current.has(sessionId)) return current;
           const remaining = new Set(current);
@@ -7616,6 +7472,8 @@ export default function App() {
         nextProvider,
         nextModel
       ),
+    providerSwitching:
+      activeSession !== null && providerSwitchingSessions.has(activeSession),
     providerChangeDisabled:
       activeSession !== null &&
       (runningSessions.has(activeSession) ||
@@ -7635,8 +7493,7 @@ export default function App() {
     worktreeOptions,
     worktreeOptionsLoading,
     onWorktreeBase: setWorktreeBase,
-    planMode,
-    onPlan: setPlanMode,
+
     memoryRead,
     memoryWrite,
     memoryEnabled: memorySettingsEnabled,
@@ -7672,7 +7529,6 @@ export default function App() {
           mode: sessionMode(mode, sandbox),
           memoryRead,
           memoryWrite,
-          planFirst: planMode,
           provider,
           model: currentModel,
         });
@@ -8401,10 +8257,6 @@ export default function App() {
                       activeSession != null && activeSession !== ""
                         ? (interactionCapabilities[activeSession] ?? null)
                         : null;
-                    const activeGoal =
-                      activeSession != null && activeSession !== ""
-                        ? (goals[activeSession] ?? null)
-                        : null;
                     const activeAppshotKey =
                       activeSession ?? `draft:${(activeProject ?? cwd) || "."}`;
                     const activeAppshots =
@@ -8419,6 +8271,9 @@ export default function App() {
                       ...sessionConfig,
                       provider: paneProvider,
                       hasSession: activeSession !== null,
+                      providerSwitching:
+                        activeSession !== null &&
+                        providerSwitchingSessions.has(activeSession),
                       providerChangeDisabled:
                         activeSession !== null &&
                         (running ||
@@ -8585,10 +8440,6 @@ export default function App() {
                                   setSettingsInitialTab("general");
                                   setShowSettings(true);
                                 }}
-                                turns={turns}
-                                onOpenPlanAsDocument={openPlanAsDocument}
-                                onPinPlanArtifact={pinPlanArtifact}
-                                canPinPlan={scenesSurfaceEnabled && canPinPlan}
                                 preview={interactivePreview}
                               />
                             </div>
@@ -9018,29 +8869,6 @@ export default function App() {
                                   activeInteractionCapabilities?.steering ??
                                   false
                                 }
-                                goalCapability={
-                                  activeInteractionCapabilities?.goal ?? null
-                                }
-                                goal={activeGoal}
-                                onGoal={async (action, objective) => {
-                                  const session = activeSession;
-                                  if (session == null || session === "") return;
-                                  try {
-                                    await controlGoal(
-                                      session,
-                                      action,
-                                      objective
-                                    );
-                                  } catch (error) {
-                                    toast(
-                                      t("toast.goalFailed", {
-                                        error: String(error),
-                                      }),
-                                      "error"
-                                    );
-                                    throw error;
-                                  }
-                                }}
                                 onStop={() =>
                                   activeSession != null &&
                                   activeSession !== "" &&
@@ -9493,36 +9321,6 @@ export default function App() {
           onOpen={(match) => openFileTab(match.path, match)}
           onClose={() => setShowWorkspaceSearch(false)}
         />
-      )}
-
-      {planDocPending != null && planDocPending !== "" && (
-        <Dialog open onOpenChange={(o) => !o && resolvePlanDocPending(null)}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>{t("planDoc.title")}</DialogTitle>
-            </DialogHeader>
-            <p className="text-ui text-muted-foreground">
-              {t("planDoc.confirm")}
-            </p>
-            <DialogFooter>
-              <Button
-                variant="outline"
-                onClick={() => resolvePlanDocPending(null)}
-              >
-                {t("planDoc.cancel")}
-              </Button>
-              <Button
-                variant="secondary"
-                onClick={() => resolvePlanDocPending("append")}
-              >
-                {t("planDoc.append")}
-              </Button>
-              <Button onClick={() => resolvePlanDocPending("replace")}>
-                {t("planDoc.replace")}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
       )}
 
       {skillDraft && (

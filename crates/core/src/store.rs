@@ -4926,6 +4926,7 @@ mod tests {
         session.worktree_identity = Some(DirectoryIdentity::Unix {
             device: 42,
             inode: 108,
+            birth_time_ns: Some(123_456),
         });
         session.worktree_common_dir = Some("/source/repo/.git".into());
         session.worktree_git_dir = Some("/source/repo/.git/worktrees/isolated".into());

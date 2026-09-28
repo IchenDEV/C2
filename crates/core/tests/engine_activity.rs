@@ -402,6 +402,94 @@ async fn model_switch_is_rejected_while_a_turn_owns_the_session() {
 }
 
 #[tokio::test]
+async fn retired_planning_config_is_rejected_while_supported_choices_still_work() {
+    const AGENT: &str = r#"
+import json, sys
+for line in sys.stdin:
+    message = json.loads(line)
+    method = message.get("method")
+    if method == "initialize":
+        result = {"protocolVersion":1}
+    elif method == "session/new":
+        result = {"sessionId":"config-session", "configOptions":[
+            {"id":"collaboration_mode","name":"Mode","type":"select",
+             "currentValue":"default","options":[{"value":"plan","name":"Plan"}]},
+            {"id":"effort","name":"Effort","type":"select",
+             "currentValue":"low","options":[{"value":"high","name":"High"}]}
+        ]}
+    elif method == "session/prompt":
+        result = {"stopReason":"end_turn"}
+    elif method == "session/set_config_option":
+        result = {"configOptions":[]}
+    else:
+        continue
+    print(json.dumps({"jsonrpc":"2.0","id":message["id"],"result":result}), flush=True)
+"#;
+    let (engine, mut rx) = Engine::new(vec![provider(AGENT)], SkillLibrary::new(vec![]));
+    let session = create_session(&engine, &mut rx).await;
+    engine
+        .submit(prompt(&session, "config-test"))
+        .await
+        .unwrap();
+    let mut saw_supported_config = false;
+    loop {
+        match next_event(&mut rx).await {
+            Event::ConfigOptions { options, .. } => {
+                assert!(options
+                    .iter()
+                    .all(|option| option.id != "collaboration_mode"));
+                saw_supported_config |= options.iter().any(|option| option.id == "effort");
+            }
+            Event::TurnEnded { .. } => break,
+            Event::Error { message, .. } => panic!("unexpected prompt error: {message}"),
+            _ => {}
+        }
+    }
+    assert!(saw_supported_config);
+
+    engine
+        .submit(Op::SetConfigOption {
+            session: session.clone(),
+            config_id: "collaboration_mode".into(),
+            value: "plan".into(),
+        })
+        .await
+        .unwrap();
+    loop {
+        match next_event(&mut rx).await {
+            Event::Error {
+                message, terminal, ..
+            } => {
+                assert!(!terminal);
+                assert!(
+                    message.contains("unsupported session config choice"),
+                    "{message}"
+                );
+                break;
+            }
+            Event::ConfigOptions { .. } => panic!("retired config reached the provider"),
+            _ => {}
+        }
+    }
+
+    engine
+        .submit(Op::SetConfigOption {
+            session,
+            config_id: "effort".into(),
+            value: "high".into(),
+        })
+        .await
+        .unwrap();
+    loop {
+        match next_event(&mut rx).await {
+            Event::ConfigOptions { .. } => break,
+            Event::Error { message, .. } => panic!("supported config rejected: {message}"),
+            _ => {}
+        }
+    }
+}
+
+#[tokio::test]
 async fn cancel_drains_permissions_before_acp_finishes_the_turn() {
     let (engine, mut rx) = Engine::new(vec![provider(CANCEL_AGENT)], SkillLibrary::new(vec![]));
     let session = create_session(&engine, &mut rx).await;

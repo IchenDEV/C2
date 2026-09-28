@@ -13,7 +13,7 @@ use codetwo_core::event::Event;
 use codetwo_core::permission::{
     PermissionContextKind, PermissionMode, PermissionPolicy, SandboxPolicy,
 };
-use codetwo_core::{PermissionRouter, ProviderId, SessionHandler};
+use codetwo_core::{PermissionRouter, SessionHandler};
 use serde_json::{json, Value};
 use tokio::io::{AsyncBufReadExt, AsyncWrite, AsyncWriteExt, BufReader};
 use tokio::sync::mpsc;
@@ -93,7 +93,6 @@ async fn permission_is_parked_then_answered() {
     let policy = Arc::new(Mutex::new(PermissionPolicy::default()));
     let handler = Arc::new(SessionHandler::new(
         "s1".into(),
-        ProviderId::Codex,
         events_tx,
         policy,
         router.clone(),
@@ -176,7 +175,6 @@ async fn mcp_elicitation_still_parks_in_full_access() {
     }));
     let handler = Arc::new(SessionHandler::new(
         "s1".into(),
-        ProviderId::Codex,
         events_tx,
         policy,
         router.clone(),
@@ -244,7 +242,6 @@ async fn internal_auto_scene_selection_does_not_ask_before_the_broker() {
     let policy = Arc::new(Mutex::new(PermissionPolicy::default()));
     let handler = Arc::new(SessionHandler::new(
         "s1".into(),
-        ProviderId::Codex,
         events_tx,
         policy,
         router,
@@ -315,7 +312,6 @@ async fn internal_auto_scene_permission_escalation_still_asks() {
     let router = PermissionRouter::default();
     let handler = Arc::new(SessionHandler::new(
         "s1".into(),
-        ProviderId::Codex,
         events_tx,
         Arc::new(Mutex::new(PermissionPolicy::default())),
         router.clone(),
@@ -417,7 +413,6 @@ async fn sites_production_action_still_parks_in_full_access() {
     }));
     let handler = Arc::new(SessionHandler::new(
         "s1".into(),
-        ProviderId::Codex,
         events_tx,
         policy,
         router.clone(),

@@ -64,7 +64,10 @@ fn develop_brief_is_typed() {
     let execution = develop.execution.as_ref().unwrap();
     assert_eq!(execution.session_mode, Some(SceneSessionMode::AutoEdit));
     assert_eq!(execution.worktree, Some(SceneWorktree::Current));
-    assert_eq!(execution.plan_first, Some(true));
+    assert!(serde_json::to_value(execution)
+        .unwrap()
+        .get("plan_first")
+        .is_none());
 
     let artifact_ids: Vec<&str> = develop.artifacts.iter().map(|a| a.id.as_str()).collect();
     assert_eq!(artifact_ids, vec!["plan", "change-summary"]);

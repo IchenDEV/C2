@@ -24,6 +24,8 @@ pub struct AcpClient {
     // Wrapped in a std Mutex so `AcpClient` is `Sync` (needed to live in desktop host state / the engine's
     // shared session map). We only touch it to kill the child on drop.
     child: Option<Mutex<Child>>,
+    #[cfg(unix)]
+    process_group: Option<i32>,
     started_at_unix_ms: i64,
     terminated: AtomicBool,
 }
@@ -33,9 +35,19 @@ impl AcpClient {
         Self {
             conn,
             child: child.map(Mutex::new),
+            #[cfg(unix)]
+            process_group: None,
             started_at_unix_ms: unix_time_millis(),
             terminated: AtomicBool::new(false),
         }
+    }
+
+    /// Only `spawn` creates an isolated process group; callers supplying arbitrary children
+    /// through `new` retain direct-child ownership.
+    #[cfg(unix)]
+    pub(super) fn with_process_group(mut self, process_group: Option<i32>) -> Self {
+        self.process_group = process_group;
+        self
     }
 
     /// The underlying connection, for advanced/unsupported calls.
@@ -238,11 +250,18 @@ impl AcpClient {
     /// Terminate the owned provider process without waiting for it to exit.
     ///
     /// Plugin unload is synchronous, so it must never park on `Child::wait`. Closing the child is
-    /// enough to end its stdio connection; the reader task then rejects outstanding requests and
-    /// lets their turn leases take the normal provider-failure path.
+    /// insufficient when an adapter wrapper leaves descendants holding stdio. On Unix, terminate
+    /// the isolated group as well so pending requests close and turn leases can be released.
+    /// Windows retains direct-child cleanup; process-tree ownership requires a Job Object.
     pub fn terminate(&self) {
         if self.terminated.swap(true, Ordering::AcqRel) {
             return;
+        }
+        #[cfg(unix)]
+        if let Some(group) = self.process_group {
+            if let Err(error) = crate::unix_process_group::kill(group) {
+                tracing::warn!(%error, "could not terminate ACP process group");
+            }
         }
         if let Some(child) = &self.child {
             if let Ok(mut child) = child.lock() {

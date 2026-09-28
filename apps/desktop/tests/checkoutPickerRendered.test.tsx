@@ -61,8 +61,7 @@ function config(overrides = {}) {
     ],
     worktreeOptionsLoading: false,
     onWorktreeBase: () => {},
-    planMode: false,
-    onPlan: () => {},
+
     memoryEnabled: true,
     memoryRead: "inherit",
     memoryWrite: "inherit",

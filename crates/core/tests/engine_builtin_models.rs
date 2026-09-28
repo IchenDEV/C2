@@ -1,12 +1,6 @@
-//! A provider that reports no models of its own still gives the user something to pick from: the
-//! engine offers the provider's built-in list as soon as the session exists, before any prompt has
-//! been sent — which is also the only moment an agent would ever report its own.
-//!
-//! The mock agent here answers `initialize` and nothing else, which is all `session/new` (the Op,
-//! not the ACP call — that one is deferred to the first prompt) needs.
+//! A silent provider must not create selectable model ids that were never discovered.
 
 use codetwo_core::event::Event;
-use codetwo_core::models::builtin_models;
 use codetwo_core::provider::{LaunchSpec, Provider, ProviderId};
 use codetwo_core::skill::SkillLibrary;
 use codetwo_core::{Engine, Op};
@@ -24,7 +18,7 @@ for line in sys.stdin:
 "#;
 
 #[tokio::test]
-async fn a_silent_provider_still_gets_a_model_list() {
+async fn a_silent_provider_does_not_invent_a_model_list() {
     let provider = Provider {
         id: ProviderId::Grok,
         display_name: "Mock".into(),
@@ -49,7 +43,7 @@ async fn a_silent_provider_still_gets_a_model_list() {
 
     let mut created_request = None;
     let mut listed: Option<(Vec<String>, String)> = None;
-    while let Some(ev) = rx.recv().await {
+    while let Ok(ev) = rx.try_recv() {
         match ev {
             Event::SessionCreated { request_id, .. } => created_request = request_id,
             Event::Models {
@@ -64,12 +58,34 @@ async fn a_silent_provider_still_gets_a_model_list() {
     }
 
     assert_eq!(created_request.as_deref(), Some("desktop-request"));
-    let (ids, current) = listed.expect("a models event");
-    let expected: Vec<String> = builtin_models(&ProviderId::Grok)
-        .into_iter()
-        .map(|m| m.id)
-        .collect();
-    assert_eq!(ids, expected);
-    // A desktop choice made before the session exists remains authoritative until ACP starts.
-    assert_eq!(current, "grok-code-fast-1");
+    assert!(
+        listed.is_none(),
+        "silent provider invented choices: {listed:?}"
+    );
+    engine.shutdown();
+}
+
+/// Probe in a subprocess so environment overrides cannot race other integration tests.
+#[test]
+fn codex_runtime_override_is_forwarded_to_the_adapter() {
+    const PROBE: &str = "CODETWO_RUNTIME_OVERRIDE_PROBE";
+    if std::env::var_os(PROBE).is_some() {
+        let expected = std::env::var("CODEX_PATH").unwrap();
+        let runtime = codetwo_core::codex_runtime::CodexRuntimeDiscovery::detect();
+        assert_eq!(runtime.codex_path, Some(std::path::PathBuf::from(&expected)));
+        let provider = codetwo_core::provider::registry_with_codex_runtime(&runtime)
+            .into_iter()
+            .find(|provider| provider.id == ProviderId::Codex)
+            .unwrap();
+        assert!(provider.launch.env.contains(&("CODEX_PATH".into(), expected)));
+        return;
+    }
+    let dir = tempfile::tempdir().unwrap();
+    let output = std::process::Command::new(std::env::current_exe().unwrap())
+        .args(["--exact", "codex_runtime_override_is_forwarded_to_the_adapter"])
+        .env(PROBE, "1")
+        .env("CODEX_PATH", dir.path().join("explicit-runtime"))
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{output:?}");
 }

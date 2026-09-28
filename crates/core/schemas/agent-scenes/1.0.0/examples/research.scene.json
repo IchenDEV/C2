@@ -10,8 +10,7 @@
   "execution": {
     "session_mode": "read_only",
     "memory_preset": "standard",
-    "worktree": "off",
-    "plan_first": false
+    "worktree": "off"
   },
   "skills": {
     "inline": [

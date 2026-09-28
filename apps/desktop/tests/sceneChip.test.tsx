@@ -29,7 +29,7 @@ function sceneInfo(overrides = {}) {
     reference: "builtin:develop",
     name: "develop",
     title: "Develop",
-    description: "Plan-first implementation",
+    description: "Implementation",
     icon: "🛠️",
     source: "builtin",
     keywords: [],
@@ -60,8 +60,7 @@ function config(overrides = {}) {
     worktreeOptions: [],
     worktreeOptionsLoading: false,
     onWorktreeBase: () => {},
-    planMode: false,
-    onPlan: () => {},
+
     memoryEnabled: true,
     memoryRead: "inherit",
     memoryWrite: "inherit",
@@ -130,7 +129,7 @@ describe("Provider/model picker", () => {
     rendered.unmount();
   });
 
-  test("keeps known providers selectable and offers retry when desktop detection fails", async () => {
+  test("offers retry without fabricated providers when desktop detection fails", async () => {
     activateDom();
     let retries = 0;
     const rendered = mount(
@@ -177,8 +176,7 @@ describe("Provider/model picker", () => {
         '[data-slot="popover-content"]'
       );
       expect(trigger?.textContent).toContain("Default model");
-      button(popup, "Grok");
-      button(popup, "Codex");
+      expect(popup?.querySelectorAll('[role="option"]').length).toBe(0);
       button(popup, "Retry").click();
       expect(retries).toBe(1);
     } finally {
@@ -236,7 +234,7 @@ describe("SceneChip", () => {
         ?.className
     ).toContain("max-h-(--available-height)");
     const detail = [...dom.document.body.querySelectorAll("span")].find(
-      (node) => node.textContent === "Plan-first implementation"
+      (node) => node.textContent === "Implementation"
     );
     expect(detail?.classList.contains("whitespace-normal")).toBe(true);
     expect(

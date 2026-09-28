@@ -106,8 +106,9 @@ pub struct SceneExecution {
     pub memory_preset: Option<SceneMemoryPreset>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub worktree: Option<SceneWorktree>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub plan_first: Option<bool>,
+    /// Decode old scene files without enabling or re-exporting the retired feature.
+    #[serde(default, rename = "plan_first", skip_serializing)]
+    pub _legacy_plan_first: Option<bool>,
 }
 
 /// Declaration order IS the loosening order; `Ord` on it drives the escalation rule.
@@ -1069,7 +1070,6 @@ pub struct SceneApplyPlan {
     pub scene_ref: String,
     pub execution: Option<ExecutionPolicy>,
     pub memory: Option<(MemoryAccess, MemoryAccess)>,
-    pub plan_first: Option<bool>,
     pub pending: Vec<PendingField>,
     /// Set ⇒ NOTHING was applied; the caller re-calls with `confirm_escalation = true`.
     pub escalation: Option<EscalationRequired>,
@@ -1092,7 +1092,6 @@ pub fn plan_apply(
                 scene_ref: scene_ref.to_string(),
                 execution: None,
                 memory: None,
-                plan_first: None,
                 pending: Vec::new(),
                 escalation: Some(escalation),
                 new_session: None,
@@ -1100,7 +1099,6 @@ pub fn plan_apply(
         }
     };
     let memory = execution.memory_preset.map(memory_preset_policy);
-    let plan_first = execution.plan_first;
     match strength {
         ApplyStrength::Soft => {
             let mut pending = Vec::new();
@@ -1120,7 +1118,7 @@ pub fn plan_apply(
                 scene_ref: scene_ref.to_string(),
                 execution: applied,
                 memory,
-                plan_first,
+
                 pending,
                 escalation: None,
                 new_session: None,
@@ -1139,7 +1137,7 @@ pub fn plan_apply(
                 scene_ref: scene_ref.to_string(),
                 execution: applied,
                 memory,
-                plan_first,
+
                 pending: Vec::new(),
                 escalation: None,
                 new_session: Some(SceneSessionParams {
@@ -1396,6 +1394,17 @@ mod tests {
     use super::*;
     use crate::skill::SlotKind;
 
+    #[test]
+    fn legacy_plan_first_is_readable_but_not_reexported() {
+        let execution: SceneExecution = serde_json::from_value(serde_json::json!({
+            "plan_first": true, "model": "account-model"
+        }))
+        .unwrap();
+        let value = serde_json::to_value(execution).unwrap();
+        assert!(value.get("plan_first").is_none());
+        assert_eq!(value["model"], "account-model");
+    }
+
     fn scene_json(name: &str, extra: &str) -> String {
         format!(r#"{{"$schema":"{SCENE_SCHEMA_ID}","name":"{name}","title":"T"{extra}}}"#)
     }
@@ -1579,13 +1588,13 @@ mod tests {
     fn plan_apply_soft_vs_full() {
         let mut scene = minimal_scene("x");
         scene.execution = Some(SceneExecution {
+            _legacy_plan_first: None,
             providers: vec!["claude_code".into()],
             model: Some("m".into()),
             reasoning_effort: None,
             session_mode: Some(SceneSessionMode::ReadOnly),
             memory_preset: Some(SceneMemoryPreset::Private),
             worktree: Some(SceneWorktree::Current),
-            plan_first: Some(true),
         });
         let current = ExecutionPolicy::default(); // ask / workspace_write
 
@@ -1596,7 +1605,6 @@ mod tests {
             Some(session_mode_policy(SceneSessionMode::ReadOnly))
         );
         assert_eq!(soft.memory, Some((MemoryAccess::Deny, MemoryAccess::Deny)));
-        assert_eq!(soft.plan_first, Some(true));
         assert_eq!(
             soft.pending,
             vec![
@@ -1621,7 +1629,6 @@ mod tests {
         scene.execution = Some(SceneExecution {
             session_mode: Some(SceneSessionMode::FullAccess),
             memory_preset: Some(SceneMemoryPreset::Private),
-            plan_first: Some(true),
             ..Default::default()
         });
         let current = ExecutionPolicy::default();
@@ -1631,7 +1638,6 @@ mod tests {
         assert_eq!(escalation.to, SceneSessionMode::FullAccess);
         assert!(plan.execution.is_none());
         assert!(plan.memory.is_none());
-        assert!(plan.plan_first.is_none());
         assert!(plan.new_session.is_none());
 
         let confirmed = plan_apply(&current, &scene, "builtin:x", ApplyStrength::Soft, true);

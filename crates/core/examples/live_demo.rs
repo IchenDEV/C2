@@ -182,14 +182,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         .await
                         .ok();
                 }
-                Event::Plan { entries, .. } => println!(
-                    "  ☰ plan: {}",
-                    entries
-                        .iter()
-                        .map(|entry| entry.content.as_str())
-                        .collect::<Vec<_>>()
-                        .join(", ")
-                ),
                 Event::TurnEnded { stop_reason, .. } => {
                     println!("\n■ turn ended: {stop_reason}");
                     break;
@@ -231,7 +223,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 | Event::HookTurnStarted { .. }
                 | Event::SessionCost { .. }
                 | Event::SessionCapabilities { .. }
-                | Event::GoalChanged { .. }
                 | Event::PromptQueued { .. }
                 | Event::SteerAccepted { .. }
                 | Event::WorktreeDiscarded { .. } => {}

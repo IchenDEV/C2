@@ -1160,19 +1160,6 @@ fn private_appshot_file(
 pub fn builtin_skills() -> Vec<Skill> {
     vec![
         Skill {
-            id: "plan-first".into(),
-            name: "Plan first".into(),
-            description: "Propose a plan and wait for approval before editing".into(),
-            icon: None,
-            source: None,
-            payload: SkillPayload::Fragment {
-                text: "Before changing anything, produce a short numbered plan of the steps you \
-                       intend to take, and wait for my approval. Do not edit files or run \
-                       destructive commands until I approve the plan."
-                    .into(),
-            },
-        },
-        Skill {
             id: "reviewer".into(),
             name: "Code Reviewer".into(),
             description: "Meticulous senior reviewer persona".into(),

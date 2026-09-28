@@ -9,8 +9,7 @@
   },
   "execution": {
     "session_mode": "read_only",
-    "memory_preset": "standard",
-    "plan_first": false
+    "memory_preset": "standard"
   },
   "skills": {
     "inline": [

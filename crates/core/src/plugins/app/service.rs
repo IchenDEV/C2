@@ -683,7 +683,7 @@ mod tests {
                 "skills",
                 PluginPolicy {
                     components: BTreeMap::from([(
-                        "skill:plan-first".into(),
+                        "skill:test-writer".into(),
                         PluginOverride::Disabled,
                     )]),
                     ..Default::default()
@@ -708,8 +708,8 @@ mod tests {
             Arc::new(Paths::new(data.path())),
             Some(Arc::new(Mutex::new(store))),
         );
-        assert!(service.list().iter().any(|skill| skill.id == "plan-first"));
-        assert!(service.library().get("plan-first").is_none());
+        assert!(service.list().iter().any(|skill| skill.id == "test-writer"));
+        assert!(service.library().get("test-writer").is_none());
         assert!(service.library().get("reviewer").is_some());
 
         service.reload(Some(&project));

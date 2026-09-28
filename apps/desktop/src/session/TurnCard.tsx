@@ -508,7 +508,7 @@ function requestCanvasDuplicate(canvas: CanvasHistoryMarker): void {
   );
 }
 
-/** A collapsible group of secondary detail (agents / thinking / plan / memory). */
+/** A collapsible group of secondary detail (agents / thinking / memory). */
 function Detail({
   icon: Icon,
   label,
@@ -680,7 +680,7 @@ function AgentRoster({ agents }: { agents: readonly AgentActivity[] }) {
  * The prompt sits in a bubble on the right and the answer runs full width beneath it, so a long
  * transcript reads as a conversation instead of a stack of equally-weighted cards. Tool calls keep
  * their streamed position, with adjacent calls sharing one disclosure; thinking and memory
- * metadata stay collapsed underneath. The current task plan lives in the right information panel.
+ * metadata stay collapsed underneath.
  */
 export const TurnCard = memo(
   ({

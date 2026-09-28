@@ -33,7 +33,8 @@ for line in sys.stdin:
         prompt = json.dumps(message.get("params", {}))
         if "hold open" in prompt:
             time.sleep(0.5)
-        reply = "plan reply" if "Before changing anything" in prompt else "phone reply"
+        assert "Before changing anything" not in prompt
+        reply = "long reply" if "long request" in prompt else "phone reply"
         split = max(1, len(reply) // 2)
         for chunk in (reply[:split], reply[split:]):
             send({"jsonrpc":"2.0","method":"session/update","params":{
@@ -782,9 +783,9 @@ async fn native_mobile_creates_a_thread_and_dispatches_a_prompt() {
         .await
         .unwrap();
     let mode_receipt = next_json(&mut socket).await;
-    assert_eq!(mode_receipt["exit"]["_tag"], "Success");
+    assert_eq!(mode_receipt["exit"]["_tag"], "Failure");
 
-    let (status, plan_detail) = http(
+    let (status, long_detail) = http(
         addr,
         "GET",
         &format!("/api/orchestration/threads/{thread_id}"),
@@ -794,21 +795,21 @@ async fn native_mobile_creates_a_thread_and_dispatches_a_prompt() {
     )
     .await;
     assert_eq!(status, 200);
-    assert_eq!(plan_detail["thread"]["interactionMode"], "plan");
+    assert_eq!(long_detail["thread"]["interactionMode"], "default");
 
-    let plan_text = format!("plan this exact long request: {}", "x".repeat(700));
-    let plan_command = json!({
+    let long_text = format!("answer this exact long request: {}", "x".repeat(700));
+    let long_command = json!({
         "type": "thread.turn.start",
-        "commandId": "mobile-turn-plan",
+        "commandId": "mobile-turn-long",
         "threadId": thread_id,
         "message": {
-            "messageId": "mobile-message-plan",
+            "messageId": "mobile-message-long",
             "role": "user",
-            "text": plan_text,
+            "text": long_text,
             "attachments": [],
         },
         "runtimeMode": "approval-required",
-        // Deliberately stale. Only the preceding explicit mode-set may mutate mode.
+        // A rejected Plan request leaves ordinary turns available.
         "interactionMode": "default",
         "modelSelection": { "instanceId": "t3mock", "model": "phone-model" },
         "createdAt": "2026-08-12T00:02:00.000Z",
@@ -817,19 +818,19 @@ async fn native_mobile_creates_a_thread_and_dispatches_a_prompt() {
         .send(Message::Text(
             json!({
                 "_tag": "Request",
-                "id": "dispatch-plan",
+                "id": "dispatch-long",
                 "tag": "orchestration.dispatchCommand",
-                "payload": plan_command,
+                "payload": long_command,
                 "headers": [],
             })
             .to_string(),
         ))
         .await
         .unwrap();
-    let plan_receipt = next_json(&mut socket).await;
-    assert_eq!(plan_receipt["exit"]["_tag"], "Success");
+    let long_receipt = next_json(&mut socket).await;
+    assert_eq!(long_receipt["exit"]["_tag"], "Success");
 
-    let mut plan_snapshot = Value::Null;
+    let mut long_snapshot = Value::Null;
     for _ in 0..40 {
         let (_, current) = http(
             addr,
@@ -844,22 +845,22 @@ async fn native_mobile_creates_a_thread_and_dispatches_a_prompt() {
             .as_array()
             .unwrap()
             .iter()
-            .any(|message| message["role"] == "assistant" && message["text"] == "plan reply");
-        plan_snapshot = current;
+            .any(|message| message["role"] == "assistant" && message["text"] == "long reply");
+        long_snapshot = current;
         if complete {
             break;
         }
         tokio::time::sleep(Duration::from_millis(25)).await;
     }
-    let plan_messages = plan_snapshot["thread"]["messages"].as_array().unwrap();
-    assert_eq!(plan_snapshot["thread"]["interactionMode"], "plan");
-    assert!(plan_messages
+    let long_messages = long_snapshot["thread"]["messages"].as_array().unwrap();
+    assert_eq!(long_snapshot["thread"]["interactionMode"], "default");
+    assert!(long_messages
         .iter()
-        .any(|message| message["role"] == "user" && message["text"] == plan_text));
-    assert!(plan_messages
+        .any(|message| message["role"] == "user" && message["text"] == long_text));
+    assert!(long_messages
         .iter()
-        .any(|message| message["role"] == "assistant" && message["text"] == "plan reply"));
-    assert!(!plan_messages.iter().any(|message| message["text"]
+        .any(|message| message["role"] == "assistant" && message["text"] == "long reply"));
+    assert!(!long_messages.iter().any(|message| message["text"]
         .as_str()
         .is_some_and(|text| text.contains("[skill:plan-first]"))));
     assert_eq!(store.list_sessions().unwrap().len(), 1);
@@ -893,7 +894,7 @@ async fn native_mobile_creates_a_thread_and_dispatches_a_prompt() {
             "attachments": [],
         },
         "runtimeMode": "approval-required",
-        "interactionMode": "plan",
+        "interactionMode": "default",
         "modelSelection": { "instanceId": "t3mock", "model": "phone-model" },
         "createdAt": "2026-08-12T00:03:00.000Z",
     });
@@ -929,7 +930,7 @@ async fn native_mobile_creates_a_thread_and_dispatches_a_prompt() {
                         "attachments": [],
                     },
                     "runtimeMode": "approval-required",
-                    "interactionMode": "plan",
+                    "interactionMode": "default",
                     "modelSelection": { "instanceId": "t3mock", "model": "phone-model" },
                     "createdAt": "2026-08-12T00:03:01.000Z",
                 },
@@ -973,7 +974,7 @@ async fn native_mobile_creates_a_thread_and_dispatches_a_prompt() {
     }));
 
     if std::env::var_os("CODETWO_DUMP_T3_FIXTURES").is_some() {
-        eprintln!("T3_THREAD_FIXTURE={plan_snapshot}");
+        eprintln!("T3_THREAD_FIXTURE={long_snapshot}");
     }
 
     drop(socket);
@@ -988,6 +989,7 @@ async fn native_mobile_creates_a_thread_and_dispatches_a_prompt() {
         serde_json::from_slice(&std::fs::read(&compatibility_path).unwrap()).unwrap();
     compatibility["commandReceipts"] = json!([]);
     compatibility["aliases"] = json!({});
+    compatibility["interactionModes"] = json!({thread_id: "plan"});
     std::fs::write(
         &compatibility_path,
         serde_json::to_vec_pretty(&compatibility).unwrap(),
@@ -995,7 +997,7 @@ async fn native_mobile_creates_a_thread_and_dispatches_a_prompt() {
     .unwrap();
 
     // T3 mobile owns this public id and keeps it as its cache key. Reload around the same durable
-    // C2 store and confirm both the id and selected interaction mode survive a server restart.
+    // C2 store and confirm the id survives while retired persisted Plan state is ignored.
     let (restart_engine, restart_rx) = Engine::with_store(
         vec![provider],
         SkillLibrary::new(builtin_skills()),
@@ -1066,7 +1068,7 @@ async fn native_mobile_creates_a_thread_and_dispatches_a_prompt() {
         "reloaded thread snapshot failed: {restarted_detail}"
     );
     assert_eq!(restarted_detail["thread"]["id"], thread_id);
-    assert_eq!(restarted_detail["thread"]["interactionMode"], "plan");
+    assert_eq!(restarted_detail["thread"]["interactionMode"], "default");
     assert_eq!(
         restarted_detail["thread"]["messages"]
             .as_array()
@@ -1083,7 +1085,7 @@ async fn native_mobile_creates_a_thread_and_dispatches_a_prompt() {
         "/api/orchestration/dispatch",
         Some("application/json"),
         Some(bearer),
-        &plan_command.to_string(),
+        &long_command.to_string(),
     )
     .await;
     assert_eq!(

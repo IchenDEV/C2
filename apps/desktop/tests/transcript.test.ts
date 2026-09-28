@@ -15,7 +15,7 @@ import {
 } from "../src/session/turns";
 
 describe("persisted transcript projection", () => {
-  test("preserves structured plan status and accepts legacy string entries", () => {
+  test("ignores retired structured and string plan entries without losing the prompt", () => {
     const turns = turnsFromTranscript([
       ["user", { kind: "prompt", text: "implement", display: "implement" }],
       [
@@ -34,14 +34,9 @@ describe("persisted transcript projection", () => {
       ],
     ]);
 
-    expect(turns[0].plan).toEqual([
-      { content: "Inspect the workspace", priority: null, status: null },
-      {
-        content: "Implement the panel",
-        priority: "high",
-        status: "in_progress",
-      },
-    ]);
+    expect(turns).toHaveLength(1);
+    expect(turns[0].prompt).toBe("implement");
+    expect(turns[0]).not.toHaveProperty("plan");
   });
 
   test("shows the canonical prompt while preserving the agent response", () => {

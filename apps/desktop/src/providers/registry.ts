@@ -1,7 +1,9 @@
 import type { ProviderInfo } from "../bridge";
 
 const DEFAULT_RETRY_DELAYS_MS = [0, 250, 750] as const;
-const DEFAULT_ATTEMPT_TIMEOUT_MS = 7000;
+// Host discovery bounds version probes at 6s and model queries at 8s. Let it settle
+// before retrying, otherwise a slow CLI spawns overlapping discovery requests.
+const DEFAULT_ATTEMPT_TIMEOUT_MS = 16_000;
 
 async function timeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
   return await new Promise<T>((resolve, reject) => {
@@ -31,7 +33,7 @@ async function pause(delayMs: number): Promise<void> {
 
 /**
  * Desktop RPC can race the native bridge during first paint. Bound every attempt and retry the
- * fixed provider catalog so one lost startup request cannot leave the picker empty forever.
+ * host provider discovery so one lost startup request cannot leave the picker empty forever.
  */
 export async function loadProviderRegistry(
   load: () => Promise<ProviderInfo[]>,

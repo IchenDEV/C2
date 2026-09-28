@@ -31,9 +31,9 @@ use crate::canvas::{
     CanvasPromptPayload, CanvasProviderImageCapability,
 };
 use crate::error::AcpError;
-use crate::event::{ConfigOptionInfo, Event, GoalSnapshot, ModelChoice, Op};
+use crate::event::{ConfigOptionInfo, Event, ModelChoice, Op};
 use crate::memory::{prompt_source, MemoryCanvasRef, MemoryCapability, MemoryTurnProvenance};
-use crate::models::{available_models, builtin_models};
+use crate::models::available_models;
 use crate::permission::{
     Action, ExecutionPolicy, PermissionContext, PermissionContextKind, PermissionMode,
     PermissionPolicy, SandboxPolicy,
@@ -41,9 +41,9 @@ use crate::permission::{
 use crate::provider::{LaunchSpec, Provider, ProviderId, ProviderToolset};
 use crate::session::{
     initial_session_title, tool_status_is_in_flight, tool_status_is_terminal,
-    transcript_context_with_omission, MemoryAccess, Part, PlanEntry, Role, Session,
-    SessionActivity, SessionId, SessionRunState, SessionTitleOrigin, TranscriptCursor,
-    TranscriptPage, DEFAULT_TRANSCRIPT_TURNS,
+    transcript_context_with_omission, MemoryAccess, Part, Role, Session, SessionActivity,
+    SessionId, SessionRunState, SessionTitleOrigin, TranscriptCursor, TranscriptPage,
+    DEFAULT_TRANSCRIPT_TURNS,
 };
 use crate::skill::{
     canonical_doc_text, compile_with_appshots, compile_with_canvas,
@@ -258,7 +258,8 @@ fn push_provider_switch_record(
     if content.trim().is_empty() {
         return;
     }
-    if kind == "message"
+    if role == "assistant"
+        && kind == "message"
         && records
             .last()
             .is_some_and(|record| record.role == role && record.kind == kind)
@@ -289,21 +290,6 @@ fn provider_switch_context(
             (Role::Agent, Part::Text { text }) => {
                 push_provider_switch_record(&mut records, "assistant", "message", text.clone())
             }
-            (Role::Agent, Part::Plan { entries }) => {
-                let content = entries
-                    .iter()
-                    .map(|entry| match (&entry.status, &entry.priority) {
-                        (Some(status), Some(priority)) => {
-                            format!("- [{status}; {priority}] {}", entry.content)
-                        }
-                        (Some(status), None) => format!("- [{status}] {}", entry.content),
-                        (None, Some(priority)) => format!("- [{priority}] {}", entry.content),
-                        (None, None) => format!("- {}", entry.content),
-                    })
-                    .collect::<Vec<_>>()
-                    .join("\n");
-                push_provider_switch_record(&mut records, "assistant", "plan", content);
-            }
             (Role::Agent, Part::ToolCall { title, status, .. }) => push_provider_switch_record(
                 &mut records,
                 "tool",
@@ -314,35 +300,82 @@ fn provider_switch_context(
         }
     }
 
+    // Keep the original goal and latest user constraints even when a large assistant response
+    // fills the recent-history budget. Indices preserve chronology and prevent duplicate anchors.
+    let first_user = records.iter().position(|record| record.role == "user");
+    let last_user = records.iter().rposition(|record| record.role == "user");
+    let fits = records.len() <= 128
+        && records
+            .iter()
+            .map(|record| record.content.chars().count())
+            .sum::<usize>()
+            <= MAX_PROVIDER_SWITCH_CONTEXT_CHARS;
     let mut remaining = MAX_PROVIDER_SWITCH_CONTEXT_CHARS;
-    let mut selected = Vec::new();
+    let mut selected = std::collections::BTreeMap::new();
     let mut truncated = false;
-    for record in records.into_iter().rev() {
-        let chars = record.content.chars().count();
-        if chars <= remaining {
-            remaining -= chars;
-            selected.push(serde_json::json!({
-                "role": record.role,
-                "kind": record.kind,
-                "content": record.content,
-            }));
+    for index in [first_user, last_user].into_iter().flatten() {
+        if selected.contains_key(&index) {
             continue;
         }
-        truncated = true;
-        if remaining > 0 {
-            let keep = remaining.saturating_sub(1);
-            let skip = chars.saturating_sub(keep);
-            let content = format!("…{}", record.content.chars().skip(skip).collect::<String>());
-            selected.push(serde_json::json!({
-                "role": record.role,
-                "kind": record.kind,
-                "content": content,
-                "truncated": true,
-            }));
-        }
-        break;
+        let record = &records[index];
+        let chars = record.content.chars().count();
+        let keep = if fits { chars } else { chars.min(4 * 1024) };
+        let content = if chars > keep {
+            // Preserve both ends of a long user request: goals usually lead, corrections trail.
+            let head: String = record.content.chars().take(keep / 2).collect();
+            let tail: String = record
+                .content
+                .chars()
+                .skip(chars - (keep - keep / 2 - 1))
+                .collect();
+            format!("{head}…{tail}")
+        } else {
+            record.content.clone()
+        };
+        truncated |= chars > keep;
+        remaining -= keep;
+        selected.insert(
+            index,
+            serde_json::json!({
+                "role": record.role, "kind": record.kind, "content": content,
+                "truncated": chars > keep,
+            }),
+        );
     }
-    selected.reverse();
+    for (index, record) in records.iter().enumerate().rev() {
+        if selected.contains_key(&index) {
+            continue;
+        }
+        // Also bound metadata overhead for histories with many tiny alternating records.
+        if remaining == 0 || selected.len() >= 128 {
+            truncated = true;
+            break;
+        }
+        let chars = record.content.chars().count();
+        let keep = chars.min(remaining);
+        let content = if chars > keep {
+            format!(
+                "…{}",
+                record
+                    .content
+                    .chars()
+                    .skip(chars - keep + 1)
+                    .collect::<String>()
+            )
+        } else {
+            record.content.clone()
+        };
+        remaining -= keep;
+        truncated |= chars > keep;
+        selected.insert(
+            index,
+            serde_json::json!({
+                "role": record.role, "kind": record.kind, "content": content,
+                "truncated": chars > keep,
+            }),
+        );
+    }
+    let selected: Vec<_> = selected.into_values().collect();
     serde_json::json!({
         "kind": "provider_switch",
         "sourceProvider": from.as_str(),
@@ -440,13 +473,120 @@ mod provider_switch_context_tests {
         assert!(content_chars <= MAX_PROVIDER_SWITCH_CONTEXT_CHARS);
         assert_eq!(context["olderHistoryOmitted"], true);
         assert!(serialized.contains("OLD_TAIL"));
-        assert!(!serialized.contains("OLD_HEAD"));
+        assert!(serialized.contains("OLD_HEAD"));
         assert!(serialized.contains("Compile workspace: completed"));
         assert!(serialized.contains("Latest assistant conclusion"));
         assert!(serialized.contains("Latest user request"));
         assert!(!serialized.contains("PRIVATE_REASONING_SECRET"));
         assert!(!serialized.contains("PRIVATE_INPUT_SECRET"));
         assert!(!serialized.contains("PRIVATE_TOOL_OUTPUT_SECRET"));
+    }
+
+    #[test]
+    fn short_history_keeps_complete_user_messages_and_their_boundaries() {
+        let prompt = |text: String| {
+            (
+                Role::User,
+                Part::Prompt {
+                    display: text.clone(),
+                    text,
+                },
+            )
+        };
+        let first = "目标".repeat(4_000);
+        let transcript = vec![prompt(first.clone()), prompt("追加约束".into())];
+        let context = provider_switch_context(&ProviderId::Pi, &ProviderId::Grok, &transcript);
+        assert_eq!(context["history"].as_array().unwrap().len(), 2);
+        assert_eq!(context["history"][0]["content"], first);
+        assert_eq!(context["history"][1]["content"], "追加约束");
+        assert_eq!(context["olderHistoryOmitted"], false);
+    }
+
+    #[test]
+    fn long_unicode_and_many_small_records_keep_goals_and_latest_constraints() {
+        let prompt = |text: String| {
+            (
+                Role::User,
+                Part::Prompt {
+                    display: text.clone(),
+                    text,
+                },
+            )
+        };
+        let mut transcript = vec![prompt("最初目标：保留用户数据".into())];
+        for i in 0..300 {
+            transcript.push(prompt(format!("request {i}")));
+            transcript.push((
+                Role::Agent,
+                Part::Text {
+                    text: format!("reply {i}"),
+                },
+            ));
+        }
+        transcript.push(prompt("最新约束：不要发布".into()));
+        transcript.push((
+            Role::Agent,
+            Part::Text {
+                text: "界🌏".repeat(80_000),
+            },
+        ));
+        let context = provider_switch_context(&ProviderId::Pi, &ProviderId::Grok, &transcript);
+        let history = context["history"].as_array().unwrap();
+        assert!(history.len() <= 128);
+        assert!(
+            history
+                .iter()
+                .map(|row| row["content"].as_str().unwrap().chars().count())
+                .sum::<usize>()
+                <= MAX_PROVIDER_SWITCH_CONTEXT_CHARS
+        );
+        let encoded = context.to_string();
+        assert!(encoded.contains("最初目标"));
+        assert!(encoded.contains("最新约束"));
+        assert_eq!(context["olderHistoryOmitted"], true);
+        // Record overhead is bounded independently of the content budget.
+        let tiny = provider_switch_context(&ProviderId::Pi, &ProviderId::Grok, &transcript[..601]);
+        assert!(tiny["history"].as_array().unwrap().len() <= 128);
+        assert_eq!(tiny["olderHistoryOmitted"], true);
+    }
+
+    #[tokio::test]
+    async fn dropping_a_switch_releases_its_starting_client_and_session_fence() {
+        use crate::provider::{LaunchSpec, Provider};
+        use crate::skill::SkillLibrary;
+        let store = Arc::new(Store::open_in_memory().unwrap());
+        let session = Session::new(ProviderId::Grok, std::env::temp_dir().to_string_lossy());
+        store.upsert_session(&session).unwrap();
+        let target = Provider {
+            id: ProviderId::Pi,
+            display_name: "Slow target".into(),
+            needs_node: false,
+            launch: LaunchSpec::new("python3", ["-c", "import time; time.sleep(30)"]),
+        };
+        let (engine, _rx) =
+            super::Engine::with_store(vec![target], SkillLibrary::new(vec![]), store.clone());
+        let mut switching = Box::pin(engine.switch_provider(&session.id, ProviderId::Pi, None));
+        let started = async {
+            loop {
+                if !engine.state.starting_clients.lock().unwrap().is_empty() {
+                    break;
+                }
+                tokio::task::yield_now().await;
+            }
+        };
+        tokio::select! {
+            result = &mut switching => panic!("unexpected switch completion: {result:?}"),
+            result = tokio::time::timeout(std::time::Duration::from_secs(5), started) => result.unwrap(),
+        }
+        assert_eq!(engine.state.starting_clients.lock().unwrap().len(), 1);
+        drop(switching);
+        assert!(engine.state.starting_clients.lock().unwrap().is_empty());
+        assert!(!engine.session_is_switching_provider(&session.id));
+        assert_eq!(
+            store.get_session(&session.id).unwrap().unwrap().provider,
+            ProviderId::Grok
+        );
+        engine.shutdown();
     }
 
     #[tokio::test]
@@ -458,7 +598,6 @@ mod provider_switch_context_tests {
         let (events, mut received) = tokio::sync::mpsc::unbounded_channel();
         let handler = SessionHandler::new(
             session.id.clone(),
-            ProviderId::Grok,
             events,
             Arc::new(Mutex::new(PermissionPolicy::default())),
             PermissionRouter::default(),
@@ -542,7 +681,6 @@ where
 /// parts, resolves permissions, and advances the provider-neutral liveness clock.
 pub struct SessionHandler {
     session_id: SessionId,
-    provider: ProviderId,
     events: mpsc::UnboundedSender<Event>,
     policy: Arc<Mutex<PermissionPolicy>>,
     router: PermissionRouter,
@@ -559,7 +697,7 @@ pub struct SessionHandler {
     /// Runtime-generation fence. A provider replacement flips the old handler inactive before
     /// terminating its process, so late stdio frames cannot repaint or append to the new runtime.
     active: Arc<AtomicBool>,
-    /// Goal continuation can start a provider turn without a matching `session/prompt` future.
+    /// Provider activity can start a turn without a matching `session/prompt` future.
     /// Retain its activity lease until a provider-owned `session_info_update` closes the turn.
     external_turn: Mutex<Option<TurnLease>>,
 }
@@ -567,18 +705,16 @@ pub struct SessionHandler {
 impl SessionHandler {
     pub fn new(
         session_id: SessionId,
-        provider: ProviderId,
         events: mpsc::UnboundedSender<Event>,
         policy: Arc<Mutex<PermissionPolicy>>,
         router: PermissionRouter,
         store: Option<Arc<Store>>,
     ) -> Self {
-        Self::new_with_activity(session_id, provider, events, policy, router, store, true)
+        Self::new_with_activity(session_id, events, policy, router, store, true)
     }
 
     fn new_with_activity(
         session_id: SessionId,
-        provider: ProviderId,
         events: mpsc::UnboundedSender<Event>,
         policy: Arc<Mutex<PermissionPolicy>>,
         router: PermissionRouter,
@@ -587,7 +723,6 @@ impl SessionHandler {
     ) -> Self {
         Self {
             session_id,
-            provider,
             events,
             policy,
             router,
@@ -607,13 +742,12 @@ impl SessionHandler {
 
     fn inactive(
         session_id: SessionId,
-        provider: ProviderId,
         events: mpsc::UnboundedSender<Event>,
         policy: Arc<Mutex<PermissionPolicy>>,
         router: PermissionRouter,
         store: Option<Arc<Store>>,
     ) -> Self {
-        Self::new_with_activity(session_id, provider, events, policy, router, store, false)
+        Self::new_with_activity(session_id, events, policy, router, store, false)
     }
 
     fn activity_flag(&self) -> Arc<AtomicBool> {
@@ -652,16 +786,6 @@ impl SessionHandler {
     }
 
     fn handle_session_info(&self, meta: Value) {
-        if let Some(goal) = meta.as_object().and_then(|object| object.get("goal")) {
-            let normalized = normalize_goal(goal);
-            if goal.is_null() || normalized.is_some() {
-                self.emit(Event::GoalChanged {
-                    session: self.session_id.clone(),
-                    goal: normalized,
-                });
-            }
-        }
-
         let status = meta
             .pointer("/codex/threadStatus/type")
             .and_then(Value::as_str);
@@ -1026,6 +1150,9 @@ fn config_option_infos(options: &[crate::acp::wire::SessionConfigOption]) -> Vec
     options
         .iter()
         .filter(|o| o.option_type.as_deref().unwrap_or("select") == "select")
+        .filter(|o| {
+            o.id != "collaboration_mode" && o.category.as_deref() != Some("collaboration_mode")
+        })
         .map(|o| ConfigOptionInfo {
             id: o.id.clone(),
             name: o.name.clone(),
@@ -1042,56 +1169,6 @@ fn config_option_infos(options: &[crate::acp::wire::SessionConfigOption]) -> Vec
                 .collect(),
         })
         .collect()
-}
-
-/// Normalize only provider values that are protocol-valid aliases for the same real behavior.
-/// glm-acp-agent 1.6 currently exposes six accepted strings for GLM-5.3, while Z.AI documents
-/// three distinct service levels; presenting all six would give the slider fake precision.
-fn provider_config_option_infos(
-    provider: &ProviderId,
-    options: &[crate::acp::wire::SessionConfigOption],
-) -> Vec<ConfigOptionInfo> {
-    let mut infos = config_option_infos(options);
-    let is_effort = |option: &ConfigOptionInfo| {
-        option.category.as_deref() == Some("thought_level")
-            || option.id == "effort"
-            || option.id == "reasoning_effort"
-    };
-    if *provider == ProviderId::Pi {
-        // pi-acp 0.0.33 advertises the same six strings for every model and omits Pi's supported
-        // `max` value. Until the adapter consumes Pi's model-specific thinking-level RPC, hiding
-        // that known-false menu is more truthful than presenting a selectable fake capability.
-        infos.retain(|option| !is_effort(option));
-        return infos;
-    }
-    if *provider != ProviderId::ZCode {
-        return infos;
-    }
-    let is_glm_53 = infos
-        .iter()
-        .find(|option| option.category.as_deref() == Some("model") || option.id == "model")
-        .map(|option| {
-            option.current.starts_with("glm-5.3")
-                || option.current.starts_with("glm-5.2")
-                || option.current.starts_with("glm-5.1")
-        })
-        .unwrap_or(false);
-    if !is_glm_53 {
-        return infos;
-    }
-    if let Some(effort) = infos.iter_mut().find(|option| is_effort(option)) {
-        effort.current = match effort.current.as_str() {
-            "minimal" | "light" => "low",
-            "medium" => "high",
-            "xhigh" | "ultra" => "max",
-            current => current,
-        }
-        .to_string();
-        effort
-            .choices
-            .retain(|choice| matches!(choice.id.as_str(), "low" | "high" | "max"));
-    }
-    infos
 }
 
 /// Some agents expose a model-specific effort ladder before ACP's config-options surface. Grok's
@@ -1265,26 +1342,6 @@ fn canvas_history_projection(canonical: String, compiled: Option<&CompiledPrompt
         ));
     }
     out
-}
-
-fn normalize_goal(value: &Value) -> Option<GoalSnapshot> {
-    if value.is_null() {
-        return None;
-    }
-    let objective = value.get("objective")?.as_str()?.to_string();
-    let status = value.get("status")?.as_str()?.to_string();
-    Some(GoalSnapshot {
-        objective,
-        status,
-        created_at: value.get("createdAt").and_then(Value::as_i64).unwrap_or(0),
-        updated_at: value.get("updatedAt").and_then(Value::as_i64).unwrap_or(0),
-        token_budget: value.get("tokenBudget").and_then(Value::as_u64),
-        tokens_used: value.get("tokensUsed").and_then(Value::as_u64).unwrap_or(0),
-        time_used_seconds: value
-            .get("timeUsedSeconds")
-            .and_then(Value::as_u64)
-            .unwrap_or(0),
-    })
 }
 
 fn encode_mcp_servers(
@@ -1834,22 +1891,36 @@ mod usage_update_tests {
     use std::sync::{Arc, Mutex};
 
     use super::SessionHandler;
-    use crate::acp::wire::{PlanEntry as AcpPlanEntry, SessionNotification, SessionUpdate};
+    use crate::acp::wire::{SessionNotification, SessionUpdate};
     use crate::acp::ClientHandler;
     use crate::activity::ActivityTracker;
     use crate::engine::PermissionRouter;
     use crate::event::Event;
     use crate::permission::PermissionPolicy;
-    use crate::provider::ProviderId;
     use crate::session::{SessionActivity, SessionRunState};
     use tokio::sync::mpsc;
 
+    #[test]
+    fn planning_selectors_are_not_projected_as_supported_configuration() {
+        let options: Vec<crate::acp::wire::SessionConfigOption> = serde_json::from_value(serde_json::json!([
+            {"id":"custom-planner","name":"Plan","category":"collaboration_mode",
+             "type":"select","currentValue":"plan","options":[{"value":"plan","name":"Plan"}]},
+            {"id":"collaboration_mode","name":"Mode","type":"select",
+             "currentValue":"plan","options":[{"value":"plan","name":"Plan"}]},
+            {"id":"model","name":"Model","category":"model","type":"select",
+             "currentValue":"account-model","options":[{"value":"account-model","name":"Model"}]}
+        ])).unwrap();
+        let projected = super::config_option_infos(&options);
+        assert_eq!(projected.len(), 1);
+        assert_eq!(projected[0].id, "model");
+        assert_eq!(projected[0].current, "account-model");
+    }
+
     #[tokio::test]
-    async fn plan_update_preserves_task_status() {
+    async fn retired_plan_updates_are_ignored() {
         let (events, mut received) = mpsc::unbounded_channel();
         let handler = SessionHandler::new(
             "session-1".into(),
-            ProviderId::Codex,
             events,
             Arc::new(Mutex::new(PermissionPolicy::default())),
             PermissionRouter::default(),
@@ -1859,23 +1930,15 @@ mod usage_update_tests {
         handler
             .session_update(SessionNotification {
                 session_id: "provider-session-1".into(),
-                update: SessionUpdate::Plan {
-                    entries: vec![AcpPlanEntry {
-                        content: "Implement the panel".into(),
-                        priority: Some("high".into()),
-                        status: Some("in_progress".into()),
-                    }],
-                },
+                update: serde_json::from_value(serde_json::json!({
+                    "sessionUpdate": "plan",
+                    "entries": [{"content": "Old provider plan", "status": "in_progress"}]
+                }))
+                .unwrap(),
             })
             .await;
 
-        assert!(matches!(
-            received.recv().await,
-            Some(Event::Plan { entries, .. })
-                if entries[0].content == "Implement the panel"
-                    && entries[0].priority.as_deref() == Some("high")
-                    && entries[0].status.as_deref() == Some("in_progress")
-        ));
+        assert!(received.try_recv().is_err());
     }
 
     #[tokio::test]
@@ -1883,7 +1946,6 @@ mod usage_update_tests {
         let (events, mut received) = mpsc::unbounded_channel();
         let handler = SessionHandler::new(
             "session-1".into(),
-            ProviderId::Grok,
             events,
             Arc::new(Mutex::new(PermissionPolicy::default())),
             PermissionRouter::default(),
@@ -1937,13 +1999,12 @@ mod usage_update_tests {
     }
 
     #[tokio::test]
-    async fn session_info_drives_goal_and_external_turn_lifecycle() {
+    async fn session_info_ignores_goal_and_tracks_external_turn_lifecycle() {
         let (events, mut received) = mpsc::unbounded_channel();
         let tracker = ActivityTracker::new(events.clone(), None);
         tracker.register("session-1", SessionActivity::default());
         let handler = SessionHandler::new(
             "session-1".into(),
-            ProviderId::Codex,
             events,
             Arc::new(Mutex::new(PermissionPolicy::default())),
             PermissionRouter::with_tracker(tracker.clone()),
@@ -1967,11 +2028,6 @@ mod usage_update_tests {
             })
             .await;
 
-        assert!(matches!(
-            received.recv().await,
-            Some(Event::GoalChanged { goal: Some(goal), .. })
-                if goal.objective == "Unify plugins" && goal.status == "active"
-        ));
         assert!(matches!(
             received.recv().await,
             Some(Event::SessionActivityChanged { activity, .. })
@@ -1999,10 +2055,6 @@ mod usage_update_tests {
 
         assert!(matches!(
             received.recv().await,
-            Some(Event::GoalChanged { goal: None, .. })
-        ));
-        assert!(matches!(
-            received.recv().await,
             Some(Event::SessionActivityChanged { activity, .. })
                 if matches!(activity.state, SessionRunState::Idle)
         ));
@@ -2026,7 +2078,6 @@ mod native_command_tests {
     use crate::acp::ClientHandler;
     use crate::event::Event;
     use crate::permission::PermissionPolicy;
-    use crate::provider::ProviderId;
     use crate::skill::DocBlock;
 
     #[test]
@@ -2061,7 +2112,6 @@ mod native_command_tests {
         let (events, mut received) = mpsc::unbounded_channel();
         let handler = SessionHandler::new(
             "session-1".into(),
-            ProviderId::ClaudeCode,
             events,
             Arc::new(Mutex::new(PermissionPolicy::default())),
             PermissionRouter::default(),
@@ -2192,7 +2242,6 @@ mod tool_update_persistence_tests {
         let (events, mut received) = mpsc::unbounded_channel();
         let handler = SessionHandler::new(
             session.id.clone(),
-            ProviderId::Codex,
             events,
             Arc::new(Mutex::new(PermissionPolicy::default())),
             PermissionRouter::default(),
@@ -2483,31 +2532,13 @@ impl ClientHandler for SessionHandler {
                     normalized.warnings,
                 )
             }
-            SessionUpdate::Plan { entries } => {
-                let items: Vec<PlanEntry> = entries
-                    .into_iter()
-                    .map(|entry| PlanEntry {
-                        content: entry.content,
-                        priority: entry.priority,
-                        status: entry.status,
-                    })
-                    .collect();
-                (
-                    Some(Event::Plan {
-                        session,
-                        entries: items.clone(),
-                        transcript_seq: None,
-                    }),
-                    Some(Part::Plan { entries: items }),
-                    Vec::new(),
-                )
-            }
+            SessionUpdate::Plan {} => return,
             // Agent-side config change (e.g. it switched model itself): forward the new set to the
             // UI. Not a transcript part — configuration isn't conversation.
             SessionUpdate::ConfigOptionUpdate { config_options } => (
                 Some(Event::ConfigOptions {
                     session,
-                    options: provider_config_option_infos(&self.provider, &config_options),
+                    options: config_option_infos(&config_options),
                 }),
                 None,
                 Vec::new(),
@@ -2525,7 +2556,6 @@ impl ClientHandler for SessionHandler {
                     Some(Event::SessionCapabilities {
                         session,
                         steering: interaction.steering,
-                        goal: interaction.goal,
                         compact_context,
                     }),
                     None,
@@ -2605,10 +2635,6 @@ impl ClientHandler for SessionHandler {
                     ..
                 }
                 | Event::ToolCall {
-                    transcript_seq: seq,
-                    ..
-                }
-                | Event::Plan {
                     transcript_seq: seq,
                     ..
                 } => *seq = transcript_seq,
@@ -2822,15 +2848,14 @@ struct SessionRuntime {
     cwd: String,
     policy: Arc<Mutex<PermissionPolicy>>,
     /// The models this session can be switched to: what the agent reported at `session/new`, or
-    /// [`builtin_models`] for its provider when it reports none — which is most of them today,
-    /// since the ACP model API is UNSTABLE and widely unimplemented.
+    /// the installed CLI catalogue before ACP metadata arrives. Empty means undiscovered.
     models: Vec<ModelChoice>,
     /// Last complete selector set received from the agent. Most providers return a replacement
     /// set after each change; Grok's legacy mode method returns `{}`, so its metadata-derived
     /// effort option is updated here after a successful switch.
     config_options: Vec<ConfigOptionInfo>,
-    /// Whether [`SessionRuntime::models`] came from the agent rather than our built-in list. A
-    /// built-in choice is one the agent never advertised, so it's applied on a best-effort
+    /// Whether [`SessionRuntime::models`] came from ACP rather than standalone CLI discovery.
+    /// A CLI choice is applied on a best-effort
     /// `session/set_model` and reported honestly when the agent won't take it.
     models_reported: bool,
     initial_reasoning_effort: Option<String>,
@@ -2915,10 +2940,19 @@ struct EngineState {
 struct ProviderSwitchGuard {
     state: Arc<EngineState>,
     session: SessionId,
+    candidate: Option<Arc<AcpClient>>,
 }
 
 impl Drop for ProviderSwitchGuard {
     fn drop(&mut self) {
+        if let Some(client) = &self.candidate {
+            self.state
+                .starting_clients
+                .lock()
+                .unwrap()
+                .retain(|candidate| !Arc::ptr_eq(candidate, client));
+            client.terminate();
+        }
         self.state
             .provider_switches
             .lock()
@@ -3193,7 +3227,47 @@ impl Engine {
         Ok(ProviderSwitchGuard {
             state: self.state.clone(),
             session: session.to_string(),
+            candidate: None,
         })
+    }
+
+    /// Registered integrations with model choices actually discovered by their live runtimes.
+    /// An empty list is unknown, never a fabricated provider default.
+    pub fn provider_catalog(&self) -> Vec<(Provider, Vec<ModelChoice>)> {
+        let sessions = self.state.sessions.lock().unwrap();
+        self.state
+            .providers
+            .iter()
+            .map(|provider| {
+                let mut models = Vec::new();
+                let mut seen = HashSet::new();
+                for runtime in sessions
+                    .values()
+                    .filter(|runtime| runtime.session.provider == provider.id)
+                {
+                    for choice in &runtime.models {
+                        if seen.insert(choice.id.clone()) {
+                            models.push(choice.clone());
+                        }
+                    }
+                    for option in runtime.config_options.iter().filter(|option| {
+                        option.category.as_deref() == Some("model") || option.id == "model"
+                    }) {
+                        for choice in &option.choices {
+                            if seen.insert(choice.id.clone()) {
+                                models.push(ModelChoice {
+                                    id: choice.id.clone(),
+                                    name: choice.name.clone(),
+                                    description: choice.description.clone(),
+                                });
+                            }
+                        }
+                    }
+                }
+                models.sort_by(|left, right| left.id.cmp(&right.id));
+                (provider.clone(), models)
+            })
+            .collect()
     }
 
     pub fn session_is_switching_provider(&self, session: &str) -> bool {
@@ -3254,6 +3328,23 @@ impl Engine {
     /// revives the provider from the now-active store row.
     pub fn release_handoff_fence(&self, session: &str) {
         self.state.handoff_fences.lock().unwrap().remove(session);
+    }
+
+    fn clear_restored_handoff_context(&self, session: &str) -> Result<(), String> {
+        let pending_switch = self
+            .state
+            .sessions
+            .lock()
+            .unwrap()
+            .get(session)
+            .and_then(|runtime| runtime.handoff_context.as_ref())
+            .is_some_and(|context| {
+                context.get("kind").and_then(Value::as_str) == Some("provider_switch")
+            });
+        if pending_switch {
+            return Ok(());
+        }
+        self.clear_handoff_context(session)
     }
 
     fn clear_handoff_context(&self, session: &str) -> Result<(), String> {
@@ -4323,7 +4414,6 @@ impl Engine {
         self.emit(Event::SessionCapabilities {
             session: session.to_string(),
             steering: interaction.steering,
-            goal: interaction.goal,
             compact_context,
         });
         if !models.is_empty() {
@@ -4352,7 +4442,7 @@ impl Engine {
         model: Option<String>,
     ) -> Result<Session, String> {
         self.assert_session_active(session)?;
-        let _switch = self.begin_provider_switch(session)?;
+        let mut switch = self.begin_provider_switch(session)?;
         if self.session_is_busy(session) {
             return Err("can't switch providers while a turn is running or awaiting input".into());
         }
@@ -4396,7 +4486,7 @@ impl Engine {
             Some(store) => store
                 .transcript(session)
                 .map_err(|error| format!("couldn't read conversation history: {error}"))?,
-            None => Vec::new(),
+            None => return Err("switching agents requires saved conversation history".into()),
         };
         let continuation = provider_switch_context(&original.provider, &provider, &transcript);
         let policy = Arc::new(Mutex::new(PermissionPolicy {
@@ -4406,7 +4496,6 @@ impl Engine {
         }));
         let handler = Arc::new(SessionHandler::inactive(
             session.to_string(),
-            provider.clone(),
             self.state.events.clone(),
             policy.clone(),
             self.state.router.clone(),
@@ -4442,11 +4531,10 @@ impl Engine {
         if !self.track_starting_client(&client) {
             return Err("engine is shutting down".into());
         }
+        switch.candidate = Some(client.clone());
         let init = match client.initialize(client_capabilities()).await {
             Ok(init) => init,
             Err(error) => {
-                self.untrack_starting_client(&client);
-                client.terminate();
                 return Err(format!(
                     "couldn't initialize {}: {error}",
                     target.display_name
@@ -4460,8 +4548,6 @@ impl Engine {
         let mut live_sessions = self.state.sessions.lock().unwrap();
         if self.state.shutting_down.load(Ordering::Acquire) {
             drop(live_sessions);
-            self.untrack_starting_client(&client);
-            client.terminate();
             return Err("engine is shutting down".into());
         }
         let runtime_matches = match (&expected_client, live_sessions.get(session)) {
@@ -4474,8 +4560,6 @@ impl Engine {
         };
         if !runtime_matches {
             drop(live_sessions);
-            self.untrack_starting_client(&client);
-            client.terminate();
             return Err("the session runtime changed while its provider was switching".into());
         }
 
@@ -4490,8 +4574,6 @@ impl Engine {
                 active.store(true, Ordering::Release);
             }
             drop(live_sessions);
-            self.untrack_starting_client(&client);
-            client.terminate();
             return Err("can't switch providers while a turn is running or awaiting input".into());
         }
 
@@ -4518,8 +4600,6 @@ impl Engine {
                         active.store(true, Ordering::Release);
                     }
                     drop(live_sessions);
-                    self.untrack_starting_client(&client);
-                    client.terminate();
                     return Err(
                         "the durable provider changed while this switch was starting".into(),
                     );
@@ -4529,8 +4609,6 @@ impl Engine {
                         active.store(true, Ordering::Release);
                     }
                     drop(live_sessions);
-                    self.untrack_starting_client(&client);
-                    client.terminate();
                     return Err(format!("couldn't persist provider switch: {error}"));
                 }
             }
@@ -4539,6 +4617,7 @@ impl Engine {
         let old_runtime = live_sessions.remove(session);
         callback_active.store(true, Ordering::Release);
         self.untrack_starting_client(&client);
+        switch.candidate = None;
         live_sessions.insert(
             session.to_string(),
             SessionRuntime {
@@ -4590,14 +4669,9 @@ impl Engine {
             session: session.to_string(),
             options: Vec::new(),
         });
-        self.emit(Event::GoalChanged {
-            session: session.to_string(),
-            goal: None,
-        });
         self.emit(Event::SessionCapabilities {
             session: session.to_string(),
             steering: interaction.steering,
-            goal: interaction.goal,
             compact_context: compact_context_supported(&native_commands),
         });
         self.emit(Event::Models {
@@ -4606,224 +4680,6 @@ impl Engine {
             current: model.unwrap_or_default(),
         });
         Ok(updated)
-    }
-
-    /// Establish the provider-side session when a command (currently goal control) needs an ACP
-    /// session id before any prompt has done so.
-    async fn ensure_acp_session(&self, session: &str) -> Result<(), String> {
-        self.assert_session_active(session)?;
-        if !self.state.sessions.lock().unwrap().contains_key(session) {
-            self.revive_session(session).await?;
-        }
-        let snapshot = {
-            let sessions = self.state.sessions.lock().unwrap();
-            let runtime = sessions
-                .get(session)
-                .ok_or_else(|| "no such session".to_string())?;
-            (
-                runtime.client.clone(),
-                runtime.acp_session_id.clone(),
-                runtime.resume_acp_session_id.clone(),
-                runtime.cwd.clone(),
-                runtime.caps,
-                runtime.replaying.clone(),
-                runtime.interaction.clone(),
-                runtime.provider_toolset.clone(),
-                runtime.session.provider.clone(),
-                runtime.session.model.clone(),
-                runtime.config_options.clone(),
-                runtime.initial_reasoning_effort.clone(),
-                compact_context_supported(&runtime.native_commands),
-            )
-        };
-        let (
-            client,
-            existing,
-            resume,
-            cwd,
-            caps,
-            replaying,
-            interaction,
-            toolset,
-            provider,
-            pending_model,
-            existing_options,
-            pending_effort,
-            compact_context,
-        ) = snapshot;
-        self.emit(Event::SessionCapabilities {
-            session: session.to_string(),
-            steering: interaction.steering,
-            goal: interaction.goal.clone(),
-            compact_context,
-        });
-        if existing.is_some() {
-            if !existing_options.is_empty() {
-                self.emit(Event::ConfigOptions {
-                    session: session.to_string(),
-                    options: existing_options,
-                });
-            }
-            return Ok(());
-        }
-
-        let mut servers = toolset.mcp_servers.clone();
-        if let Some(config) = &self.state.desktop_mcp {
-            attach_host_mcp_servers(&mut servers, [config.scene_server_for_session(session)]);
-            if provider == ProviderId::Codex
-                && toolset.browser_access_enabled
-                && config.browser_enabled
-            {
-                attach_host_mcp_servers(&mut servers, [config.browser_server_for_session(session)]);
-            }
-        }
-        let encoded = encode_mcp_servers(&servers, caps)?;
-        let mut restored_provider_context = false;
-        let (acp_session_id, models, mut options, mut current) = if let Some(resume_id) = resume
-            .as_deref()
-            .filter(|_| caps.resume_session || caps.load_session)
-        {
-            match restore_provider_session(
-                &client,
-                caps,
-                resume_id,
-                &cwd,
-                encoded.clone(),
-                &replaying,
-            )
-            .await
-            {
-                Ok(response) => {
-                    restored_provider_context = true;
-                    let current = response
-                        .models
-                        .as_ref()
-                        .map(|models| models.current_model_id.clone())
-                        .unwrap_or_default();
-                    let options = response
-                        .config_options
-                        .as_deref()
-                        .map(|options| provider_config_option_infos(&provider, options))
-                        .unwrap_or_default();
-                    (resume_id.to_string(), response.models, options, current)
-                }
-                Err(_) => {
-                    let response = client
-                        .new_session_full(&cwd, encoded.clone())
-                        .await
-                        .map_err(|error| error.to_string())?;
-                    let current = response
-                        .models
-                        .as_ref()
-                        .map(|models| models.current_model_id.clone())
-                        .unwrap_or_default();
-                    let options = response
-                        .config_options
-                        .as_deref()
-                        .map(|options| provider_config_option_infos(&provider, options))
-                        .unwrap_or_default();
-                    (response.session_id, response.models, options, current)
-                }
-            }
-        } else {
-            let response = client
-                .new_session_full(&cwd, encoded)
-                .await
-                .map_err(|error| error.to_string())?;
-            let current = response
-                .models
-                .as_ref()
-                .map(|models| models.current_model_id.clone())
-                .unwrap_or_default();
-            let options = response
-                .config_options
-                .as_deref()
-                .map(|options| provider_config_option_infos(&provider, options))
-                .unwrap_or_default();
-            (response.session_id, response.models, options, current)
-        };
-
-        if let Some(model) = pending_model.as_deref().filter(|model| *model != current) {
-            match client.set_model(&acp_session_id, model).await {
-                Ok(()) => {
-                    current = model.to_string();
-                    reflect_flat_model_in_options(&mut options, model);
-                }
-                Err(error) => self.emit(Event::Error {
-                    session: Some(session.to_string()),
-                    message: format!("{model} wasn't accepted: {error}"),
-                    terminal: false,
-                    request_id: None,
-                }),
-            }
-        }
-        if let Some(effort) = pending_effort.as_deref() {
-            if let Some(option) = options.iter().find(|option| {
-                option.category.as_deref() == Some("thought_level")
-                    || matches!(option.id.as_str(), "effort" | "reasoning_effort")
-            }) {
-                options = client
-                    .set_config_option(&acp_session_id, &option.id, effort)
-                    .await
-                    .map(|options| provider_config_option_infos(&provider, &options))
-                    .map_err(|error| error.to_string())?;
-            }
-        }
-        let reported = models
-            .as_ref()
-            .map(|models| {
-                models
-                    .available_models
-                    .iter()
-                    .map(|model| ModelChoice {
-                        id: model.model_id.clone(),
-                        name: model.name.clone(),
-                        description: model.description.clone(),
-                    })
-                    .collect::<Vec<_>>()
-            })
-            .unwrap_or_default();
-        {
-            let mut sessions = self.state.sessions.lock().unwrap();
-            let runtime = sessions
-                .get_mut(session)
-                .ok_or_else(|| "session closed while connecting".to_string())?;
-            runtime.acp_session_id = Some(acp_session_id.clone());
-            runtime.resume_acp_session_id = None;
-            runtime.mcp_servers = servers;
-            runtime.config_options = options.clone();
-            runtime.initial_reasoning_effort = None;
-            runtime.session.acp_session_id = Some(acp_session_id);
-            if !current.is_empty() {
-                runtime.session.model = Some(current.clone());
-            }
-            if !reported.is_empty() {
-                runtime.models = reported.clone();
-                runtime.models_reported = true;
-            }
-            if let Some(store) = &self.state.store {
-                store
-                    .upsert_session(&runtime.session)
-                    .map_err(|error| error.to_string())?;
-            }
-        }
-        if !reported.is_empty() {
-            self.emit(Event::Models {
-                session: session.to_string(),
-                available: reported,
-                current,
-            });
-        }
-        if !options.is_empty() {
-            self.emit(Event::ConfigOptions {
-                session: session.to_string(),
-                options,
-            });
-        }
-        if restored_provider_context {
-            self.clear_handoff_context(session)?;
-        }
-        Ok(())
     }
 
     pub async fn steer_prompt(
@@ -4919,65 +4775,6 @@ impl Engine {
         Ok(outcome.to_string())
     }
 
-    pub async fn control_goal(
-        &self,
-        session: &str,
-        action: &str,
-        objective: Option<String>,
-    ) -> Result<(), String> {
-        self.ensure_acp_session(session).await?;
-        let (client, acp_session_id, goal) = {
-            let sessions = self.state.sessions.lock().unwrap();
-            let runtime = sessions
-                .get(session)
-                .ok_or_else(|| "no such session".to_string())?;
-            (
-                runtime.client.clone(),
-                runtime
-                    .acp_session_id
-                    .clone()
-                    .ok_or_else(|| "ACP session is unavailable".to_string())?,
-                runtime.interaction.goal.clone(),
-            )
-        };
-        let goal =
-            goal.ok_or_else(|| format!("the provider did not advertise goal action {action}"))?;
-        if !goal.actions.iter().any(|candidate| candidate == action) {
-            return Err(format!(
-                "the provider did not advertise goal action {action}"
-            ));
-        }
-        let objective = objective
-            .map(|value| value.trim().to_string())
-            .filter(|value| !value.is_empty());
-        if action == "set" && objective.is_none() {
-            return Err("goal objective is required".into());
-        }
-        let mut params = Map::from_iter([
-            ("sessionId".into(), Value::String(acp_session_id)),
-            ("action".into(), Value::String(action.to_string())),
-        ]);
-        if let Some(objective) = objective {
-            params.insert("objective".into(), Value::String(objective));
-        }
-        let response: Value = client
-            .connection()
-            .request(&goal.control_method, Value::Object(params))
-            .await
-            .map_err(|error| error.to_string())?;
-        if let Some(value) = response.get("goal") {
-            let goal = normalize_goal(value);
-            if !value.is_null() && goal.is_none() {
-                return Err("the provider returned an invalid goal snapshot".into());
-            }
-            self.emit(Event::GoalChanged {
-                session: session.to_string(),
-                goal,
-            });
-        }
-        Ok(())
-    }
-
     fn overlay_activities(&self, mut sessions: Vec<Session>) -> Vec<Session> {
         for session in &mut sessions {
             if let Some(activity) = self.state.activity.activity(&session.id) {
@@ -5044,7 +4841,6 @@ impl Engine {
         }));
         let handler = Arc::new(SessionHandler::new(
             id.to_string(),
-            sess.provider.clone(),
             self.state.events.clone(),
             policy.clone(),
             self.state.router.clone(),
@@ -5145,7 +4941,6 @@ impl Engine {
         self.emit(Event::SessionCapabilities {
             session: id.to_string(),
             steering: interaction.steering,
-            goal: interaction.goal,
             compact_context: compact_context_supported(&native_commands),
         });
         if !models.is_empty() {
@@ -5519,7 +5314,6 @@ impl Engine {
                 }));
                 let handler = Arc::new(SessionHandler::new(
                     sess.id.clone(),
-                    sess.provider.clone(),
                     self.state.events.clone(),
                     policy.clone(),
                     self.state.router.clone(),
@@ -5780,7 +5574,6 @@ impl Engine {
                 self.emit(Event::SessionCapabilities {
                     session: session_id.clone(),
                     steering: interaction.steering,
-                    goal: interaction.goal,
                     compact_context: compact_context_supported(&native_commands),
                 });
                 for (hook, error) in hook_errors {
@@ -6378,9 +6171,7 @@ impl Engine {
                                 let mut restored_options = resp
                                     .config_options
                                     .as_deref()
-                                    .map(|options| {
-                                        provider_config_option_infos(&current_provider, options)
-                                    })
+                                    .map(|options| config_option_infos(options))
                                     .unwrap_or_default();
                                 if !restored_options.iter().any(|option| {
                                     option.category.as_deref() == Some("thought_level")
@@ -6431,7 +6222,7 @@ impl Engine {
                                         options,
                                     });
                                 }
-                                if let Err(error) = self.clear_handoff_context(&session) {
+                                if let Err(error) = self.clear_restored_handoff_context(&session) {
                                     tracing::warn!(
                                         "clear provider-restored handoff context failed: {error}"
                                     );
@@ -6494,9 +6285,7 @@ impl Engine {
                             let mut options = resp
                                 .config_options
                                 .as_deref()
-                                .map(|options| {
-                                    provider_config_option_infos(&current_provider, options)
-                                })
+                                .map(|options| config_option_infos(options))
                                 .unwrap_or_default();
                             if !options
                                 .iter()
@@ -6601,14 +6390,10 @@ impl Engine {
                                             next
                                         })
                                     } else {
-                                        client.set_config_option(&id, &option.id, &want).await.map(
-                                            |options| {
-                                                provider_config_option_infos(
-                                                    &current_provider,
-                                                    &options,
-                                                )
-                                            },
-                                        )
+                                        client
+                                            .set_config_option(&id, &option.id, &want)
+                                            .await
+                                            .map(|options| config_option_infos(&options))
                                     };
                                     match changed {
                                         Ok(updated) => options = updated,
@@ -6804,7 +6589,7 @@ impl Engine {
                                     }
                                 }
                             }
-                            if clear_handoff_after_prompt {
+                            if clear_handoff_after_prompt && stop != StopReason::Cancelled {
                                 if let Err(error) =
                                     turn_engine.clear_handoff_context(&sess_for_task)
                                 {
@@ -7041,7 +6826,7 @@ impl Engine {
                                     .cloned()
                                 {
                                     Some(provider) => available_models(&provider).await,
-                                    None => builtin_models(&stored_session.provider),
+                                    None => Vec::new(),
                                 };
                                 (stored_session, models, false)
                             }
@@ -7146,6 +6931,20 @@ impl Engine {
                     return Ok(());
                 }
 
+                // Only exposed, provider-reported choices can be changed. Retired controls
+                // cannot be reactivated by a stale frontend or direct command invocation.
+                if !previous_options.iter().any(|option| {
+                    option.id == config_id && option.choices.iter().any(|choice| choice.id == value)
+                }) {
+                    self.emit(Event::Error {
+                        session: Some(session),
+                        message: format!("unsupported session config choice: {config_id}"),
+                        terminal: false,
+                        request_id: None,
+                    });
+                    return Ok(());
+                }
+
                 // Grok's current ACP extension advertises effort in ModelInfo metadata and uses
                 // the legacy mode method to change it. Keep the generic frontend contract while
                 // sending the method this provider actually implements.
@@ -7178,7 +6977,7 @@ impl Engine {
 
                 match client.set_config_option(&acp_sid, &config_id, &value).await {
                     Ok(options) => {
-                        let options = provider_config_option_infos(&provider, &options);
+                        let options = config_option_infos(&options);
                         {
                             let mut map = self.state.sessions.lock().unwrap();
                             if let Some(rt) = map.get_mut(&session) {
@@ -7703,12 +7502,9 @@ mod cwd_tests {
 
 #[cfg(test)]
 mod model_option_tests {
-    use super::{
-        provider_config_option_infos, reasoning_option_from_models, reflect_flat_model_in_options,
-    };
+    use super::{config_option_infos, reasoning_option_from_models, reflect_flat_model_in_options};
     use crate::acp::wire::{ModelInfo, SessionModelState};
     use crate::event::{ConfigOptionInfo, ModelChoice};
-    use crate::provider::ProviderId;
 
     fn choice(id: &str) -> ModelChoice {
         ModelChoice {
@@ -7776,7 +7572,7 @@ mod model_option_tests {
     }
 
     #[test]
-    fn glm_53_aliases_collapse_to_three_real_service_levels() {
+    fn model_effort_choices_preserve_the_adapter_catalogue() {
         let wire = serde_json::from_value::<Vec<crate::acp::wire::SessionConfigOption>>(
             serde_json::json!([
                 {"id":"model","name":"Model","type":"select","category":"model",
@@ -7791,24 +7587,24 @@ mod model_option_tests {
         )
         .unwrap();
 
-        let options = provider_config_option_infos(&ProviderId::ZCode, &wire);
+        let options = config_option_infos(&wire);
         let effort = options
             .iter()
             .find(|option| option.id == "thought_level")
             .unwrap();
-        assert_eq!(effort.current, "max");
+        assert_eq!(effort.current, "xhigh");
         assert_eq!(
             effort
                 .choices
                 .iter()
                 .map(|choice| choice.id.as_str())
                 .collect::<Vec<_>>(),
-            ["low", "high", "max"]
+            ["minimal", "low", "medium", "high", "xhigh", "max"]
         );
     }
 
     #[test]
-    fn pi_fixed_adapter_ladder_is_not_presented_as_model_specific_truth() {
+    fn reported_effort_is_not_hidden_by_provider_identity() {
         let wire: Vec<crate::acp::wire::SessionConfigOption> =
             serde_json::from_value(serde_json::json!([
                 {
@@ -7837,9 +7633,11 @@ mod model_option_tests {
             ]))
             .unwrap();
 
-        let options = provider_config_option_infos(&ProviderId::Pi, &wire);
-        assert_eq!(options.len(), 1);
+        let options = config_option_infos(&wire);
+        assert_eq!(options.len(), 2);
         assert_eq!(options[0].id, "model");
+        assert_eq!(options[1].current, "high");
+        assert_eq!(options[1].choices.len(), 6);
     }
 }
 
@@ -8239,7 +8037,7 @@ for line in sys.stdin:
 
         let error = validate_session_checkout(&session).await.unwrap_err();
         assert!(
-            error.contains("path identity changed"),
+            error.contains("path identity changed") || error.contains("repository changed"),
             "unexpected error: {error}"
         );
 

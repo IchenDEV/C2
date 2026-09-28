@@ -809,26 +809,10 @@ export interface ConfigOptionInfo {
   choices: ModelChoice[];
 }
 
-export interface GoalCapabilityInfo {
-  control_method: string;
-  actions: string[];
-}
-
 export interface SessionInteractionCapabilities {
   steering: boolean;
-  goal: GoalCapabilityInfo | null;
   /** Set only after the live ACP session advertises its native `/compact` command. */
   compact_context: boolean;
-}
-
-export interface GoalSnapshot {
-  objective: string;
-  status: string;
-  created_at: number;
-  updated_at: number;
-  token_budget: number | null;
-  tokens_used: number;
-  time_used_seconds: number;
 }
 
 /// Neutral document shape the editor serializes into; matches core `DocBlock` serde.
@@ -958,12 +942,6 @@ export type CoreEvent =
       transcript_seq?: number | null;
     }
   | {
-      event: "plan";
-      session: string;
-      entries: (PlanEntry | string)[];
-      transcript_seq?: number | null;
-    }
-  | {
       event: "permission_request";
       session: string;
       request_id: string;
@@ -1002,10 +980,8 @@ export type CoreEvent =
       event: "session_capabilities";
       session: string;
       steering: boolean;
-      goal: GoalCapabilityInfo | null;
       compact_context?: boolean;
     }
-  | { event: "goal_changed"; session: string; goal: GoalSnapshot | null }
   | {
       event: "prompt_queued";
       session: string;
@@ -1112,13 +1088,6 @@ export interface PtyAttach {
   restore: string;
 }
 
-export interface PlanEntry {
-  content: string;
-  priority?: string | null;
-  status?: string | null;
-}
-
-/// Mirrors core `Part` (tagged by `kind`).
 export type Part =
   | { kind: "text"; text: string }
   | { kind: "prompt"; text: string; display: string }
@@ -1132,7 +1101,7 @@ export type Part =
       agent_input?: unknown;
       outputs?: ToolOutput[];
     }
-  | { kind: "plan"; entries: (PlanEntry | string)[] };
+  | { kind: "plan"; entries: unknown[] };
 
 export interface ArtifactRef {
   id: string;
@@ -1773,72 +1742,6 @@ export async function reloadDevelopmentPlugins(): Promise<PluginDeveloperStatus>
   );
 }
 
-const fallbackProvider = (
-  id: string,
-  display_name: string,
-  needs_node: boolean
-): ProviderInfo => ({
-  id,
-  display_name,
-  custom: false,
-  available: false,
-  enabled: true,
-  needs_node,
-  models: [],
-  capabilities: [],
-  management: {
-    installed: false,
-    version: null,
-    latest_version: null,
-    update_available: null,
-    check_error: null,
-    install_supported: false,
-    upgrade_supported: false,
-    launch_mode: "unavailable",
-  },
-  configuration: defaultProviderConfiguration({ id }),
-});
-
-const FALLBACK_PROVIDERS: ProviderInfo[] = [
-  fallbackProvider("claude_code", "Claude Code", true),
-  fallbackProvider("codex", "Codex", true),
-  fallbackProvider("grok", "Grok", false),
-  fallbackProvider("cursor", "Cursor", false),
-  fallbackProvider("opencode", "OpenCode", false),
-  fallbackProvider("opencode2", "OpenCode 2 (Beta)", false),
-  fallbackProvider("pi", "Pi", true),
-  fallbackProvider("kimi", "Kimi", false),
-  fallbackProvider("zcode", "ZCode (GLM)", true),
-  fallbackProvider("amp", "Amp", true),
-  fallbackProvider("droid", "Droid", false),
-];
-
-/** Stable provider identity while the desktop host is still starting or temporarily unavailable. */
-export function fallbackProviders(): ProviderInfo[] {
-  return FALLBACK_PROVIDERS.map((provider) => ({
-    ...provider,
-    models: [...provider.models],
-    capabilities: [...provider.capabilities],
-    management: { ...provider.management },
-    configuration: {
-      ...provider.configuration,
-      args: provider.configuration.args
-        ? [...provider.configuration.args]
-        : null,
-      effective_args: [...provider.configuration.effective_args],
-      forwarded_environment: [...provider.configuration.forwarded_environment],
-      missing_environment: [...provider.configuration.missing_environment],
-    },
-  }));
-}
-
-export function providerDisplayName(providerId: string): string {
-  return (
-    FALLBACK_PROVIDERS.find((provider) => provider.id === providerId)
-      ?.display_name ?? providerId
-  );
-}
-
 const FALLBACK_SKILLS: SkillInfo[] = [
   {
     id: "reviewer",
@@ -1917,7 +1820,7 @@ export async function listProviders(
     ? await call<ProviderInfoWire[]>("providers.list", {
         check_updates: checkUpdates,
       })
-    : fallbackProviders();
+    : [];
   return providers.map(normalizeProviderInfo);
 }
 
@@ -2448,19 +2351,6 @@ export async function steerPrompt(
   requestId: string
 ): Promise<{ outcome: "injected" | "startedNewTurn" }> {
   return await call("engine.steer", { session, doc, request_id: requestId });
-}
-
-export async function controlGoal(
-  session: string,
-  action: "set" | "pause" | "resume" | "clear",
-  objective?: string
-): Promise<void> {
-  if (inDesktop)
-    await call("engine.goal", {
-      session,
-      action,
-      objective: objective ?? null,
-    });
 }
 
 export async function listAutomations(): Promise<Automation[]> {
@@ -5365,7 +5255,6 @@ export interface SceneApplyOutcome {
   applied: string[];
   pending: string[];
   escalation: SceneEscalation | null;
-  plan_first: boolean | null;
   suppress_unpinned: boolean;
   pinned_skills: string[];
 }
@@ -5396,7 +5285,6 @@ export interface AutoSceneChanged {
   title: string;
   reason: string;
   pending: string[];
-  planFirst: boolean | null;
   memoryRead: MemoryAccess;
   memoryWrite: MemoryAccess;
 }
@@ -5428,7 +5316,7 @@ const FALLBACK_SCENES: SceneInfo[] = (
       "Develop",
       "开发",
       "auto_edit",
-      "Plan-first implementation in an isolated worktree.",
+      "Implementation in an isolated worktree.",
     ],
     [
       "test",

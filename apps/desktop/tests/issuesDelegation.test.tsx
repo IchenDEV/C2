@@ -49,7 +49,7 @@ function sceneInfo(overrides = {}) {
     reference: "builtin:develop",
     name: "develop",
     title: "Develop",
-    description: "Plan-first implementation",
+    description: "Implementation",
     icon: "🛠️",
     source: "builtin",
     keywords: [],

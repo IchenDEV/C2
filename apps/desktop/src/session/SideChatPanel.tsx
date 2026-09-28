@@ -164,7 +164,6 @@ const TURN_EVENTS = new Set<CoreEvent["event"]>([
   "agent_text",
   "agent_thought",
   "tool_call",
-  "plan",
   "turn_ended",
   "error",
 ]);
