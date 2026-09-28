@@ -182,7 +182,7 @@ The shared business set is:
 | `SearchField` | labelled search input, icon geometry, optional accessible clear action | Automations, Docker, Task Board, Plugin Manager, Memory, Trajectory |
 | `Empty` primitive | empty-state hierarchy, media, description, and action composition | Automations, Pull Requests |
 | `SelectableRow` | compact picker choice, visible selection mark, accessible selected/disabled state, description and metadata layout | Composer mode, memory, collaboration, worktree, provider, and model pickers; Scene picker; Checkout picker |
-| `NavigationRow` | navigation/current-page state, inset focus, truncation, and optional themed tooltip | application rail and Settings navigation |
+| `NavigationRow` | navigation/current-page state, inset focus, truncation, and optional themed tooltip | Settings navigation and right-panel picker |
 | `CompositeActionRow` | semantic full-row primary action plus independent trailing controls | Mission Control, Browser tabs, File tree |
 | `ChoiceRow` | labelled radio or checkbox choice, description/preview layout, selected and disabled presentation | Agent question dialog, design-system preview |
 | `MasterDetailRow` | selected master-list row, leading mark, description, and metadata layout | Automations, Pull Requests |
@@ -247,7 +247,7 @@ Filled actions always consume an inseparable semantic pair: Primary uses `primar
 must reach 4.5:1 in light and dark. A page or preview shell may inherit the UI font family, but must
 not reset a shared control's color, font size, line height, or state styling.
 
-Dark mode separates persistent planes with lightness, not shadow. Do not add a white hairline,
+Dark mode separates persistent planes primarily with lightness; floating workspace surfaces may use the shared raised elevation. Do not add a white hairline,
 inner glow, or feature-local translucent glass to recover separation.
 
 ## Typography
@@ -317,6 +317,8 @@ rows, and 36px for inputs, selects, and important controls. The main titlebar is
 strips are 40px. A taller element is content input such as Composer, not a generic large-button
 size.
 
+Workspace window chrome uses a 32px drag strip and scoped 40px workspace pane headers. Right-panel tabs and its close control share the window strip through the shell titlebar host, track the dock width, and leave no inner dock header. The focused task title reuses the existing title projection in the window strip; feature pages leave that title empty. Search and the sidebar toggle live in the window strip, aligned with the expanded sidebar and reserving at least 96px before controls for native window buttons. The task list has no duplicate header or product wordmark. Below 48rem, toolbar actions retain accessible names while dropping visible labels; the selected dock tab keeps its label even when inactive tabs become icons. Settings and Scene Studio retain their own header geometry.
+
 Session titlebar tools form one quiet monochrome toolbar. Icons and labels keep the muted foreground
 across rest, hover, open, and pressed states; hover may add a neutral surface and keyboard focus
 adds the standard ring. A real open or pressed state may use only a neutral fill. Titlebar actions
@@ -334,11 +336,11 @@ Elevation communicates a real layer and never changes on hover:
 | role | use |
 | --- | --- |
 | `elevation-surface` | no shadow; compatibility role for cards, inputs, and persistent panels |
-| `elevation-raised` | one restrained short shadow for menu, popover, tooltip |
+| `elevation-raised` | 0 2px 8px, 4% light / 12% dark; one restrained short shadow for menu, popover, tooltip, floating main workspace, composer and right tool panel |
 | `elevation-modal` | one restrained wider shadow for dialog, blocking overlay |
 
-Persistent titlebars, sidebars, cards, inputs, and panels are flat. They use tonal planes, spacing,
-and contextual structural separators instead of floating-card shadows. Settings pages separate major groups with page-section spacing. Related rows share one tonal module
+Persistent titlebars, sidebars, cards, inputs, and panels are flat by default. The workspace composer (including its document-mode control bar) and right tool panel are explicit floating surfaces: use the existing raised background and elevation, constant across focus and hover. The right panel uses the shared raised Card with an 8px outer gutter included in its reserved width; closing it leaves no gutter. The main workspace shares its 16px rounded, clipped boundary and 8px inset, using the same raised shadow as the right panel and composer. Keep its reading background unchanged. Other surfaces use tonal planes, spacing,
+and contextual structural separators. Settings pages separate major groups with page-section spacing. Related rows share one tonal module
 with internal hairlines; they do not become a stack of individually elevated cards. Choice tiles
 such as appearance schemes and themes use tonal hover and a semantic selected ring without surface
 elevation. Popovers and dialogs retain only the restrained elevation assigned to their real layer.
@@ -364,7 +366,7 @@ selected-hover and invalid are added where meaningful. The state ladder is owned
 - **Loading:** stable dimensions with a 14px spinner; do not swap to a differently sized control.
 
 Button variants are Primary, Secondary, Ghost, and Destructive. Secondary is a neutral tonal
-surface, Ghost has no shadow, and Destructive is red only for a destructive action. Legacy Outline callers share the Secondary neutral visual treatment; no outlined visual system is added. Default and icon buttons are 32px, compact and mini buttons are 28px, and the 36px field
+surface, Ghost has no shadow, and Destructive is red only for a destructive action. Legacy Outline callers share the Secondary neutral visual treatment; no outlined visual system is added. Standalone icon-size Button variants own a full circular radius. Responsive icon-only toolbar controls use equal width/height and the same circle; joined split buttons preserve their connected shape. Default and icon buttons are 32px, compact and mini buttons are 28px, and the 36px field
 size is reserved for an action that must align with an input or select. Size changes never
 introduce a different radius. Primary and Destructive own their paired foreground tokens; Secondary
 and Ghost stay on the neutral text hierarchy so the four variants read as one control family.

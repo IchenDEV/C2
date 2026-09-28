@@ -35,6 +35,7 @@ import {
   Folder,
   FolderPlus,
   PanelLeft,
+  Search,
   SquareKanban,
 } from "@/components/ui/icons";
 import { Input } from "@/components/ui/input";
@@ -446,7 +447,7 @@ import { SettingsPage } from "./settings/SettingsPage";
 import type { SettingsTab } from "./settings/SettingsPage";
 import { needsMeCount } from "./sidebar/missionControl.ts";
 import { MissionControlDialog } from "./sidebar/MissionControl.tsx";
-import { SessionRail } from "./sidebar/SessionRail";
+import { APP_NAV_WIDTH, SessionRail } from "./sidebar/SessionRail";
 import type { CanvasBlockRuntime } from "./skillInline";
 import {
   associateTaskSession,
@@ -694,7 +695,7 @@ function slug(name: string): string {
     .replaceAll(/^-|-$/gu, "");
 }
 
-/** A header icon with a tooltip — the always-visible way into a dock surface. */
+/** A window-strip action with its accessible name and current shortcut. */
 function IconAction({
   icon: Icon,
   label,
@@ -1499,6 +1500,8 @@ export default function App() {
   const [activeFile, setActiveFile] = useState<string | null>(null);
   const [fileReveal, setFileReveal] = useState<FileRevealTarget | null>(null);
   const fileRevealRequestRef = useRef(0);
+  const [dockTitlebarHost, setDockTitlebarHost] =
+    useState<HTMLDivElement | null>(null);
   const [dockWidth, setDockWidth] = usePersistedNumber(
     "codetwo.dockWidth",
     440
@@ -1516,7 +1519,7 @@ export default function App() {
   const appliedRailWidth = Math.min(420, Math.max(220, railWidth));
   const [viewportWidth, setViewportWidth] = useState(() => window.innerWidth);
   const narrowLayout = shouldOverlayRailForWorkspace(
-    viewportWidth,
+    viewportWidth - APP_NAV_WIDTH,
     appliedRailWidth
   );
   const [narrowRailOpen, setNarrowRailOpen] = useState(false);
@@ -1534,7 +1537,7 @@ export default function App() {
   }, [narrowLayout]);
   const dockForcesRailOverlay =
     dockTab !== null &&
-    shouldOverlayRailForDock(viewportWidth, appliedRailWidth);
+    shouldOverlayRailForDock(viewportWidth - APP_NAV_WIDTH, appliedRailWidth);
   const railOverlay = narrowLayout || dockForcesRailOverlay;
   const wasDockRailOverlayRef = useRef(dockForcesRailOverlay);
   useLayoutEffect(() => {
@@ -1558,13 +1561,9 @@ export default function App() {
     setShowFeishu(false);
     setShowTaskBoard(true);
     if (railOverlay) setNarrowRailOpen(false);
-    else if (railCollapsed) setRailCollapsedRaw(0);
   };
-  // Full-page document is *the* mode of this app, not a temporary state it visits — it's what
-  // sets a document-first tool apart from a chat box, so it is also the default. Nothing takes it
-  // away on your behalf; the composer's ⤢ button, the grip double-click and Mod+Shift+E change it,
-  // and the choice persists.
-  const [docModeRaw, setDocModeRaw] = usePersistedNumber("codetwo.docMode", 1);
+  // New installs start with the bottom composer; the document toggle preserves the user's choice.
+  const [docModeRaw, setDocModeRaw] = usePersistedNumber("codetwo.docMode", 0);
   const docMode = docModeRaw !== 0;
   const setDocMode = (v: boolean) => setDocModeRaw(v ? 1 : 0);
   const mainRef = useRef<HTMLElement | null>(null);
@@ -5781,7 +5780,6 @@ export default function App() {
     setShowFeishu(false);
     setShowPluginManager(true);
     if (railOverlay) setNarrowRailOpen(false);
-    else if (railCollapsed) setRailCollapsedRaw(0);
   };
   const openPluginManager = () => {
     openPluginManagerFor(null);
@@ -5873,7 +5871,6 @@ export default function App() {
     setShowFeishu(false);
     setShowAutomations(true);
     if (railOverlay) setNarrowRailOpen(false);
-    else if (railCollapsed) setRailCollapsedRaw(0);
   };
 
   const openPullRequests = () => {
@@ -5889,7 +5886,6 @@ export default function App() {
     readPullRequestTasks();
     setShowPullRequests(true);
     if (railOverlay) setNarrowRailOpen(false);
-    else if (railCollapsed) setRailCollapsedRaw(0);
   };
 
   const openDocker = () => {
@@ -5900,7 +5896,6 @@ export default function App() {
     setShowFeishu(false);
     setShowDocker(true);
     if (railOverlay) setNarrowRailOpen(false);
-    else if (railCollapsed) setRailCollapsedRaw(0);
   };
 
   const openFeishu = () => {
@@ -5911,7 +5906,6 @@ export default function App() {
     setShowDocker(false);
     setShowFeishu(true);
     if (railOverlay) setNarrowRailOpen(false);
-    else if (railCollapsed) setRailCollapsedRaw(0);
   };
 
   const openSourceControl = () => {
@@ -7581,20 +7575,55 @@ export default function App() {
     setSceneEditorRequest(null);
   };
 
-  const railExpandAction = displayedRailCollapsed ? (
-    <IconAction
-      icon={PanelLeft}
-      label={t("rail.expand")}
-      onClick={toggleDisplayedRail}
-    />
-  ) : undefined;
-
   return (
     <div className="app-shell text-foreground flex h-screen flex-col overflow-hidden">
       <DesktopPetBridge
         animation={petAnimation}
         bubble={petConversationBubble}
       />
+      {!showSettings && !(showSceneStudio && scenesSurfaceEnabled) && (
+        <div
+          data-workspace-titlebar
+          className="workspace-titlebar bg-sidebar electrobun-webkit-app-region-drag flex min-w-0 shrink-0 items-center"
+        >
+          <div
+            data-workspace-navigation
+            className="flex shrink-0 items-center justify-end gap-1 pr-2"
+            style={{ width: Math.max(168, APP_NAV_WIDTH + railInlineWidth) }}
+          >
+            <IconAction
+              icon={Search}
+              label={t("rail.searchChats")}
+              hint={hint("open_command_palette")}
+              onClick={() => setShowPalette(true)}
+            />
+            <IconAction
+              icon={PanelLeft}
+              label={t(
+                displayedRailCollapsed ? "rail.expand" : "rail.collapse"
+              )}
+              onClick={toggleDisplayedRail}
+            />
+          </div>
+          <div className="electrobun-webkit-app-region-drag flex min-w-0 flex-1 justify-center px-4">
+            <span className="electrobun-webkit-app-region-drag text-metadata text-muted-foreground max-w-lg truncate font-medium">
+              {showTaskBoard ||
+              showPluginManager ||
+              showAutomations ||
+              showPullRequests ||
+              showDocker ||
+              showFeishu
+                ? null
+                : activeTitle}
+            </span>
+          </div>
+          <div
+            ref={setDockTitlebarHost}
+            data-dock-titlebar-host
+            className="contents"
+          />
+        </div>
+      )}
       {/* Settings takes the whole window — its own nav rail replaces the session rail, and the
           Back row at its foot is the way home. */}
       {showSettings ? (
@@ -7661,7 +7690,7 @@ export default function App() {
       ) : (
         // page-in makes the return from settings (which remounts this whole subtree) a transition
         // rather than a cut, and doubles as the app's own opening animation.
-        <div className="animate-page-in flex min-h-0 flex-1">
+        <div className="workspace-shell bg-sidebar animate-page-in relative flex min-h-0 flex-1">
           {/* ---------------- sessions rail ---------------- */}
           {railOverlay && narrowRailOpen && (
             <Button
@@ -7669,11 +7698,20 @@ export default function App() {
               variant="ghost"
               size="icon"
               aria-label={t("rail.collapse")}
-              className="fixed inset-0 z-40 size-auto rounded-none bg-black/35 hover:bg-black/35"
+              className="absolute inset-0 z-40 size-auto rounded-none bg-black/35 hover:bg-black/35"
               onClick={() => setNarrowRailOpen(false)}
             />
           )}
           <SessionRail
+            onOpenTasks={() => {
+              setShowTaskBoard(false);
+              setShowPluginManager(false);
+              setShowAutomations(false);
+              setShowPullRequests(false);
+              setShowDocker(false);
+              setShowFeishu(false);
+              if (railOverlay) setNarrowRailOpen(false);
+            }}
             projects={projects}
             sessions={sessions}
             archivedSessions={archivedSessions}
@@ -7733,8 +7771,6 @@ export default function App() {
             width={railWidth}
             onWidth={setRailWidth}
             newHint={hint("new_session")}
-            searchHint={hint("open_command_palette")}
-            onOpenSearch={() => setShowPalette(true)}
             onOpenSettings={() => {
               setShowTaskBoard(false);
               setShowPluginManager(false);
@@ -7748,7 +7784,6 @@ export default function App() {
             }}
             collapsed={displayedRailCollapsed}
             overlay={railOverlay}
-            onToggleCollapse={toggleDisplayedRail}
             taskBoardOpen={showTaskBoard}
             onOpenTaskBoard={() => {
               if (showTaskBoard) setShowTaskBoard(false);
@@ -7805,7 +7840,6 @@ export default function App() {
                 enabled={dockerPluginReady}
                 callCommand={callDocker}
                 onOpenPluginManager={openPluginManager}
-                headerLeadingAction={railExpandAction}
               />
             ) : null}
 
@@ -7820,7 +7854,6 @@ export default function App() {
                   await run([{ type: "text", text: prompt }]);
                 }}
                 onOpenPluginManager={openFeishuPluginSettings}
-                headerLeadingAction={railExpandAction}
                 navigationHost={feishuRailHost}
                 settingsHost={feishuSettingsHost}
                 onSelectResource={openFeishu}
@@ -7829,7 +7862,6 @@ export default function App() {
 
             {showPullRequests && (
               <PullRequestsPage
-                headerLeadingAction={railExpandAction}
                 onChat={chatAboutPullRequest}
                 tasks={pullRequestTasks}
                 activeTaskId={activeBoardTask?.id ?? null}
@@ -7851,7 +7883,6 @@ export default function App() {
                     setShowAutomations(false);
                     void selectSession(session);
                   }}
-                  headerLeadingAction={railExpandAction}
                 />
               ) : null)}
 
@@ -7886,7 +7917,6 @@ export default function App() {
                   });
                 }}
                 onStartTask={startBoardTask}
-                headerLeadingAction={railExpandAction}
               />
             )}
 
@@ -7898,7 +7928,6 @@ export default function App() {
                 marketplaceSources={
                   localizedPluginManagerModel.marketplaceSources
                 }
-                headerLeadingAction={railExpandAction}
                 labels={pluginManagerLabels}
                 scope={pluginManagerScope}
                 projects={pluginManagerProjects}
@@ -8077,7 +8106,10 @@ export default function App() {
             >
               {/* ---------------- the session column ---------------- */}
               <main
-                className="bg-background @container/workspace flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
+                className={cn(
+                  "bg-background rounded-card shadow-raised @container/workspace m-2 flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden",
+                  dockTab !== null && "mr-0"
+                )}
                 ref={mainRef}
               >
                 {/* Tiling workspace: every pane renders the full column body below, so each keeps its
@@ -8257,10 +8289,8 @@ export default function App() {
                     };
                     return (
                       <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden">
-                        {/* Also a window drag region: the overlay title bar draws nothing to grab. Buttons and
-              other children stay clickable — only elements carrying the attribute start a drag. */}
-                        {/* The shared 40px title line keeps every pane on one baseline. With the rail collapsed,
-              the inset clears the traffic lights and the expand button takes the wordmark's place. */}
+                        {/* Pane headers share a compact baseline below the native window strip.
+                            Only marked background/title elements drag; controls remain interactive. */}
                         <header
                           data-has-conversation={
                             hasConversationContent ? "true" : undefined
@@ -8272,7 +8302,6 @@ export default function App() {
                               : "pl-4"
                           )}
                         >
-                          {railExpandAction}
                           {/* Breadcrumb, reference-style: project / thread. */}
                           {activeProjectName != null &&
                             activeProjectName !== "" && (
@@ -8280,9 +8309,12 @@ export default function App() {
                                 <span className="session-header-project-context electrobun-webkit-app-region-drag text-ui text-muted-foreground max-w-40 truncate">
                                   {activeProjectName}
                                 </span>
-                                <span className="session-header-project-context text-ui text-muted-foreground/50 shrink-0">
-                                  /
-                                </span>
+                                {(Boolean(activeSession) ||
+                                  activeBoardTask != null) && (
+                                  <span className="session-header-project-context text-ui text-muted-foreground/50 shrink-0">
+                                    /
+                                  </span>
+                                )}
                               </>
                             )}
                           {activeBoardTask ? (
@@ -8298,9 +8330,12 @@ export default function App() {
                               <SquareKanban className="size-3.5" aria-hidden />
                             </TooltipButton>
                           ) : null}
-                          <span className="session-header-title electrobun-webkit-app-region-drag text-ui max-w-96 truncate font-medium">
-                            {activeTitle}
-                          </span>
+                          {(Boolean(activeSession) ||
+                            activeBoardTask != null) && (
+                            <span className="session-header-title electrobun-webkit-app-region-drag text-ui max-w-96 truncate font-medium">
+                              {activeTitle}
+                            </span>
+                          )}
                           {/* The session title trails the task title for context — unless both name the
                 same thread (a task created from a single-prompt thread). */}
                           {activeBoardTask == null ? null : (
@@ -8548,7 +8583,7 @@ export default function App() {
                 Compact, the wrapper is just the composer's slot; expanded, it is the document column
                 inside the outer transcript/document row. Keep this wrapper vertical so banners and
                 plugin contributions remain above the document instead of consuming its width. An empty
-                thread is the hero state: the heading and the card sit together in the centre. */}
+                thread gives the heading the spare space above the bottom composer. */}
                           <div
                             ref={heroScrollRef}
                             className={cn(
@@ -8556,7 +8591,7 @@ export default function App() {
                               docMode
                                 ? "order-1 min-h-0 min-w-0 flex-1 flex-col"
                                 : turns.length === 0 && !sessionLoading
-                                  ? "hero-scroll-shell pb-page-end order-2 min-h-0 flex-1 flex-col justify-center-safe overflow-y-auto pt-6"
+                                  ? "hero-scroll-shell order-2 min-h-0 flex-1 flex-col overflow-y-auto"
                                   : "order-2 shrink-0 flex-col"
                             )}
                           >
@@ -8576,63 +8611,83 @@ export default function App() {
                             {!docMode &&
                               turns.length === 0 &&
                               !sessionLoading && (
-                                <h1 className="animate-rise-in mb-8 px-8 text-center text-[26px] font-semibold tracking-[-0.01em]">
-                                  {t("transcript.greetingIn")}{" "}
-                                  <DropdownMenu>
-                                    <DropdownMenuTrigger
-                                      render={
-                                        <Button
-                                          type="button"
-                                          variant="link"
-                                          size="compact"
-                                          className="decoration-muted-foreground/40 h-auto px-0 py-0 [font-size:inherit] [line-height:inherit] [font-weight:inherit] [letter-spacing:inherit] text-inherit decoration-dotted underline-offset-[7px]"
-                                          title={activeProject ?? undefined}
-                                        >
-                                          {activeProjectName ??
-                                            t("rail.noProject")}
-                                        </Button>
-                                      }
-                                    />
-                                    <DropdownMenuContent
-                                      side="top"
-                                      align="center"
-                                      className="w-60"
-                                    >
-                                      {projects.length > 0 && (
-                                        <>
-                                          <DropdownMenuGroup>
-                                            {projects.map((project) => (
-                                              <DropdownMenuItem
-                                                key={project.path}
-                                                onClick={() =>
-                                                  selectProject(project.path)
+                                <div
+                                  data-workspace-greeting
+                                  className="flex min-h-24 flex-1 shrink-0 items-center justify-center px-6 py-6"
+                                >
+                                  <h1 className="text-page text-center font-medium">
+                                    {activeProjectName == null ||
+                                    activeProjectName === "" ? (
+                                      t("transcript.greeting")
+                                    ) : (
+                                      <>
+                                        {t("transcript.greetingIn")}{" "}
+                                        <DropdownMenu>
+                                          <DropdownMenuTrigger
+                                            render={
+                                              <Button
+                                                type="button"
+                                                variant="link"
+                                                size="compact"
+                                                className="decoration-muted-foreground/40 h-auto px-0 py-0 [font-size:inherit] [line-height:inherit] [font-weight:inherit] [letter-spacing:inherit] text-inherit decoration-dotted underline-offset-[7px]"
+                                                title={
+                                                  activeProject ?? undefined
                                                 }
                                               >
-                                                <Folder />
-                                                <span
-                                                  className="min-w-0 flex-1 truncate"
-                                                  title={project.path}
-                                                >
-                                                  {project.name}
-                                                </span>
-                                                {project.path ===
-                                                  activeProject && <Check />}
-                                              </DropdownMenuItem>
-                                            ))}
-                                          </DropdownMenuGroup>
-                                          <DropdownMenuSeparator />
-                                        </>
-                                      )}
-                                      <DropdownMenuItem
-                                        onClick={() => void addProjectFolder()}
-                                      >
-                                        <FolderPlus />
-                                        {t("rail.addProject")}
-                                      </DropdownMenuItem>
-                                    </DropdownMenuContent>
-                                  </DropdownMenu>{" "}
-                                  {t("transcript.greetingEnd")}
-                                </h1>
+                                                {activeProjectName ??
+                                                  t("rail.noProject")}
+                                              </Button>
+                                            }
+                                          />
+                                          <DropdownMenuContent
+                                            side="top"
+                                            align="center"
+                                            className="w-60"
+                                          >
+                                            {projects.length > 0 && (
+                                              <>
+                                                <DropdownMenuGroup>
+                                                  {projects.map((project) => (
+                                                    <DropdownMenuItem
+                                                      key={project.path}
+                                                      onClick={() =>
+                                                        selectProject(
+                                                          project.path
+                                                        )
+                                                      }
+                                                    >
+                                                      <Folder />
+                                                      <span
+                                                        className="min-w-0 flex-1 truncate"
+                                                        title={project.path}
+                                                      >
+                                                        {project.name}
+                                                      </span>
+                                                      {project.path ===
+                                                        activeProject && (
+                                                        <Check />
+                                                      )}
+                                                    </DropdownMenuItem>
+                                                  ))}
+                                                </DropdownMenuGroup>
+                                                <DropdownMenuSeparator />
+                                              </>
+                                            )}
+                                            <DropdownMenuItem
+                                              onClick={() =>
+                                                void addProjectFolder()
+                                              }
+                                            >
+                                              <FolderPlus />
+                                              {t("rail.addProject")}
+                                            </DropdownMenuItem>
+                                          </DropdownMenuContent>
+                                        </DropdownMenu>{" "}
+                                        {t("transcript.greetingEnd")}
+                                      </>
+                                    )}
+                                  </h1>
+                                </div>
                               )}
                             {/* An archived chat reads, but doesn't run: the composer yields its slot to this notice
                   until the session is restored. The composer stays mounted (hidden) — unmounting
@@ -8731,7 +8786,6 @@ export default function App() {
                             >
                               <Composer
                                 config={paneSessionConfig}
-                                hero={turns.length === 0 && !sessionLoading}
                                 checkout={{
                                   project: activeProjectName ?? cwd,
                                   branch:
@@ -8957,6 +9011,7 @@ export default function App() {
             {/* Always mounted: closing animates the width to zero instead of unmounting, which both
                 plays the full collapse and keeps shells alive across close/open. */}
             <Dock
+              titlebarHost={dockTitlebarHost}
               open={dockTab !== null}
               tab={dockTab}
               availableSurfaces={availableDockSurfaces}
@@ -9057,7 +9112,7 @@ export default function App() {
               }}
               width={dockWidth}
               onWidth={setDockWidth}
-              reservedWidth={railInlineWidth}
+              reservedWidth={railInlineWidth + APP_NAV_WIDTH}
             />
           </div>
         </div>

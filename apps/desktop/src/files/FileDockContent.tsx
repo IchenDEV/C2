@@ -48,60 +48,65 @@ export function FileDockContent({
       data-file-dock-view={showTree ? "browser" : "editor"}
     >
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-        <div className="dock-content-tabbar flex shrink-0 items-center gap-0.5 overflow-x-auto px-2">
-          <TooltipButton
-            label={t("action.open_files")}
-            variant="ghost"
-            size="icon-xs"
-            aria-pressed={showTree}
-            onClick={() => setBrowsing((current) => !current)}
+        {(openFiles.length > 0 || !showTree) && (
+          <div
+            data-file-tabs
+            className="flex shrink-0 items-center gap-1 overflow-x-auto p-2"
           >
-            <FolderTree className="size-3.5" />
-          </TooltipButton>
-          {openFiles.map((path) => {
-            const name = path.split("/").pop() ?? path;
-            const active = path === activeFile;
-            return (
-              <Button
-                key={path}
-                type="button"
-                variant="selectable"
-                size="row"
-                focusStyle="inset"
-                data-selected={active ? "true" : "false"}
-                onClick={() => {
-                  onActiveFile(path);
-                  setBrowsing(false);
-                }}
-                title={path}
-                className={cn(
-                  "group px-module-inset text-metadata relative h-full max-w-48 shrink-0 gap-1.5",
-                  active
-                    ? "text-foreground"
-                    : "text-muted-foreground hover:text-foreground"
-                )}
-              >
-                <FileText className="size-3.5 shrink-0" />
-                <span className="truncate">{name}</span>
-                {cwd != null &&
-                  cwd !== "" &&
-                  dirtyPaths.has(dirtyKey(cwd, path)) && (
-                    <span className="bg-warning size-1.5 shrink-0 rounded-full" />
-                  )}
-                <X
-                  className="hover:text-destructive size-3 shrink-0 opacity-0 transition-opacity group-hover:opacity-100"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    onCloseFile(path);
+            <TooltipButton
+              label={t("action.open_files")}
+              variant="ghost"
+              size="icon"
+              aria-pressed={showTree}
+              onClick={() => setBrowsing((current) => !current)}
+            >
+              <FolderTree className="size-3.5" />
+            </TooltipButton>
+            {openFiles.map((path) => {
+              const name = path.split("/").pop() ?? path;
+              const active = path === activeFile;
+              return (
+                <Button
+                  key={path}
+                  type="button"
+                  variant="selectable"
+                  size="row"
+                  focusStyle="inset"
+                  data-selected={active ? "true" : "false"}
+                  onClick={() => {
+                    onActiveFile(path);
+                    setBrowsing(false);
                   }}
-                />
-                {active && (
-                  <span className="bg-primary absolute inset-x-1.5 -bottom-px h-0.5 rounded-none" />
-                )}
-              </Button>
-            );
-          })}
-        </div>
+                  title={path}
+                  className={cn(
+                    "group px-module-inset text-metadata h-control relative max-w-48 shrink-0 gap-1.5",
+                    active
+                      ? "text-foreground"
+                      : "text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  <FileText className="size-3.5 shrink-0" />
+                  <span className="truncate">{name}</span>
+                  {cwd != null &&
+                    cwd !== "" &&
+                    dirtyPaths.has(dirtyKey(cwd, path)) && (
+                      <span className="bg-warning size-1.5 shrink-0 rounded-full" />
+                    )}
+                  <X
+                    className="hover:text-destructive size-3 shrink-0 opacity-0 transition-opacity group-hover:opacity-100"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onCloseFile(path);
+                    }}
+                  />
+                  {active && (
+                    <span className="bg-primary absolute inset-x-1.5 -bottom-px h-0.5 rounded-none" />
+                  )}
+                </Button>
+              );
+            })}
+          </div>
+        )}
 
         {showTree ? (
           <FilePanel

@@ -26,7 +26,6 @@ import {
 } from "@/components/ui/icons";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Separator } from "@/components/ui/separator";
 import { TooltipButton } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
@@ -464,10 +463,11 @@ export function FilePanel({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      {/* The shared panel strip matches the viewer's file tabs across one continuous separator. */}
-      <div className="h-panel-strip flex shrink-0 items-center gap-1 px-2">
+      <div data-file-toolbar className="flex shrink-0 items-center gap-1 p-2">
         <Input
-          className="text-metadata h-(--ds-control-mini)"
+          size="compact"
+          className="text-metadata"
+          aria-label={t("files.filter")}
           placeholder={t("files.filter")}
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
@@ -476,7 +476,7 @@ export function FilePanel({
           label={t("files.newFile")}
           variant="ghost"
           size="icon"
-          className="size-7 shrink-0"
+          className="shrink-0"
           disabled={cwd == null || cwd === ""}
           onClick={() => setDraft({ kind: "new-file", parent: "", value: "" })}
         >
@@ -486,7 +486,7 @@ export function FilePanel({
           label={t("files.newFolder")}
           variant="ghost"
           size="icon"
-          className="size-7 shrink-0"
+          className="shrink-0"
           disabled={cwd == null || cwd === ""}
           onClick={() =>
             setDraft({ kind: "new-folder", parent: "", value: "" })
@@ -498,13 +498,12 @@ export function FilePanel({
           label={t("files.refresh")}
           variant="ghost"
           size="icon"
-          className="size-7 shrink-0"
+          className="shrink-0"
           onClick={() => void reload()}
         >
           <RefreshCw className="size-3.5" />
         </TooltipButton>
       </div>
-      <Separator />
 
       <ScrollArea className="min-h-0 flex-1">
         <div className="p-1">

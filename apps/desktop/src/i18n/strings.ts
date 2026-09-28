@@ -73,8 +73,6 @@ export const en = {
 
   // rail — projects
   "rail.noProject": "No project selected",
-  "rail.projectsEmpty":
-    "No projects yet. Add a directory to work in — sessions and git status follow it.",
   "rail.addProject": "Add a project…",
   "rail.renameProject": "Rename",
   "rail.removeProject": "Remove from list (chats stay)",
@@ -1937,8 +1935,7 @@ export const en = {
   "dock.reviewCommit": "Review & commit",
   "dock.workingTree": "Working tree",
   "dock.files": "Files",
-  "dock.openSurface": "Panel modules",
-  "dock.openSurfaceHint": "Choose a module for the right panel.",
+  "dock.openSurface": "Open a panel",
   "dock.terminalDesc": "Start a shell in this workspace.",
   "dock.browserDesc": "Open a local app or URL.",
   "dock.filesDesc": "Browse and edit workspace files.",
@@ -3043,8 +3040,6 @@ export const zhCN: Record<StringKey, string> = {
 
   "app.name": "C2",
   "rail.noProject": "未选择项目",
-  "rail.projectsEmpty":
-    "还没有项目。添加一个工作目录——会话和 Git 状态都会跟着它走。",
   "rail.addProject": "添加项目…",
   "rail.renameProject": "重命名",
   "rail.removeProject": "从列表移除（聊天记录会保留）",
@@ -4755,8 +4750,7 @@ export const zhCN: Record<StringKey, string> = {
   "dock.reviewCommit": "审查并提交",
   "dock.workingTree": "工作区改动",
   "dock.files": "文件",
-  "dock.openSurface": "工作模块",
-  "dock.openSurfaceHint": "选择要在右侧面板中打开的模块。",
+  "dock.openSurface": "打开面板",
   "dock.terminalDesc": "在这个工作区启动一个 shell。",
   "dock.browserDesc": "打开本地应用或网址。",
   "dock.filesDesc": "浏览、编辑工作区的文件。",

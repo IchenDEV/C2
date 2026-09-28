@@ -316,51 +316,56 @@ function ConversationFixture() {
 }
 
 function PullRequestDockScenario() {
+  const [titlebarHost, setTitlebarHost] = useState<HTMLDivElement | null>(null);
   const [tab, setTab] = useState<DockTab>("pull-request");
   return (
     <ScenarioShell route="pr-dock" title="Conversation PR Dock">
-      <div className="ui-lab-dock-layout">
-        <ConversationFixture />
-        <Dock
-          availableSurfaces={[
-            "trajectory",
-            "browser",
-            "terminal",
-            "side-chat",
-            "files",
-            "git",
-            "pull-request",
-          ]}
-          content={{
-            trajectory: <p className="p-4">Execution trajectory fixture</p>,
-            browser: <p className="p-4">Browser fixture</p>,
-            terminal: <p className="p-4">Terminal fixture</p>,
-            "side-chat": <p className="p-4">Side chat fixture</p>,
-            files: <p className="p-4">Files fixture</p>,
-            git: <p className="p-4">Git fixture</p>,
-            "pull-request": (
-              <ScrollArea className="h-full min-h-0 flex-1">
-                <div className="text-metadata p-4">
-                  <GitHubPullRequestPanel
-                    api={pullRequestPanelApi}
-                    branch="feat/sidebar-usage-widget"
-                    cwd="/ui-lab/acme/code-two"
-                  />
-                </div>
-              </ScrollArea>
-            ),
-          }}
-          onClose={() => {
-            /* empty */
-          }}
-          onTab={setTab}
-          onWidth={() => {
-            /* empty */
-          }}
-          open
-          tab={tab}
-          width={420}
-        />
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+        <div ref={setTitlebarHost} className="flex shrink-0 justify-end" />
+        <div className="ui-lab-dock-layout">
+          <ConversationFixture />
+          <Dock
+            titlebarHost={titlebarHost}
+            availableSurfaces={[
+              "trajectory",
+              "browser",
+              "terminal",
+              "side-chat",
+              "files",
+              "git",
+              "pull-request",
+            ]}
+            content={{
+              trajectory: <p className="p-4">Execution trajectory fixture</p>,
+              browser: <p className="p-4">Browser fixture</p>,
+              terminal: <p className="p-4">Terminal fixture</p>,
+              "side-chat": <p className="p-4">Side chat fixture</p>,
+              files: <p className="p-4">Files fixture</p>,
+              git: <p className="p-4">Git fixture</p>,
+              "pull-request": (
+                <ScrollArea className="h-full min-h-0 flex-1">
+                  <div className="text-metadata p-4">
+                    <GitHubPullRequestPanel
+                      api={pullRequestPanelApi}
+                      branch="feat/sidebar-usage-widget"
+                      cwd="/ui-lab/acme/code-two"
+                    />
+                  </div>
+                </ScrollArea>
+              ),
+            }}
+            onClose={() => {
+              /* empty */
+            }}
+            onTab={setTab}
+            onWidth={() => {
+              /* empty */
+            }}
+            open
+            tab={tab}
+            width={420}
+          />
+        </div>
       </div>
     </ScenarioShell>
   );
