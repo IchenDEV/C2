@@ -8354,7 +8354,7 @@ export default function App() {
 
                           <div className="electrobun-webkit-app-region-drag flex-1" />
 
-                          <div className="session-header-toolbar [&_svg]:text-muted-foreground gap-inline flex min-w-0 shrink-0 items-center">
+                          <div className="session-header-toolbar gap-inline flex min-w-0 shrink-0 items-center">
                             {/* Full-page mode hides the transcript, so the header carries the only sign that a turn
                   is in flight — and the way back to the answer without leaving the mode for good. */}
                             {docMode && hasConversationContent && (

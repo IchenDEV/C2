@@ -25,7 +25,9 @@ describe("composer geometry contract", () => {
   test("paints the compact composer on the same DOM card as its interactive content", () => {
     expect(composer).not.toContain("function ComposerLiquidSurface");
     expect(composer).not.toContain("data-gooey-composer");
-    expect(composer).toContain('"rounded-composer bg-raised shadow-raised"');
+    expect(composer).toContain(
+      '"rounded-composer bg-canvas shadow-composer dark:bg-raised"'
+    );
   });
 
   test("keeps the circular submit control concentric with the composer corner", () => {
@@ -38,7 +40,7 @@ describe("composer geometry contract", () => {
     expect(composer).toContain('"composer-mode-transition flex flex-col"');
     expect(composer).not.toContain("reducedMotion");
     expect(composer).toContain(
-      '"rounded-composer bg-raised shadow-raised pointer-events-auto mx-auto w-full max-w-3xl p-2"'
+      '"rounded-composer bg-canvas shadow-composer dark:bg-raised pointer-events-auto mx-auto w-full max-w-3xl p-2"'
     );
     expect(composer.match(/"size-8 shrink-0 rounded-full"/gu)).toHaveLength(2);
     expect(

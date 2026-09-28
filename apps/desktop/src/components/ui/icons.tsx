@@ -97,6 +97,7 @@ import { MoonIcon as PhosphorMoonIcon } from "@phosphor-icons/react/dist/csr/Moo
 import { NotePencilIcon } from "@phosphor-icons/react/dist/csr/NotePencil";
 import { PackageIcon as PhosphorPackageIcon } from "@phosphor-icons/react/dist/csr/Package";
 import { PaletteIcon as PhosphorPaletteIcon } from "@phosphor-icons/react/dist/csr/Palette";
+import { PaperclipIcon } from "@phosphor-icons/react/dist/csr/Paperclip";
 import { PaperPlaneTiltIcon } from "@phosphor-icons/react/dist/csr/PaperPlaneTilt";
 import { PathIcon } from "@phosphor-icons/react/dist/csr/Path";
 import { PauseIcon as PhosphorPauseIcon } from "@phosphor-icons/react/dist/csr/Pause";
@@ -319,6 +320,7 @@ export const Pencil = createIcon(PencilSimpleIcon, "Pencil");
 export const Pin = createIcon(PushPinIcon, "Pin");
 export const PinOff = createIcon(PushPinSlashIcon, "PinOff");
 export const Play = createIcon(PhosphorPlayIcon, "Play");
+export const Paperclip = createIcon(PaperclipIcon, "Paperclip");
 export const Plus = createIcon(PhosphorPlusIcon, "Plus");
 export const Power = createIcon(PhosphorPowerIcon, "Power");
 export const Puzzle = createIcon(PuzzlePieceIcon, "Puzzle");

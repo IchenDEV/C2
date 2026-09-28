@@ -28,7 +28,7 @@ import {
   LockOpen,
   Maximize2,
   Minimize2,
-  Plus,
+  Paperclip,
   PenLine,
   Sparkles,
   SlidersHorizontal,
@@ -44,7 +44,6 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { Separator } from "@/components/ui/separator";
 import {
   Tooltip,
   TooltipContent,
@@ -219,7 +218,7 @@ export function CheckoutBar({
   return (
     <div
       data-checkout-bar
-      className="min-h-control-field rounded-module bg-fill-quiet text-metadata text-muted-foreground relative z-0 mx-2 mb-2 flex min-w-0 items-center px-1 py-1"
+      className="min-h-control-field rounded-module bg-fill-rest text-metadata text-muted-foreground relative z-0 mx-4 -mt-4 flex min-w-0 flex-wrap items-center gap-x-2 px-2 pt-5 pb-1"
     >
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger
@@ -235,13 +234,8 @@ export function CheckoutBar({
               aria-expanded={open}
             >
               <Folder className="size-3.5 shrink-0" aria-hidden="true" />
-              <span className="text-body text-muted-foreground min-w-0 truncate">
-                {modeLabel}
-              </span>
-              <ChevronDown
-                className="size-3 shrink-0 opacity-60"
-                aria-hidden="true"
-              />
+              <span className="text-body min-w-0 truncate">{modeLabel}</span>
+              <ChevronDown className="size-3 shrink-0" aria-hidden="true" />
             </Button>
           }
         />
@@ -348,14 +342,16 @@ export function CheckoutBar({
           size="compact"
           focusStyle="inset"
           onClick={checkout.onOpen}
-          className="bg-foreground/[0.04] px-module-inset text-callout text-muted-foreground ml-auto shrink-0 gap-1.5 font-mono"
+          className="px-module-inset text-callout text-foreground ml-auto min-w-0 gap-1.5"
           aria-label={t("checkout.openSourceControl", {
             branch: checkout.branch,
           })}
           title={t("checkout.openSourceControl", { branch: checkout.branch })}
         >
           <GitBranch className="size-3" aria-hidden="true" />
-          <span className="max-w-36 truncate">{checkout.branch}</span>
+          <span className="max-w-36 truncate @lg/composer:max-w-64">
+            {checkout.branch}
+          </span>
           {checkout.dirty > 0 && (
             <span
               className="text-warning"
@@ -492,6 +488,8 @@ export function SessionModePicker({
             aria-busy={disabled}
             aria-label={`${t("config.mode")}: ${t(`mode.${active}`)}`}
             className={cn(
+              "text-body",
+              active !== "full_access" && "text-foreground",
               disabled && "cursor-wait opacity-60 hover:bg-transparent"
             )}
           >
@@ -501,7 +499,7 @@ export function SessionModePicker({
               <Lock className="size-3 shrink-0" />
             )}
             <span>{t(`mode.${active}`)}</span>
-            <ChevronDown className="size-3 shrink-0 opacity-50" />
+            <ChevronDown className="size-3 shrink-0" />
           </Chip>
         }
       />
@@ -556,7 +554,7 @@ export function MemoryPicker({ config }: { config: SessionConfig }) {
           >
             <BrainCircuit className="size-3.5 shrink-0" />
             <span>{t(`memory.preset.${active.id}`)}</span>
-            <ChevronDown className="size-3 shrink-0 opacity-50" />
+            <ChevronDown className="size-3 shrink-0" />
           </Chip>
         }
       />
@@ -643,7 +641,7 @@ export function WorktreePicker({ config }: { config: SessionConfig }) {
           >
             <GitBranch className="size-3.5 shrink-0" />
             <span className="max-w-36 truncate">{compactLabel}</span>
-            <ChevronDown className="size-3 shrink-0 opacity-50" />
+            <ChevronDown className="size-3 shrink-0" />
           </Chip>
         }
       />
@@ -1025,7 +1023,7 @@ export function ModelPicker({
               title={t("composer.model")}
               disabled={disabled}
               aria-busy={disabled}
-              className="disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent"
+              className="text-body text-foreground disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent"
             >
               <ProviderIcon provider={provider} className="size-3.5 shrink-0" />
               <span
@@ -1035,11 +1033,11 @@ export function ModelPicker({
                     : undefined
                 }
                 title={modelLabel}
-                className="text-foreground/80 max-w-28 truncate @lg/composer:max-w-44"
+                className="max-w-40 truncate @lg/composer:max-w-56"
               >
                 {modelLabel}
               </span>
-              <ChevronDown className="size-3 shrink-0 opacity-50" />
+              <ChevronDown className="size-3 shrink-0" />
             </Chip>
           }
         />
@@ -1056,13 +1054,14 @@ export function ModelPicker({
           {providerConfig ? (
             <div
               data-provider-model-picker
-              className="flex min-h-72 min-w-0 flex-1 flex-col"
+              className="flex min-h-72 min-w-0 flex-1"
             >
               <div
                 data-provider-switcher
                 role="listbox"
                 aria-label={t("config.provider")}
-                className="flex shrink-0 [scrollbar-width:none] gap-1 overflow-x-auto overscroll-x-contain p-2 [&::-webkit-scrollbar]:hidden"
+                aria-orientation="vertical"
+                className="bg-fill-quiet flex w-12 shrink-0 flex-col items-center gap-1 overflow-y-auto p-2"
               >
                 {providerChoices.map((candidate) => {
                   const selected = candidate.id === pickerProvider;
@@ -1079,6 +1078,7 @@ export function ModelPicker({
                       size="compact"
                       role="option"
                       aria-label={displayName}
+                      title={displayName}
                       aria-selected={selected}
                       data-selected={selected ? "true" : "false"}
                       disabled={
@@ -1086,7 +1086,7 @@ export function ModelPicker({
                         unavailable ||
                         providerConfig.providersStatus !== "ready"
                       }
-                      className="max-w-40 shrink-0 justify-start px-2 font-normal"
+                      className="relative size-8 shrink-0 rounded-full p-0"
                       onClick={() => {
                         setModelSearch("");
                         if (
@@ -1106,11 +1106,10 @@ export function ModelPicker({
                         provider={candidate.id}
                         className={cn("size-3.5", unavailable && "opacity-40")}
                       />
-                      <span className="truncate">{displayName}</span>
                       <span
                         aria-hidden="true"
                         className={cn(
-                          "ml-auto size-1.5 shrink-0 rounded-full",
+                          "absolute right-0.5 bottom-0.5 size-1.5 rounded-full",
                           unavailable ? "bg-border" : "bg-success"
                         )}
                       />
@@ -1118,8 +1117,7 @@ export function ModelPicker({
                   );
                 })}
               </div>
-              <Separator />
-              <div className="flex min-h-0 min-w-0 flex-1 flex-col p-2">
+              <div className="flex min-h-0 min-w-0 flex-1 flex-col p-3">
                 {providerConfig.providersStatus === "loading" ? (
                   <p
                     role="status"
@@ -1167,10 +1165,10 @@ export function ModelPicker({
                 title={t("composer.reasoning")}
                 disabled={disabled}
                 aria-busy={disabled}
-                className="disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent"
+                className="text-body text-foreground disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent"
               >
                 <span>{effortLabel}</span>
-                <ChevronDown className="size-3 shrink-0 opacity-50" />
+                <ChevronDown className="size-3 shrink-0" />
               </Chip>
             }
           />
@@ -1217,15 +1215,14 @@ export function SessionControls({
   configOptions: ConfigOptionInfo[];
   onConfigOption: (configId: string, value: string) => void;
   modelChangeDisabled?: boolean;
-  /** The checkout bar already owns this choice when it is rendered above the composer. */
+  /** The checkout footer owns this choice when present. */
   showWorktreePicker?: boolean;
 }) {
   const t = useT();
   const optionsId = useId();
   const [optionsOpen, setOptionsOpen] = useState(false);
-  const activeMode = sessionMode(config.mode, config.sandbox);
+  const hasSecondaryOptions = config.memoryEnabled || showWorktreePicker;
   const hasHiddenOverride =
-    activeMode !== "ask" ||
     (config.memoryEnabled &&
       (config.memoryRead !== "inherit" || config.memoryWrite !== "inherit")) ||
     (showWorktreePicker &&
@@ -1236,9 +1233,9 @@ export function SessionControls({
   return (
     <div
       data-session-controls
-      className="flex min-w-0 flex-col items-start gap-0.5"
+      className="flex min-w-0 flex-[1_1_20rem] flex-col items-start gap-1"
     >
-      <div className="flex max-w-full flex-wrap items-center gap-0.5">
+      <div className="flex max-w-full flex-wrap items-center gap-1">
         {config.scenesEnabled ? <SceneChip config={config} /> : null}
         <ModelPicker
           models={models}
@@ -1252,50 +1249,48 @@ export function SessionControls({
           providerConfig={config}
           disabled={modelChangeDisabled || config.providerChangeDisabled}
         />
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className={cn(
-                  "text-muted-foreground relative size-7 shrink-0 rounded-full",
-                  optionsOpen && "bg-accent text-foreground",
-                  activeMode === "full_access" && "text-warning"
-                )}
-                aria-label={t(
-                  optionsOpen
-                    ? "config.hideSessionOptions"
-                    : "config.showSessionOptions"
-                )}
-                aria-expanded={optionsOpen}
-                aria-controls={optionsId}
-                onClick={() => setOptionsOpen((open) => !open)}
-              >
-                <SlidersHorizontal className="size-3.5" />
-                {hasHiddenOverride ? (
-                  <span
-                    aria-hidden="true"
-                    className={cn(
-                      "absolute top-0.5 right-0.5 size-1.5 rounded-full",
-                      activeMode === "full_access" ? "bg-warning" : "bg-primary"
-                    )}
-                  />
-                ) : null}
-              </Button>
-            }
-          />
-          <TooltipContent>{t("config.sessionOptionsHint")}</TooltipContent>
-        </Tooltip>
+        <ModePicker config={config} />
+        {hasSecondaryOptions && (
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className={cn(
+                    "text-foreground relative size-7 shrink-0 rounded-full",
+                    optionsOpen && "bg-accent text-foreground"
+                  )}
+                  aria-label={t(
+                    optionsOpen
+                      ? "config.hideSessionOptions"
+                      : "config.showSessionOptions"
+                  )}
+                  aria-expanded={optionsOpen}
+                  aria-controls={optionsId}
+                  onClick={() => setOptionsOpen((open) => !open)}
+                >
+                  <SlidersHorizontal className="size-3.5" />
+                  {hasHiddenOverride ? (
+                    <span
+                      aria-hidden="true"
+                      className="bg-primary absolute top-0.5 right-0.5 size-1.5 rounded-full"
+                    />
+                  ) : null}
+                </Button>
+              }
+            />
+            <TooltipContent>{t("config.sessionOptionsHint")}</TooltipContent>
+          </Tooltip>
+        )}
       </div>
-      {optionsOpen ? (
+      {hasSecondaryOptions && optionsOpen ? (
         <div
           id={optionsId}
           data-session-options
           className="flex max-w-full flex-wrap items-center gap-0.5 pl-1"
         >
-          <ModePicker config={config} />
           {config.memoryEnabled ? <MemoryPicker config={config} /> : null}
           {showWorktreePicker ? <WorktreePicker config={config} /> : null}
         </div>
@@ -1425,90 +1420,6 @@ export function Composer({
           if (files.length > 0) void onAttachImages(files);
         }}
       />
-      <DropdownMenu>
-        <DropdownMenuTrigger
-          render={
-            <Button
-              variant="ghost"
-              size="icon"
-              className="size-7 shrink-0 rounded-full"
-              aria-label={t("composer.add")}
-            >
-              <Plus className="size-4" />
-            </Button>
-          }
-        />
-        <DropdownMenuContent align="start" side="top" className="w-60">
-          <DropdownMenuGroup>
-            <DropdownMenuItem onClick={onAttachFile}>
-              <FileText />
-              {t("composer.mentionFile")}
-              {filesHint && (
-                <DropdownMenuShortcut>{filesHint}</DropdownMenuShortcut>
-              )}
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => imageInputRef.current?.click()}>
-              <ImagePlus />
-              {t("composer.attachImage")}
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={onInsertSkill}>
-              <Sparkles />
-              {t("composer.insertSkill")}
-              {skillHint && (
-                <DropdownMenuShortcut>{skillHint}</DropdownMenuShortcut>
-              )}
-            </DropdownMenuItem>
-            {canvasEnabled && (
-              <DropdownMenuItem onClick={onInsertCanvas}>
-                <PenLine />
-                {t("composer.insertCanvas")}
-              </DropdownMenuItem>
-            )}
-            <DropdownMenuItem onClick={onInsertIssue}>
-              <Ticket />
-              {t("composer.pullIssue")}
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={onOpenMarket}>
-              <Store />
-              {t("composer.market")}
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={onNewSkill}>
-              <Sparkles />
-              {t("composer.newSkill")}
-            </DropdownMenuItem>
-            {/* With content already in the document the floating offer stays away; the brief is
-                still one menu entry away while a scene with one is active. */}
-            {activeBrief && !composerEmpty && (
-              <DropdownMenuItem onClick={insertBrief}>
-                <ListChecks />
-                {t("brief.menuInsert")}
-              </DropdownMenuItem>
-            )}
-          </DropdownMenuGroup>
-          <p className="text-callout text-muted-foreground px-2 pt-1.5 pb-1">
-            {t("composer.addHint")}
-          </p>
-        </DropdownMenuContent>
-      </DropdownMenu>
-
-      <Statusline
-        contextWindow={contextWindow}
-        usage={usage ?? null}
-        onCompact={onCompactContext}
-        compactDisabled={running || loading || !composerEmpty}
-        compactDisabledReason={
-          running || loading
-            ? t("context.compactBusy")
-            : composerEmpty
-              ? null
-              : t("context.compactDraft")
-        }
-      />
-
-      {pluginActions}
-
-      {/* Session configuration shares the control row with attach, voice and run: one strip, one
-          baseline. The chips row wraps inside its own measure when the composer is narrow. */}
       <SessionControls
         config={config}
         models={models}
@@ -1521,175 +1432,252 @@ export function Composer({
         showWorktreePicker={!checkout}
       />
 
-      <div className="flex-1" />
-
-      {/* Document mode is the app's own feature — it deserves a control you can see, not just a
-          chord and a grip gesture. */}
-      <Tooltip>
-        <TooltipTrigger
-          render={
-            <Button
-              variant="ghost"
-              size="icon"
-              className="text-muted-foreground size-7 shrink-0 rounded-full"
-              aria-label={
-                docMode
-                  ? t("composer.collapseLabel")
-                  : t("composer.expandLabel")
-              }
-              onClick={() => onDocMode(!docMode)}
-            >
-              {docMode ? (
-                <Minimize2 className="size-3.5" />
-              ) : (
-                <Maximize2 className="size-3.5" />
-              )}
-            </Button>
-          }
-        />
-        <TooltipContent>
-          {docMode ? t("composer.collapse") : t("composer.expand")}
-        </TooltipContent>
-      </Tooltip>
-
-      {voiceEnabled ? (
-        <VoiceButton onText={onVoiceText} onTranscript={onVoiceTranscript} />
-      ) : null}
-
-      {/* Required slot fields still empty — a hint beside Run, never a gate on it. */}
-      {unfilledRequired.length > 0 && (
-        <Tooltip>
-          <TooltipTrigger
+      <div
+        data-composer-actions
+        className="ml-auto flex max-w-full flex-wrap items-center justify-end gap-0.5"
+      >
+        <DropdownMenu>
+          <DropdownMenuTrigger
             render={
-              <Chip
-                tone="warning"
-                aria-label={t("slotCard.requiredWarning", {
-                  slots: unfilledRequired.join(", "),
-                })}
+              <Button
+                variant="ghost"
+                size="icon"
+                className="size-7 shrink-0 rounded-full"
+                aria-label={t("composer.add")}
               >
-                <TriangleAlert className="size-3.5 shrink-0" />
-                <span className="hidden @lg/composer:inline">
-                  {t("slotCard.requiredShort", {
-                    count: unfilledRequired.length,
-                  })}
-                </span>
-              </Chip>
+                <Paperclip className="size-4" />
+              </Button>
             }
           />
-          <TooltipContent>
-            {t("slotCard.requiredWarning", {
-              slots: unfilledRequired.join(", "),
-            })}
-          </TooltipContent>
-        </Tooltip>
-      )}
-
-      {/* Enter makes a paragraph in a document, so the send chord has to be taught rather than
-          assumed. It shows only while the document is empty, and so retires itself. */}
-      {composerEmpty && !running && !loading && runHint && (
-        <span className="text-callout text-muted-foreground mx-1 hidden shrink-0 whitespace-nowrap @2xl/composer:inline">
-          {t("composer.toSend", { key: runHint })}
-        </span>
-      )}
-
-      {running ? (
-        <>
-          <div className="rounded-control bg-background flex shrink-0 items-center border">
-            <Tooltip>
-              <TooltipTrigger
-                render={
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="size-8 rounded-full"
-                    onClick={onQueue}
-                    aria-label={t("composer.queue")}
-                  >
-                    <ArrowUp className="size-4" />
-                  </Button>
-                }
-              />
-              <TooltipContent>{t("composer.queue")}</TooltipContent>
-            </Tooltip>
-            <DropdownMenu>
-              <DropdownMenuTrigger
-                render={
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="text-muted-foreground size-7 rounded-full"
-                    aria-label={t("composer.sendOptions")}
-                  >
-                    <ChevronDown className="size-3.5" />
-                  </Button>
-                }
-              />
-              <DropdownMenuContent align="end" side="top">
-                <DropdownMenuItem onClick={onQueue}>
-                  {t("composer.queue")}
+          <DropdownMenuContent align="start" side="top" className="w-60">
+            <DropdownMenuGroup>
+              <DropdownMenuItem onClick={onAttachFile}>
+                <FileText />
+                {t("composer.mentionFile")}
+                {filesHint && (
+                  <DropdownMenuShortcut>{filesHint}</DropdownMenuShortcut>
+                )}
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => imageInputRef.current?.click()}>
+                <ImagePlus />
+                {t("composer.attachImage")}
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={onInsertSkill}>
+                <Sparkles />
+                {t("composer.insertSkill")}
+                {skillHint && (
+                  <DropdownMenuShortcut>{skillHint}</DropdownMenuShortcut>
+                )}
+              </DropdownMenuItem>
+              {canvasEnabled && (
+                <DropdownMenuItem onClick={onInsertCanvas}>
+                  <PenLine />
+                  {t("composer.insertCanvas")}
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={onMultitask}>
-                  {t("composer.multitask")}
+              )}
+              <DropdownMenuItem onClick={onInsertIssue}>
+                <Ticket />
+                {t("composer.pullIssue")}
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={onOpenMarket}>
+                <Store />
+                {t("composer.market")}
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={onNewSkill}>
+                <Sparkles />
+                {t("composer.newSkill")}
+              </DropdownMenuItem>
+              {/* With content already in the document the floating offer stays away; the brief is
+                still one menu entry away while a scene with one is active. */}
+              {activeBrief && !composerEmpty && (
+                <DropdownMenuItem onClick={insertBrief}>
+                  <ListChecks />
+                  {t("brief.menuInsert")}
                 </DropdownMenuItem>
-                {steeringSupported ? (
-                  <DropdownMenuItem onClick={onSteer}>
-                    {t("composer.steer")}
-                  </DropdownMenuItem>
-                ) : null}
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
-          <Tooltip>
-            <TooltipTrigger
-              render={
-                <Button
-                  variant="secondary"
-                  size="icon"
-                  className="size-8 shrink-0 rounded-full"
-                  onClick={onStop}
-                  aria-label={t("composer.stop")}
-                >
-                  <Square className="size-3.5 fill-current" />
-                </Button>
-              }
-            />
-            <TooltipContent>{t("composer.stop")}</TooltipContent>
-          </Tooltip>
-        </>
-      ) : (
+              )}
+            </DropdownMenuGroup>
+            <p className="text-callout text-muted-foreground px-2 pt-1.5 pb-1">
+              {t("composer.addHint")}
+            </p>
+          </DropdownMenuContent>
+        </DropdownMenu>
+
+        <Statusline
+          contextWindow={contextWindow}
+          usage={usage ?? null}
+          onCompact={onCompactContext}
+          compactDisabled={running || loading || !composerEmpty}
+          compactDisabledReason={
+            running || loading
+              ? t("context.compactBusy")
+              : composerEmpty
+                ? null
+                : t("context.compactDraft")
+          }
+        />
+
+        {pluginActions}
+
+        {/* Document mode is the app's own feature — it deserves a control you can see, not just a
+          chord and a grip gesture. */}
         <Tooltip>
-          {/* Kept enabled on purpose: a disabled button explains nothing, and clicking it
-              focuses the document and says what's missing. */}
           <TooltipTrigger
             render={
               <Button
+                variant="ghost"
                 size="icon"
-                variant={composerEmpty ? "secondary" : "default"}
-                className="size-8 shrink-0 rounded-full"
-                onClick={onRun}
-                disabled={loading}
+                className="text-foreground size-7 shrink-0 rounded-full"
                 aria-label={
-                  loading ? t("composer.loadingSession") : t("composer.run")
+                  docMode
+                    ? t("composer.collapseLabel")
+                    : t("composer.expandLabel")
                 }
+                onClick={() => onDocMode(!docMode)}
               >
-                {loading ? (
-                  <ActivityOrb state="connecting" aria-hidden="true" />
+                {docMode ? (
+                  <Minimize2 className="size-3.5" />
                 ) : (
-                  <ArrowUp className="size-4" />
+                  <Maximize2 className="size-3.5" />
                 )}
               </Button>
             }
           />
           <TooltipContent>
-            {loading
-              ? t("composer.loadingSession")
-              : composerEmpty
-                ? t("composer.runEmpty")
-                : t("composer.run")}
-            {!loading && <span className="ml-1.5 opacity-60">{runHint}</span>}
+            {docMode ? t("composer.collapse") : t("composer.expand")}
           </TooltipContent>
         </Tooltip>
-      )}
+
+        {voiceEnabled ? (
+          <VoiceButton onText={onVoiceText} onTranscript={onVoiceTranscript} />
+        ) : null}
+
+        {/* Required slot fields still empty — a hint beside Run, never a gate on it. */}
+        {unfilledRequired.length > 0 && (
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <Chip
+                  tone="warning"
+                  aria-label={t("slotCard.requiredWarning", {
+                    slots: unfilledRequired.join(", "),
+                  })}
+                >
+                  <TriangleAlert className="size-3.5 shrink-0" />
+                  <span className="hidden @lg/composer:inline">
+                    {t("slotCard.requiredShort", {
+                      count: unfilledRequired.length,
+                    })}
+                  </span>
+                </Chip>
+              }
+            />
+            <TooltipContent>
+              {t("slotCard.requiredWarning", {
+                slots: unfilledRequired.join(", "),
+              })}
+            </TooltipContent>
+          </Tooltip>
+        )}
+
+        {running ? (
+          <>
+            <div className="rounded-control bg-background flex shrink-0 items-center border">
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="size-8 rounded-full"
+                      onClick={onQueue}
+                      aria-label={t("composer.queue")}
+                    >
+                      <ArrowUp className="size-4" />
+                    </Button>
+                  }
+                />
+                <TooltipContent>{t("composer.queue")}</TooltipContent>
+              </Tooltip>
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  render={
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="text-muted-foreground size-7 rounded-full"
+                      aria-label={t("composer.sendOptions")}
+                    >
+                      <ChevronDown className="size-3.5" />
+                    </Button>
+                  }
+                />
+                <DropdownMenuContent align="end" side="top">
+                  <DropdownMenuItem onClick={onQueue}>
+                    {t("composer.queue")}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={onMultitask}>
+                    {t("composer.multitask")}
+                  </DropdownMenuItem>
+                  {steeringSupported ? (
+                    <DropdownMenuItem onClick={onSteer}>
+                      {t("composer.steer")}
+                    </DropdownMenuItem>
+                  ) : null}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <Button
+                    variant="secondary"
+                    size="icon"
+                    className="size-8 shrink-0 rounded-full"
+                    onClick={onStop}
+                    aria-label={t("composer.stop")}
+                  >
+                    <Square className="size-3.5 fill-current" />
+                  </Button>
+                }
+              />
+              <TooltipContent>{t("composer.stop")}</TooltipContent>
+            </Tooltip>
+          </>
+        ) : (
+          <Tooltip>
+            {/* Kept enabled on purpose: a disabled button explains nothing, and clicking it
+              focuses the document and says what's missing. */}
+            <TooltipTrigger
+              render={
+                <Button
+                  size="icon"
+                  variant={composerEmpty ? "secondary" : "default"}
+                  className="size-8 shrink-0 rounded-full"
+                  onClick={onRun}
+                  disabled={loading}
+                  aria-label={
+                    loading ? t("composer.loadingSession") : t("composer.run")
+                  }
+                >
+                  {loading ? (
+                    <ActivityOrb state="connecting" aria-hidden="true" />
+                  ) : (
+                    <ArrowUp className="size-4" />
+                  )}
+                </Button>
+              }
+            />
+            <TooltipContent>
+              {loading
+                ? t("composer.loadingSession")
+                : composerEmpty
+                  ? t("composer.runEmpty")
+                  : t("composer.run")}
+              {!loading && <span className="ml-1.5 opacity-60">{runHint}</span>}
+            </TooltipContent>
+          </Tooltip>
+        )}
+      </div>
     </>
   );
 
@@ -1718,11 +1706,6 @@ export function Composer({
           docMode ? "min-h-0 flex-1" : "mx-auto w-full max-w-3xl"
         )}
       >
-        {/* Execution location and source control are adjacent but distinct: changing where a fresh
-            session runs must never be confused with inspecting the current branch. */}
-        {!docMode && checkout && (
-          <CheckoutBar config={config} checkout={checkout} />
-        )}
         {/* No `overflow-hidden`: BlockNote's drag/insert handles render just outside the text
             column, and clipping them takes the block gutter away. The compact card paints its own
             surface so its background can never drift away from the editor in WebKit. */}
@@ -1733,13 +1716,13 @@ export function Composer({
               ? // Expanded, the composer *is* the page: no card, no border, the app's own surface.
                 // `relative` anchors the floating control bar below.
                 "min-h-0 flex-1"
-              : "rounded-composer bg-raised shadow-raised"
+              : "rounded-composer bg-canvas shadow-composer dark:bg-raised"
           )}
         >
           <div
             className={cn(
               "min-h-0 overflow-y-auto",
-              docMode ? "bn-doc-mode flex-1" : "min-h-16 py-2"
+              docMode ? "bn-doc-mode flex-1" : "min-h-28 py-4"
             )}
             style={docMode ? undefined : { maxHeight: applied }}
           >
@@ -1815,7 +1798,7 @@ export function Composer({
             <div className="pointer-events-none absolute inset-x-0 top-8 z-20 px-6">
               <div className="raised-material canvas-ui-module shadow-raised pointer-events-auto mx-auto flex w-max max-w-full items-center gap-2 px-3 py-2">
                 <ListChecks className="text-muted-foreground size-3.5 shrink-0" />
-                <span className="text-body text-muted-foreground min-w-0 truncate">
+                <span className="text-body text-foreground min-w-0 truncate">
                   {t("brief.offer", { scene: config.activeScene.title })}
                 </span>
                 <Button size="sm" className="shrink-0" onClick={insertBrief}>
@@ -1849,9 +1832,9 @@ export function Composer({
           >
             <div
               className={cn(
-                "flex min-w-0 items-center gap-0.5",
+                "flex min-w-0 flex-wrap items-end gap-1",
                 docMode
-                  ? "rounded-composer bg-raised shadow-raised pointer-events-auto mx-auto w-full max-w-3xl p-2"
+                  ? "rounded-composer bg-canvas shadow-composer dark:bg-raised pointer-events-auto mx-auto w-full max-w-3xl p-2"
                   : // Keep every outer edge 8px from the controls. The 24px surface radius then
                     // shares its bottom-right centre with the circular send/stop control.
                     "p-2"
@@ -1861,6 +1844,9 @@ export function Composer({
             </div>
           </div>
         </div>
+        {!docMode && checkout && (
+          <CheckoutBar config={config} checkout={checkout} />
+        )}
       </div>
     </section>
   );

@@ -260,6 +260,7 @@
   --shadow-surface: var(--ds-elevation-surface);
   --shadow-control: 0 1px 2px var(--ds-color-shadow);
   --shadow-raised: var(--ds-elevation-raised);
+  --shadow-composer: var(--ds-composer-elevation);
   --shadow-modal: var(--ds-elevation-modal);
   --shadow-menu: var(--ds-menu-elevation);
 
@@ -1563,6 +1564,7 @@ pre {
 /* BlockNote's placeholder inherits its own weak gray unless explicitly bridged. */
 .bn-inline-content:has(> .ProseMirror-trailingBreak:only-child)::before {
   color: var(--ds-color-text-muted);
+  font-style: normal;
   opacity: 1;
 }
 .bn-doc-mode .bn-block-content[data-content-type="paragraph"] {
@@ -1746,6 +1748,33 @@ pre {
 
 .session-header[data-has-conversation="true"] {
   box-shadow: inset 0 calc(-1 * var(--hairline-width)) 0 var(--border);
+}
+
+/* One theme-owned tone for the whole toolbar, including hover/open states. Portalled menus
+   retain their own colors; disabled buttons keep the shared opacity treatment. */
+.session-header-toolbar,
+.session-header-toolbar button,
+.session-header-toolbar button:is(:hover, :active, [aria-expanded="true"]),
+.session-header-toolbar svg {
+  color: var(--muted-foreground);
+}
+
+/* Navigation shares the toolbar tone; selection uses its fill/marker. Status badges keep
+   their semantic colors, and portalled menus retain their own styling. */
+:is([data-workspace-navigation], [data-app-navigation], .session-rail),
+:is([data-workspace-navigation], [data-app-navigation], .session-rail) button,
+:is([data-workspace-navigation], [data-app-navigation], .session-rail)
+  button:is(:hover, :active, [aria-expanded="true"]) {
+  color: var(--muted-foreground);
+}
+
+/* Composer chrome follows the same neutral tone. Preserve warning chips, recording and
+   the filled submit action by limiting this rule to neutral button variants. */
+:is([data-session-controls], [data-composer-actions], [data-checkout-bar])
+  button:is([data-variant="ghost"], [data-variant="secondary"]):not(
+    .text-warning
+  ) {
+  color: var(--muted-foreground);
 }
 
 /* Primary actions pair one semantic icon with one label; context and layout stay icon-only. */
