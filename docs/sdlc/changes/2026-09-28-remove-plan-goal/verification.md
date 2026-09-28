@@ -28,6 +28,10 @@ Residual risk: UI evidence is the browser renderer, not a native desktop/account
 
 Evidence: logs and screenshot retained under `.codex/run/remove-plan-goal/`. An unused mobile update helper exposed by compiler warnings was removed; the final workspace check is clean. Repository-wide Rust formatting has pre-existing drift; changed Rust hunks were formatted without rewriting unrelated code.
 
+## PR validation follow-up
+
+PR #242's first CI run failed two desktop tests that still expected retired Plan output (`environmentPopoverRendered` and `transcript`). Updated those expectations to assert absence of the plan panel/property while preserving ordinary environment controls and legacy prompts. No runtime behavior changed in this follow-up. Full `bun run test:ci` then passed 966 tests / 5,776 expectations; three native/profile opt-in tests were skipped by the suite. Evidence: `.codex/run/remove-plan-goal/full-desktop-tests.log`. The initial remote failure is [CI run 36383859967](https://github.com/IchenDEV/codeTwo/actions/runs/36383859967); replacement remote CI remains required before merge.
+
 ## Cleanup
 
 Removed: task-owned `target/` (3.7 GiB), `apps/desktop/dist/` (48 MiB), superseded type/test logs.
