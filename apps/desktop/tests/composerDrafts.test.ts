@@ -37,7 +37,7 @@ const posture: ComposerDraftPosture = {
   mode: "ask",
   sandbox: "workspace_write",
   worktreeBase: "current",
-  planMode: false,
+
   memoryRead: "inherit",
   memoryWrite: "allow",
   scene: "review",
@@ -215,4 +215,25 @@ describe("composer drafts", () => {
     expect(saveComposerDrafts(drafts, storage)).toBe(false);
     expect(storage.getItem(COMPOSER_DRAFT_STORAGE_KEY)).toBe("last-good-copy");
   });
+});
+
+test("legacy plan posture is discarded without losing the draft", () => {
+  const storage = new MemoryStorage();
+  const drafts = updateComposerDraft(
+    new Map(),
+    {
+      scope: project,
+      doc,
+      attachments: [],
+      posture: { ...posture, planMode: true } as ComposerDraftPosture,
+    },
+    { createId: () => "legacy-draft", now: 1 }
+  );
+  saveComposerDrafts(drafts, storage);
+  const loaded = loadComposerDrafts(storage).drafts.get(
+    composerDraftScopeKey(project)
+  );
+  expect(loaded?.doc).toEqual(doc);
+  expect(loaded?.posture.provider).toBe("codex");
+  expect(loaded?.posture).not.toHaveProperty("planMode");
 });

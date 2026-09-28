@@ -40,7 +40,7 @@ const fn price(
     }
 }
 
-/// Published per-MTok prices for the model ids [`crate::models::builtin_models`] actually offers.
+/// Published per-MTok prices for recognized model ids. Discovery does not depend on this table.
 ///
 /// Deliberately incomplete: models whose vendors publish no per-token USD price (Cursor's
 /// `composer-1`, the Kimi K3 and GLM-5 families) are omitted rather than guessed — the designed

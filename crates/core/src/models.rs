@@ -1,17 +1,7 @@
-//! Built-in model lists, for providers that don't report their own.
-//!
-//! ACP's model API (`session/new` → `models`, `session/set_model`) is marked UNSTABLE and most
-//! adapters skip the reporting half entirely. That left the picker with nothing to show and the
-//! user with nothing to do but go edit the CLI's config file — so we keep a short list of each
-//! CLI's own model ids here and offer that instead.
-//!
-//! These are a fallback, never an override: whatever the agent reports at `session/new` wins, and
-//! is the only list shown when it exists. The ids are the ones each CLI accepts for its own
-//! `--model` (so `session/set_model` has a chance of taking them); the names are what we render.
-//! A provider we have no list for still gets the "set it in the CLI's config" note.
+//! Model choices discovered from the installed provider CLI or ACP session metadata.
+//! Discovery failures leave the catalogue empty; the provider still owns its default.
 
 use std::process::Stdio;
-use std::sync::OnceLock;
 use std::time::Duration;
 
 use serde::Deserialize;
@@ -21,29 +11,12 @@ use tokio::process::Command;
 use crate::event::ModelChoice;
 use crate::provider::{which, Provider, ProviderId};
 
-static CODEX_MODELS: OnceLock<Vec<ModelChoice>> = OnceLock::new();
-static GROK_MODELS: OnceLock<Vec<ModelChoice>> = OnceLock::new();
-static CURSOR_MODELS: OnceLock<Vec<ModelChoice>> = OnceLock::new();
-static OPENCODE_MODELS: OnceLock<Vec<ModelChoice>> = OnceLock::new();
-static OPENCODE2_MODELS: OnceLock<Vec<ModelChoice>> = OnceLock::new();
-
 fn choice(id: &str, name: &str, description: Option<&str>) -> ModelChoice {
     ModelChoice {
         id: id.to_string(),
         name: name.to_string(),
         description: description.map(|s| s.to_string()),
     }
-}
-
-fn codex_family(id: &str, name: &str, description: &str, efforts: &[&str]) -> Vec<ModelChoice> {
-    efforts
-        .iter()
-        .map(|effort| ModelChoice {
-            id: format!("{id}[{effort}]"),
-            name: format!("{name} ({})", effort_label(effort)),
-            description: Some(description.to_string()),
-        })
-        .collect()
 }
 
 fn effort_label(effort: &str) -> String {
@@ -54,188 +27,33 @@ fn effort_label(effort: &str) -> String {
     }
 }
 
-/// The models we offer for `provider` when it reports none of its own. Empty for providers we
-/// don't ship a list for — including every [`ProviderId::Custom`], whose models we can't know.
-pub fn builtin_models(provider: &ProviderId) -> Vec<ModelChoice> {
-    match provider {
-        // Claude Code owns these aliases and resolves them to the current model in each tier. Keep
-        // the fallback alias-based; the adapter reports the account's exact catalogue and each
-        // model's exact effort ladder once the ACP session starts.
-        ProviderId::ClaudeCode => vec![
-            choice(
-                "default",
-                "Default",
-                Some("Claude Code resolves the account default"),
-            ),
-            choice(
-                "best",
-                "Best available",
-                Some("Claude Code chooses the strongest available model"),
-            ),
-            choice("fable", "Claude Fable", Some("Latest Fable alias")),
-            choice("opus", "Claude Opus", Some("Latest Opus alias")),
-            choice(
-                "opus[1m]",
-                "Claude Opus 1M",
-                Some("Latest Opus alias, 1M context"),
-            ),
-            choice(
-                "opusplan",
-                "Claude Opus Plan",
-                Some("Opus for planning, Sonnet for execution"),
-            ),
-            choice("sonnet", "Claude Sonnet", Some("Latest Sonnet alias")),
-            choice(
-                "sonnet[1m]",
-                "Claude Sonnet 1M",
-                Some("Latest Sonnet alias, 1M context"),
-            ),
-            choice("haiku", "Claude Haiku", Some("Fastest")),
-        ],
-        // Codex is queried live by [`available_models`]. Keep the same current catalogue here so
-        // a temporarily unavailable app-server still leaves the pre-session picker useful.
-        ProviderId::Codex => [
-            codex_family(
-                "gpt-5.6-sol",
-                "GPT-5.6-Sol",
-                "Latest frontier agentic coding model.",
-                &["low", "medium", "high", "xhigh", "max", "ultra"],
-            ),
-            codex_family(
-                "gpt-5.6-terra",
-                "GPT-5.6-Terra",
-                "Balanced agentic coding model for everyday work.",
-                &["low", "medium", "high", "xhigh", "max", "ultra"],
-            ),
-            codex_family(
-                "gpt-5.6-luna",
-                "GPT-5.6-Luna",
-                "Fast and affordable agentic coding model.",
-                &["low", "medium", "high", "xhigh", "max"],
-            ),
-            codex_family(
-                "gpt-5.5",
-                "GPT-5.5",
-                "Frontier model for complex coding, research, and real-world work.",
-                &["low", "medium", "high", "xhigh"],
-            ),
-            codex_family(
-                "gpt-5.4",
-                "GPT-5.4",
-                "Strong model for everyday coding.",
-                &["low", "medium", "high", "xhigh"],
-            ),
-            codex_family(
-                "gpt-5.4-mini",
-                "GPT-5.4-Mini",
-                "Small, fast, and cost-efficient model for simpler coding tasks.",
-                &["low", "medium", "high", "xhigh"],
-            ),
-            codex_family(
-                "gpt-5.3-codex-spark",
-                "GPT-5.3-Codex-Spark",
-                "Ultra-fast coding model.",
-                &["low", "medium", "high", "xhigh"],
-            ),
-        ]
-        .into_iter()
-        .flatten()
-        .collect(),
-        // These CLIs are queried live by `available_models`; the entries below are conservative
-        // fallbacks for a transient catalogue failure, not claims about the user's account.
-        ProviderId::Grok => vec![choice(
-            "grok-4.6",
-            "Grok 4.6",
-            Some("Current Grok CLI default"),
-        )],
-        ProviderId::Cursor => vec![choice(
-            "auto",
-            "Auto",
-            Some("Cursor selects a model available to this account"),
-        )],
-        // OpenCode and Pi catalogues are entirely account/configuration-owned. Inventing a global
-        // fallback here is worse than showing the honest “start a session / configure the CLI”
-        // state; these ACP endpoints report the real list once a session exists.
-        ProviderId::OpenCode | ProviderId::OpenCode2 | ProviderId::Pi => Vec::new(),
-        ProviderId::Kimi => vec![
-            choice("kimi-code/k3", "Kimi K3", Some("Managed Kimi Code alias")),
-            choice(
-                "kimi-code/kimi-for-coding",
-                "Kimi for Coding",
-                Some("Managed Kimi Code alias"),
-            ),
-            choice(
-                "kimi-code/kimi-for-coding-highspeed",
-                "Kimi for Coding Highspeed",
-                Some("Managed Kimi Code alias"),
-            ),
-        ],
-        // Kept in lock-step with the glm-acp-agent package we launch. The agent replaces this with
-        // its own model/config-option response after session/new.
-        ProviderId::ZCode => vec![
-            choice("glm-5.3", "GLM-5.3", Some("Default, 1M context")),
-            choice("glm-5-turbo", "GLM-5 Turbo", Some("Faster, 128K context")),
-            choice("glm-4.7", "GLM-4.7", None),
-        ],
-        // Amp routes internally across frontier models; these are its quality modes exposed as
-        // ACP model ids by the amp-acp adapter.
-        ProviderId::Amp => vec![
-            choice("medium", "Medium", Some("Default — balanced quality, speed, and cost")),
-            choice("low", "Low", Some("Fast, low-cost mode for small tasks")),
-            choice("high", "High", Some("Deeper reasoning, more time and cost")),
-            choice("ultra", "Ultra", Some("Maximum capability, open-ended tasks")),
-        ],
-        // Droid's ACP mode reports its own model list from the user's Factory account once a
-        // session starts. An empty fallback is better than inventing ids that may not exist.
-        ProviderId::Droid => Vec::new(),
-        ProviderId::Custom(_) => Vec::new(),
-    }
-}
-
-/// Resolve the model list shown before an ACP session exists. Prefer each installed CLI's live,
-/// account-specific catalogue wherever it exposes one; static entries are fallback aliases only.
+/// Query afresh so account/configuration changes and transient failures can recover.
+/// Providers without a standalone catalogue report their choices through ACP session metadata.
 pub async fn available_models(provider: &Provider) -> Vec<ModelChoice> {
     let queried = match provider.id {
         ProviderId::Codex => {
-            if let Some(models) = CODEX_MODELS.get() {
-                return models.clone();
-            }
             let executable = provider
                 .launch
                 .env
                 .iter()
                 .find_map(|(key, value)| (key == "CODEX_PATH").then_some(value.as_str()))
                 .map(std::path::PathBuf::from)
-                .filter(|path| path.is_file())
                 .or_else(|| which("codex"));
             match executable {
-                Some(executable) => query_codex_models(executable).await,
+                Some(executable) => query_codex_models(executable, &provider.launch.env).await,
                 None => Err(()),
             }
-            .map(|models| (models, &CODEX_MODELS))
         }
-        ProviderId::Grok => query_cli_catalog(provider, &["models"], parse_grok_models)
-            .await
-            .map(|models| (models, &GROK_MODELS)),
-        ProviderId::Cursor => query_cli_catalog(provider, &["--list-models"], parse_cursor_models)
-            .await
-            .map(|models| (models, &CURSOR_MODELS)),
-        ProviderId::OpenCode => query_cli_catalog(provider, &["models"], parse_opencode_models)
-            .await
-            .map(|models| (models, &OPENCODE_MODELS)),
-        ProviderId::OpenCode2 => query_cli_catalog(provider, &["models"], parse_opencode_models)
-            .await
-            .map(|models| (models, &OPENCODE2_MODELS)),
-        _ => return builtin_models(&provider.id),
+        ProviderId::Grok => query_cli_catalog(provider, &["models"], parse_grok_models).await,
+        ProviderId::Cursor => {
+            query_cli_catalog(provider, &["--list-models"], parse_cursor_models).await
+        }
+        ProviderId::OpenCode | ProviderId::OpenCode2 => {
+            query_cli_catalog(provider, &["models"], parse_opencode_models).await
+        }
+        _ => return Vec::new(),
     };
-
-    match queried {
-        Ok((models, cache)) if !models.is_empty() => {
-            let _ = cache.set(models.clone());
-            models
-        }
-        _ => builtin_models(&provider.id),
-    }
+    queried.unwrap_or_default()
 }
 
 async fn query_cli_catalog(
@@ -243,20 +61,11 @@ async fn query_cli_catalog(
     args: &[&str],
     parse: fn(&str) -> Vec<ModelChoice>,
 ) -> Result<Vec<ModelChoice>, ()> {
-    let cache = match provider.id {
-        ProviderId::Grok => GROK_MODELS.get(),
-        ProviderId::Cursor => CURSOR_MODELS.get(),
-        ProviderId::OpenCode => OPENCODE_MODELS.get(),
-        ProviderId::OpenCode2 => OPENCODE2_MODELS.get(),
-        _ => None,
-    };
-    if let Some(models) = cache {
-        return Ok(models.clone());
-    }
     let executable = which(&provider.launch.command).ok_or(())?;
     let mut command = Command::new(executable);
     command
         .args(args)
+        .envs(provider.launch.env.iter().cloned())
         .stdin(Stdio::null())
         .stderr(Stdio::null())
         .kill_on_drop(true);
@@ -368,9 +177,13 @@ fn parse_codex_models(result: &serde_json::Value) -> Result<Vec<ModelChoice>, ()
     Ok(choices)
 }
 
-async fn query_codex_models(executable: std::path::PathBuf) -> Result<Vec<ModelChoice>, ()> {
+async fn query_codex_models(
+    executable: std::path::PathBuf,
+    env: &[(String, String)],
+) -> Result<Vec<ModelChoice>, ()> {
     let mut child = Command::new(executable)
         .args(["app-server", "--stdio"])
+        .envs(env.iter().cloned())
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::null())
@@ -394,6 +207,8 @@ async fn query_codex_models(executable: std::path::PathBuf) -> Result<Vec<ModelC
     .await?;
 
     let exchange = async {
+        let mut choices = Vec::new();
+        let mut cursors = std::collections::HashSet::new();
         let mut lines = AsyncBufReader::new(stdout).lines();
         while let Some(line) = lines.next_line().await.map_err(|_| ())? {
             let message: serde_json::Value = serde_json::from_str(&line).map_err(|_| ())?;
@@ -412,7 +227,23 @@ async fn query_codex_models(executable: std::path::PathBuf) -> Result<Vec<ModelC
                     .await?;
                 }
                 Some(2) if message.get("error").is_some() => return Err(()),
-                Some(2) => return parse_codex_models(message.get("result").ok_or(())?),
+                Some(2) => {
+                    let result = message.get("result").ok_or(())?;
+                    choices.extend(parse_codex_models(result)?);
+                    let Some(cursor) = result
+                        .get("nextCursor")
+                        .and_then(serde_json::Value::as_str)
+                        .filter(|cursor| !cursor.is_empty())
+                    else {
+                        return Ok(choices);
+                    };
+                    if !cursors.insert(cursor.to_string()) {
+                        return Err(());
+                    }
+                    write_codex_rpc(&mut stdin, serde_json::json!({
+                        "method": "model/list", "id": 2, "params": { "limit": 100, "cursor": cursor }
+                    })).await?;
+                }
                 _ => {}
             }
         }
@@ -421,7 +252,7 @@ async fn query_codex_models(executable: std::path::PathBuf) -> Result<Vec<ModelC
 
     let result = tokio::time::timeout(Duration::from_secs(8), exchange)
         .await
-        .map_err(|_| ())?;
+        .unwrap_or(Err(()));
     drop(stdin);
     let _ = child.kill().await;
     let _ = child.wait().await;
@@ -442,73 +273,89 @@ async fn write_codex_rpc(
 mod tests {
     use super::*;
 
-    #[test]
-    fn only_account_owned_catalogues_have_no_static_list() {
-        for p in crate::provider::default_registry() {
-            let empty_is_expected = matches!(
-                p.id,
-                ProviderId::OpenCode | ProviderId::OpenCode2 | ProviderId::Pi | ProviderId::Droid
-            );
-            assert_eq!(
-                builtin_models(&p.id).is_empty(),
-                empty_is_expected,
-                "unexpected fallback policy for {}",
-                p.display_name
-            );
-        }
-    }
-
-    #[test]
-    fn custom_providers_have_none() {
-        assert!(builtin_models(&ProviderId::Custom("mine".into())).is_empty());
-    }
-
-    #[test]
-    fn codex_names_split_into_effort_variants() {
-        // The desktop picker groups by trailing effort token; ids and names must stay in step.
-        let codex = builtin_models(&ProviderId::Codex);
-        assert!(codex.iter().any(|m| m.name.ends_with("(High)")));
-        assert!(codex.iter().all(|m| !m.id.is_empty()));
-    }
-
-    #[test]
-    fn codex_fallback_keeps_every_current_model_family() {
-        let codex = builtin_models(&ProviderId::Codex);
-        for family in [
-            "gpt-5.6-sol",
-            "gpt-5.6-terra",
-            "gpt-5.6-luna",
-            "gpt-5.5",
-            "gpt-5.4",
-            "gpt-5.4-mini",
-            "gpt-5.3-codex-spark",
+    #[tokio::test]
+    async fn unknown_catalogues_do_not_invent_models() {
+        for id in [
+            ProviderId::ClaudeCode,
+            ProviderId::Kimi,
+            ProviderId::ZCode,
+            ProviderId::Amp,
+            ProviderId::Custom("future-agent".into()),
         ] {
-            assert!(
-                codex.iter().any(|model| model.id.starts_with(family)),
-                "missing {family} from the pre-session Codex picker"
-            );
+            let provider = Provider {
+                id,
+                display_name: "Unknown".into(),
+                launch: crate::provider::LaunchSpec::new("missing", [] as [&str; 0]),
+                needs_node: false,
+            };
+            assert!(available_models(&provider).await.is_empty());
         }
     }
 
-    #[test]
-    fn claude_fallback_uses_current_release_independent_aliases() {
-        let claude = builtin_models(&ProviderId::ClaudeCode);
-        for alias in [
-            "default",
-            "best",
-            "fable",
-            "opus",
-            "opus[1m]",
-            "opusplan",
-            "sonnet",
-            "sonnet[1m]",
-            "haiku",
-        ] {
-            assert!(
-                claude.iter().any(|model| model.id == alias),
-                "missing Claude Code alias {alias}"
-            );
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn discovery_refreshes_and_honors_provider_environment() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::tempdir().unwrap();
+        let executable = dir.path().join("catalogue");
+        std::fs::write(
+            &executable,
+            "#!/bin/sh\nprintf '* %s\\n' \"$DISCOVERED_MODEL\"\n",
+        )
+        .unwrap();
+        std::fs::set_permissions(&executable, std::fs::Permissions::from_mode(0o700)).unwrap();
+        let mut provider = Provider {
+            id: ProviderId::Grok,
+            display_name: "Test".into(),
+            launch: crate::provider::LaunchSpec::new(executable.to_string_lossy(), [] as [&str; 0]),
+            needs_node: false,
+        };
+        for model in ["account-one", "account-two"] {
+            provider.launch.env = vec![("DISCOVERED_MODEL".into(), model.into())];
+            assert_eq!(available_models(&provider).await[0].id, model);
         }
+        std::fs::write(&executable, "#!/bin/sh\nexit 1\n").unwrap();
+        assert!(available_models(&provider).await.is_empty());
+        std::fs::write(&executable, "#!/bin/sh\nprintf '* recovered\\n'\n").unwrap();
+        assert_eq!(available_models(&provider).await[0].id, "recovered");
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn codex_catalog_follows_pages_and_rejects_cursor_cycles() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::tempdir().unwrap();
+        let executable = dir.path().join("app-server");
+        std::fs::write(
+            &executable,
+            r#"#!/usr/bin/env python3
+import json, os, sys
+for line in sys.stdin:
+    m = json.loads(line)
+    if m.get('id') is None: continue
+    result = {}
+    if m['method'] == 'model/list':
+        cursor = m['params'].get('cursor')
+        result = {'data':[{'id': 'page-two' if cursor else 'page-one', 'displayName':'Discovered'}],
+                  'nextCursor': 'next' if not cursor or os.environ.get('CYCLE') else None}
+    print(json.dumps({'id':m['id'], 'result':result}), flush=True)
+"#,
+        )
+        .unwrap();
+        std::fs::set_permissions(&executable, std::fs::Permissions::from_mode(0o700)).unwrap();
+        let models = query_codex_models(executable.clone(), &[]).await.unwrap();
+        assert_eq!(
+            models
+                .iter()
+                .map(|model| model.id.as_str())
+                .collect::<Vec<_>>(),
+            ["page-one", "page-two"]
+        );
+        assert!(
+            query_codex_models(executable, &[("CYCLE".into(), "1".into())])
+                .await
+                .is_err()
+        );
     }
 
     #[test]

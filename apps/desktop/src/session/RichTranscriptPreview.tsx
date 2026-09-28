@@ -142,11 +142,6 @@ const previewTurn: Turn = {
       createdAt: previewStartedAt + 24_000,
     },
   ],
-  plan: [
-    { content: "Inspect the transcript path", status: "completed" },
-    { content: "Run renderer checks", status: "in_progress" },
-    { content: "Report the evidence", status: "pending" },
-  ],
   startedAt: previewStartedAt,
   endedAt: previewStartedAt + 25_000,
 };
@@ -186,10 +181,6 @@ export function RichTranscriptPreview() {
             /* empty */
           }}
           onOpenSettings={() => {
-            /* empty */
-          }}
-          turns={previewTurns}
-          onOpenPlanAsDocument={() => {
             /* empty */
           }}
         />

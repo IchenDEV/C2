@@ -11,8 +11,7 @@ import {
 } from "./domTestHarness";
 
 activateDom();
-const { CollaborationModePicker, GoalPicker, ModelPicker } =
-  await import("../src/session/Composer");
+const { ModelPicker } = await import("../src/session/Composer");
 const { I18nProvider } = await import("../src/i18n");
 const { hiddenModelsForProvider, setModelHidden } =
   await import("../src/session/modelPreferences");
@@ -433,66 +432,33 @@ describe("ModelPicker", () => {
   });
 });
 
-describe("provider-native session controls", () => {
-  test("renders collaboration mode only from an advertised provider option", () => {
-    activateDom();
-    const absent = mount(
-      <CollaborationModePicker options={[]} onChange={() => {}} />
-    );
-    expect(absent.container.querySelector("button")).toBeNull();
-    absent.unmount();
-
-    const rendered = mount(
-      <CollaborationModePicker
-        options={[
-          {
-            id: "collaboration_mode",
-            name: "Collaboration mode",
-            category: "collaboration_mode",
-            current: "plan",
-            choices: [
-              { id: "default", name: "Default", description: null },
-              {
-                id: "plan",
-                name: "Plan",
-                description: "Plan before implementation",
-              },
-            ],
-          },
-        ]}
-        onChange={() => {}}
+test("shows pending switching state without inventing provider choices", async () => {
+  activateDom();
+  const rendered = mount(
+    <I18nProvider>
+      <ModelPicker
+        models={[]}
+        current={null}
+        defaultModel={null}
+        provider="custom-agent"
+        onModel={() => {}}
+        configOptions={[]}
+        onConfigOption={() => {}}
+        hasSession
+        disabled
+        providerConfig={{
+          providers: [],
+          providersStatus: "loading",
+          provider: "custom-agent",
+          providerSwitching: true,
+        }}
       />
-    );
-    expect(
-      rendered.container.querySelector(
-        'button[aria-label="Collaboration mode: Plan"]'
-      )
-    ).toBeTruthy();
-    rendered.unmount();
-  });
-
-  test("renders Goal only when the provider advertises the extension", () => {
-    activateDom();
-    const absent = mount(
-      <I18nProvider>
-        <GoalPicker capability={null} goal={null} onGoal={async () => {}} />
-      </I18nProvider>
-    );
-    expect(absent.container.querySelector("button")).toBeNull();
-    absent.unmount();
-
-    const rendered = mount(
-      <I18nProvider>
-        <GoalPicker
-          capability={{ control_method: "_session/goal", actions: ["set"] }}
-          goal={null}
-          onGoal={async () => {}}
-        />
-      </I18nProvider>
-    );
-    expect(
-      rendered.container.querySelector('button[aria-label="Goal"]')
-    ).toBeTruthy();
-    rendered.unmount();
-  });
+    </I18nProvider>
+  );
+  const trigger = rendered.container.querySelector('button[title="Model"]');
+  expect(trigger?.disabled).toBe(true);
+  expect(rendered.container.querySelector('[role="status"]')?.textContent).toBe(
+    "Switching agent…"
+  );
+  rendered.unmount();
 });

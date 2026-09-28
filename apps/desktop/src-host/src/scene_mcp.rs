@@ -527,8 +527,8 @@ async fn dispatch_broker(
                             .resolve(&reference)
                             .map(codetwo_core::SceneLibrary::reference_for)
                     });
-                let (changed, pending, plan_first) = if current.as_deref() == Some(&canonical) {
-                    (false, Vec::new(), None)
+                let (changed, pending) = if current.as_deref() == Some(&canonical) {
+                    (false, Vec::new())
                 } else {
                     let outcome = core
                         .call(
@@ -565,8 +565,7 @@ async fn dispatch_broker(
                         .filter_map(Value::as_str)
                         .map(str::to_string)
                         .collect();
-                    let plan_first = outcome.get("plan_first").and_then(Value::as_bool);
-                    (true, pending, plan_first)
+                    (true, pending)
                 };
                 let (memory_read, memory_write) = store
                     .session_memory_policy(&request.session)
@@ -580,7 +579,6 @@ async fn dispatch_broker(
                             "title": title,
                             "reason": reason,
                             "pending": pending,
-                            "planFirst": plan_first,
                             "memoryRead": memory_read,
                             "memoryWrite": memory_write,
                         }),

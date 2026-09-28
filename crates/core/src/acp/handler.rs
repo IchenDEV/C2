@@ -12,7 +12,7 @@ use crate::error::RpcError;
 
 #[async_trait]
 pub trait ClientHandler: Send + Sync + 'static {
-    /// A streamed `session/update` (assistant text, thoughts, tool calls, plans).
+    /// A streamed `session/update` (assistant text, thoughts, tool calls).
     async fn session_update(&self, _note: SessionNotification) {}
 
     /// The agent needs a permission decision. Default: cancel (deny) — safe by default.

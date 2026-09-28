@@ -917,3 +917,23 @@ describe("execution policy projection", () => {
     ).toBe(false);
   });
 });
+
+test("provider replacement is metadata and never creates or mutates a turn", () => {
+  const turns = [newTurn("Keep this draft")];
+  expect(
+    applyEvent(turns, {
+      event: "provider_changed",
+      session: "s",
+      provider: "pi",
+      model: null,
+    })
+  ).toBe(turns);
+  expect(
+    applyEvent([], {
+      event: "provider_changed",
+      session: "s",
+      provider: "pi",
+      model: null,
+    })
+  ).toEqual([]);
+});

@@ -7,7 +7,6 @@ export type TrajectoryKind =
   | "reasoning"
   | "tool"
   | "memory"
-  | "plan"
   | "error";
 
 export type TrajectoryLane = "context" | "assistant" | "tool";
@@ -142,23 +141,6 @@ export function deriveTrajectory(
         endAt: turnEnd,
         running: turn.endedAt === undefined,
         output: reasoning,
-      });
-    }
-
-    if (turn.plan.length > 0) {
-      records.push({
-        id: `turn:${turn.id}:plan`,
-        index: 0,
-        kind: "plan",
-        lane: "assistant",
-        turn: turnNumber,
-        step: 1,
-        title: "Plan",
-        summary: compact(turn.plan.map((entry) => entry.content).join(" · ")),
-        startAt: turn.startedAt,
-        endAt: turn.startedAt,
-        running: false,
-        output: turn.plan,
       });
     }
 

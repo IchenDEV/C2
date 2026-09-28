@@ -13,7 +13,7 @@ and declarative hooks. A **pipeline** chains scenes into a lifecycle (the built-
 research → develop → test → fix → acceptance, with a test/fix loop).
 
 Scenes exist because every ingredient already shipped separately — permission modes, memory
-presets, Plan First, worktree baselines, the skill library — but the user had to reassemble them
+presets, worktree baselines, the skill library — but the user had to reassemble them
 by hand for every kind of work. A scene is the packaging object; it introduces **no new
 execution capability**. Like plugins, installing or activating a scene never runs a script.
 
@@ -76,15 +76,17 @@ project/user defaults when creating a session). Values reuse the existing vocabu
 | `session_mode` | `read_only` \| `ask` \| `auto_edit` \| `full_access` | `apps/desktop/src/session/mode.ts` |
 | `memory_preset` | `standard` \| `read_only` \| `private` \| `learn_only` | composer memory presets |
 | `worktree` | `off` \| `current` \| `origin_default` | `crates/core/src/project.rs` |
-| `plan_first` | boolean | composer Plan First toggle |
 | `providers` | provider ids, preference order | `crates/core/src/provider.rs` registry |
 | `model`, `reasoning_effort` | provider-defined strings | provider capabilities |
+
+Legacy `execution.plan_first` is accepted only when reading older scene files. It has no
+effect and is omitted when saving or exporting a scene.
 
 **Binding matrix.** Not everything can change mid-session; the host applies a scene at two
 strengths and must show which one happened:
 
 - **Soft-apply** (switching scenes inside a live session): `session_mode`, `memory_preset`,
-  `plan_first`, skills, brief, guardrails take effect immediately. `providers`, `model`,
+  skills, brief, guardrails take effect immediately. `providers`, `model`,
   `reasoning_effort` apply from the next session; `worktree` is immutable per session by design.
 - **Full-apply** (scene chosen at session creation, or "new session in this scene"): everything
   applies. When a soft-apply leaves fields pending, the scene chip shows a partial indicator and

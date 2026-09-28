@@ -185,6 +185,7 @@ pub enum PendingInputKind {
     Elicitation,
 }
 
+/// Read-only compatibility for plan rows written by older versions.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct PlanEntry {
     pub content: String,
@@ -655,12 +656,7 @@ pub fn transcript_context_with_omission(
         let text = match part {
             Part::Text { text } => text.trim().to_string(),
             Part::Prompt { text, .. } => text.trim().to_string(),
-            Part::Plan { entries } => entries
-                .iter()
-                .map(|entry| format!("- {}", entry.content))
-                .collect::<Vec<_>>()
-                .join("\n"),
-            Part::Reasoning { .. } | Part::ToolCall { .. } => continue,
+            Part::Reasoning { .. } | Part::ToolCall { .. } | Part::Plan { .. } => continue,
         };
         if text.is_empty() {
             continue;
@@ -750,7 +746,7 @@ mod transcript_context_tests {
     use super::{transcript_context, Part, Role};
 
     #[test]
-    fn context_omits_reasoning_and_tools_but_keeps_conversation_and_plans() {
+    fn context_omits_reasoning_tools_and_retired_plans() {
         let transcript = vec![
             (
                 Role::User,
@@ -786,7 +782,7 @@ mod transcript_context_tests {
 
         let context = transcript_context("Release", &transcript);
         assert!(context.contains("ship the feature"));
-        assert!(context.contains("- verify\n- release"));
+        assert!(!context.contains("- verify\n- release"));
         assert!(!context.contains("private chain"));
         assert!(!context.contains("dangerous payload"));
     }

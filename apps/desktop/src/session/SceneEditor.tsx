@@ -1134,10 +1134,6 @@ export function SceneEditor({
       label: td(t, `sceneEditor.worktree.${value}`),
     })
   );
-  const boolOptions = [
-    { value: "true", label: t("sceneEditor.on") },
-    { value: "false", label: t("sceneEditor.off") },
-  ];
   const editorTitle =
     request.kind === "edit"
       ? t("sceneEditor.editTitle")
@@ -1502,27 +1498,6 @@ export function SceneEditor({
                           execution: {
                             ...execution,
                             worktree: worktree as typeof execution.worktree,
-                          },
-                        })
-                      }
-                    />
-                    <OptionalSelectField
-                      id="scene-plan"
-                      label={t("sceneEditor.planFirst")}
-                      value={
-                        execution.plan_first === undefined
-                          ? undefined
-                          : String(execution.plan_first)
-                      }
-                      options={boolOptions}
-                      inheritLabel={t("sceneEditor.inherit")}
-                      onChange={(plan) =>
-                        setDraft({
-                          ...draft,
-                          execution: {
-                            ...execution,
-                            plan_first:
-                              plan === undefined ? undefined : plan === "true",
                           },
                         })
                       }

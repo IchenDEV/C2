@@ -91,7 +91,6 @@ async fn agent_output_is_persisted() {
     }));
     let handler = Arc::new(SessionHandler::new(
         "s1".into(),
-        ProviderId::Codex,
         events_tx,
         policy,
         router,

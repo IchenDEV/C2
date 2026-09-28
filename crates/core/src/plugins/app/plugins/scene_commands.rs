@@ -368,7 +368,6 @@ async fn apply_scene_to(
             applied: Vec::new(),
             pending: Vec::new(),
             escalation: Some(EscalationOut::from_core(escalation)),
-            plan_first: None,
             suppress_unpinned: false,
             pinned_skills: Vec::new(),
         });
@@ -395,9 +394,6 @@ async fn apply_scene_to(
             .map_err(PluginError::new)?;
         applied.push("memory_preset");
     }
-    if plan.plan_first.is_some() {
-        applied.push("plan_first");
-    }
     inputs
         .store
         .set_session_scene(session, Some(&scene_ref), false)
@@ -409,7 +405,6 @@ async fn apply_scene_to(
         applied,
         pending: plan.pending.into_iter().map(pending_field_str).collect(),
         escalation: None,
-        plan_first: plan.plan_first,
         suppress_unpinned: skills.suppress_unpinned,
         pinned_skills: skills.pinned,
     })
@@ -494,7 +489,6 @@ struct SceneApplyOutcome {
     applied: Vec<&'static str>,
     pending: Vec<&'static str>,
     escalation: Option<EscalationOut>,
-    plan_first: Option<bool>,
     suppress_unpinned: bool,
     pinned_skills: Vec<String>,
 }

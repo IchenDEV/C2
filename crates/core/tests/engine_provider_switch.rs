@@ -56,7 +56,7 @@ for line in sys.stdin:
         used_old_cursor = True
         send({"jsonrpc":"2.0","id":mid,"error":{"code":-32000,"message":"old cursor must not cross providers"}})
     elif method == "session/new":
-        send({"jsonrpc":"2.0","id":mid,"result":{"sessionId":"target-session"}})
+        send({"jsonrpc":"2.0","id":mid,"result":{"sessionId":"target-session","models":{"currentModelId":"account-model","availableModels":[{"modelId":"account-model","name":"Account model"}]}}})
     elif method == "session/prompt":
         prompt = json.dumps(message["params"].get("prompt", []))
         required = ["first user request", "from-provider-a", "Compile workspace: completed", "second user request"]
@@ -233,6 +233,18 @@ async fn switch_keeps_the_conversation_and_sends_only_provider_neutral_history()
 
     let replies = run_turn(&engine, &mut rx, &session, "second user request", "turn-b").await;
     assert_eq!(replies, vec!["CONTINUATION_OK"]);
+    let catalogue = engine.provider_catalog();
+    let (_, models) = catalogue
+        .iter()
+        .find(|(provider, _)| provider.id == ProviderId::Pi)
+        .unwrap();
+    assert_eq!(
+        models
+            .iter()
+            .map(|model| model.id.as_str())
+            .collect::<Vec<_>>(),
+        ["account-model"]
+    );
     assert!(store.handoff_context(&session).unwrap().is_none());
     assert_eq!(store.transcript(&session).unwrap().len(), 6);
     engine.shutdown();
@@ -391,20 +403,182 @@ fn managed_task_session_lease_blocks_provider_identity_changes() {
     );
 }
 
-fn live_provider_id(value: &str) -> ProviderId {
-    match value {
-        "claude_code" => ProviderId::ClaudeCode,
-        "codex" => ProviderId::Codex,
-        "grok" => ProviderId::Grok,
-        "cursor" => ProviderId::Cursor,
-        "opencode" => ProviderId::OpenCode,
-        "opencode2" => ProviderId::OpenCode2,
-        "pi" => ProviderId::Pi,
-        "kimi" => ProviderId::Kimi,
-        "zcode" => ProviderId::ZCode,
-        "amp" => ProviderId::Amp,
-        "droid" => ProviderId::Droid,
-        other => panic!("unsupported live provider id: {other}"),
+#[tokio::test]
+async fn repeated_and_unprompted_switches_use_canonical_history() {
+    let store = Arc::new(Store::open_in_memory().unwrap());
+    let providers = vec![
+        provider(ProviderId::Grok, "Source mock", SOURCE_AGENT),
+        provider(ProviderId::Pi, "Target mock", TARGET_AGENT),
+    ];
+    let (engine, mut rx) = Engine::with_store(providers, SkillLibrary::new(vec![]), store.clone());
+    let session = create_session(&engine, &mut rx, ProviderId::Grok).await;
+    run_turn(&engine, &mut rx, &session, "first user request", "first").await;
+    for round in 0..4 {
+        engine
+            .switch_provider(&session, ProviderId::Pi, None)
+            .await
+            .unwrap();
+        // Switch back before the target has consumed the pending continuation.
+        engine
+            .switch_provider(&session, ProviderId::Grok, None)
+            .await
+            .unwrap();
+        engine
+            .switch_provider(&session, ProviderId::Pi, None)
+            .await
+            .unwrap();
+        let context = store.handoff_context(&session).unwrap().unwrap();
+        assert_eq!(context["kind"], "provider_switch");
+        assert!(!context["history"].to_string().contains("sourceProvider"));
+        assert_eq!(
+            run_turn(
+                &engine,
+                &mut rx,
+                &session,
+                "second user request",
+                &format!("round-{round}")
+            )
+            .await,
+            vec!["CONTINUATION_OK"]
+        );
+        engine
+            .switch_provider(&session, ProviderId::Grok, None)
+            .await
+            .unwrap();
+    }
+    engine.shutdown();
+}
+
+#[tokio::test]
+async fn cancelled_first_turn_retains_context_through_restart_and_native_restore() {
+    const CANCEL_THEN_RESTORE: &str = r#"
+import json, sys
+restored = False
+for line in sys.stdin:
+    m = json.loads(line)
+    method, mid = m.get("method"), m.get("id")
+    result = {}
+    if method == "initialize":
+        result = {"protocolVersion":1,"agentCapabilities":{"loadSession":True}}
+    elif method == "session/new":
+        result = {"sessionId":"retry-session"}
+    elif method == "session/load":
+        restored = True
+    elif method == "session/prompt":
+        if not restored:
+            result = {"stopReason":"cancelled"}
+        else:
+            prompt = json.dumps(m["params"]["prompt"])
+            ok = "first user request" in prompt and "from-provider-a" in prompt
+            print(json.dumps({"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"retry-session","update":{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"RESTORED_OK" if ok else "LOST_CONTEXT"}}}}), flush=True)
+            result = {"stopReason":"end_turn"}
+    if mid is not None:
+        print(json.dumps({"jsonrpc":"2.0","id":mid,"result":result}), flush=True)
+"#;
+    let store = Arc::new(Store::open_in_memory().unwrap());
+    let providers = vec![
+        provider(ProviderId::Grok, "Source", SOURCE_AGENT),
+        provider(ProviderId::Pi, "Retry target", CANCEL_THEN_RESTORE),
+    ];
+    let (engine, mut rx) =
+        Engine::with_store(providers.clone(), SkillLibrary::new(vec![]), store.clone());
+    let session = create_session(&engine, &mut rx, ProviderId::Grok).await;
+    run_turn(&engine, &mut rx, &session, "first user request", "first").await;
+    engine
+        .switch_provider(&session, ProviderId::Pi, None)
+        .await
+        .unwrap();
+    run_turn(&engine, &mut rx, &session, "cancelled request", "cancel").await;
+    assert!(store.handoff_context(&session).unwrap().is_some());
+    engine.shutdown();
+    let (revived, mut rx) = Engine::with_store(providers, SkillLibrary::new(vec![]), store.clone());
+    assert_eq!(
+        run_turn(&revived, &mut rx, &session, "retry", "retry").await,
+        vec!["RESTORED_OK"]
+    );
+    assert!(store.handoff_context(&session).unwrap().is_none());
+    revived.shutdown();
+}
+
+#[tokio::test]
+async fn unavailable_history_refuses_switch_instead_of_silently_losing_context() {
+    let (engine, mut rx) = Engine::new(
+        vec![
+            provider(ProviderId::Grok, "Source", SOURCE_AGENT),
+            provider(ProviderId::Pi, "Target", TARGET_AGENT),
+        ],
+        SkillLibrary::new(vec![]),
+    );
+    let session = create_session(&engine, &mut rx, ProviderId::Grok).await;
+    assert!(engine
+        .switch_provider(&session, ProviderId::Pi, None)
+        .await
+        .unwrap_err()
+        .contains("saved conversation history"));
+    assert_eq!(
+        run_turn(&engine, &mut rx, &session, "still usable", "first").await,
+        vec!["from-provider-a"]
+    );
+    engine.shutdown();
+}
+
+#[tokio::test]
+async fn failed_first_prompt_keeps_continuation_for_retry() {
+    let store = Arc::new(Store::open_in_memory().unwrap());
+    let mut target = provider(ProviderId::Pi, "Fail once", TARGET_AGENT);
+    target.launch.args[1] = TARGET_AGENT
+        .replace(
+            "used_old_cursor = False",
+            "used_old_cursor = False\nfailed = False",
+        )
+        .replace(
+            "        prompt = json.dumps",
+            r#"        if not failed:
+            failed = True
+            send({"jsonrpc":"2.0","id":mid,"error":{"code":-32000,"message":"temporary failure"}})
+            continue
+        prompt = json.dumps"#,
+        );
+    let (engine, mut rx) = Engine::with_store(
+        vec![provider(ProviderId::Grok, "Source", SOURCE_AGENT), target],
+        SkillLibrary::new(vec![]),
+        store.clone(),
+    );
+    let session = create_session(&engine, &mut rx, ProviderId::Grok).await;
+    run_turn(&engine, &mut rx, &session, "first user request", "first").await;
+    engine
+        .switch_provider(&session, ProviderId::Pi, None)
+        .await
+        .unwrap();
+    engine
+        .submit(prompt(&session, "second user request", "failure"))
+        .await
+        .unwrap();
+    loop {
+        if let Event::Error {
+            terminal: true,
+            message,
+            ..
+        } = next_event(&mut rx).await
+        {
+            assert!(message.contains("temporary failure"));
+            break;
+        }
+    }
+    assert!(store.handoff_context(&session).unwrap().is_some());
+    assert_eq!(
+        run_turn(&engine, &mut rx, &session, "second user request", "retry").await,
+        vec!["CONTINUATION_OK"]
+    );
+    assert!(store.handoff_context(&session).unwrap().is_none());
+    engine.shutdown();
+}
+
+struct LiveEngineGuard(Engine);
+
+impl Drop for LiveEngineGuard {
+    fn drop(&mut self) {
+        self.0.shutdown();
     }
 }
 
@@ -467,10 +641,24 @@ async fn run_live_turn(
     let token = format!("C2_{}_{}_OK", provider.as_str().to_uppercase(), index);
     let expected = format!("{token}_{continuity_key}");
     let instruction = if index == 0 {
+        let context_chars = std::env::var("CODETWO_LIVE_SWITCH_CONTEXT_CHARS")
+            .map(|value| {
+                value
+                    .parse::<usize>()
+                    .expect("context size must be an integer")
+            })
+            .unwrap_or(0);
+        assert!(
+            context_chars <= 256 * 1024,
+            "live fixture is limited to 256 Ki characters"
+        );
+        let filler = "Synthetic reference data: the desktop app uses Rust and TypeScript. ";
+        let reference = filler.repeat(context_chars.div_ceil(filler.len()));
+        let reference = &reference[..context_chars];
         format!(
             "Remember this continuity key for later provider switches: {continuity_key}. \
-             The project is a Rust and TypeScript desktop app. Reply with exactly {expected} \
-             and no other text. Do not use tools."
+             The following reference appendix is synthetic test data.\n{reference}\n\
+             Reply with exactly {expected} and no other text. Do not use tools."
         )
     } else {
         format!(
@@ -577,13 +765,21 @@ fn assert_live_session_has_content(store: &Store, session: &str, continuity_key:
 #[tokio::test]
 #[ignore = "requires locally authenticated real provider CLIs"]
 async fn live_providers_switch_in_place_and_back() {
+    let providers = default_registry();
     let provider_names = std::env::var("CODETWO_LIVE_SWITCH_PROVIDERS")
-        .unwrap_or_else(|_| "codex,grok,cursor,codex".into());
+        .expect("set CODETWO_LIVE_SWITCH_PROVIDERS to the authenticated provider ids to exercise");
     let sequence = provider_names
         .split(',')
         .map(str::trim)
         .filter(|value| !value.is_empty())
-        .map(live_provider_id)
+        .map(|name| {
+            providers
+                .iter()
+                .find(|provider| provider.id.as_str() == name)
+                .unwrap_or_else(|| panic!("provider {name} is not registered"))
+                .id
+                .clone()
+        })
         .collect::<Vec<_>>();
     assert!(sequence.len() >= 2, "provide at least two provider ids");
     assert!(
@@ -593,7 +789,8 @@ async fn live_providers_switch_in_place_and_back() {
 
     let store = Arc::new(Store::open_in_memory().unwrap());
     let (engine, mut rx) =
-        Engine::with_store(default_registry(), SkillLibrary::new(vec![]), store.clone());
+        Engine::with_store(providers, SkillLibrary::new(vec![]), store.clone());
+    let _cleanup = LiveEngineGuard(engine.clone());
     let session = create_live_session(&engine, &mut rx, sequence[0].clone()).await;
     let original_session = session.clone();
     let continuity_key = format!("C2_CONTEXT_{}", uuid::Uuid::new_v4().simple());

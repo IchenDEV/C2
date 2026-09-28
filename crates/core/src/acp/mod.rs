@@ -43,7 +43,11 @@ pub async fn spawn(
     }
     cmd.stdin(Stdio::piped())
         .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
+        .stderr(Stdio::piped())
+        .kill_on_drop(true);
+    // Wrapper CLIs (for example npx) may leave descendants holding ACP stdio open.
+    #[cfg(unix)]
+    cmd.process_group(0);
 
     let mut child = cmd.spawn().map_err(|e| {
         // "No such file or directory (os error 2)" is inscrutable; name the missing command and
@@ -61,7 +65,12 @@ pub async fn spawn(
     }
 
     let conn = Connection::new(stdout, stdin, handler);
-    Ok(AcpClient::new(conn, Some(child)))
+    #[cfg(unix)]
+    let process_group = child.id().and_then(|pid| i32::try_from(pid).ok());
+    let client = AcpClient::new(conn, Some(child));
+    #[cfg(unix)]
+    let client = client.with_process_group(process_group);
+    Ok(client)
 }
 
 /// Forward a provider's stderr to tracing (adapters log diagnostics there).

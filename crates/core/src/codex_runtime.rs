@@ -20,6 +20,11 @@ pub struct CodexRuntimeDiscovery {
 
 impl CodexRuntimeDiscovery {
     pub fn detect() -> Self {
+        if let Some(path) = std::env::var_os("CODEX_PATH").filter(|path| !path.is_empty()) {
+            return Self {
+                codex_path: Some(path.into()),
+            };
+        }
         #[cfg(target_os = "macos")]
         {
             let app = Path::new("/Applications/ChatGPT.app");
@@ -31,7 +36,11 @@ impl CodexRuntimeDiscovery {
             }
         }
 
-        Self::default()
+        // Pin ACP and catalogue discovery to the same installed CLI. Otherwise the adapter
+        // silently uses its own bundled version, which can reject models discovered locally.
+        Self {
+            codex_path: crate::provider::which("codex"),
+        }
     }
 }
 

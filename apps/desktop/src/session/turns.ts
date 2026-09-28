@@ -3,7 +3,6 @@ import type {
   DocBlock,
   MemoryReceipt,
   Part,
-  PlanEntry,
   ToolOutput,
   TranscriptEntry,
 } from "../bridge";
@@ -109,21 +108,6 @@ export interface ToolEntry {
   lastTranscriptSeq?: number;
 }
 
-/** Normalize durable legacy string entries and current structured ACP plan entries once. */
-export function normalizePlanEntries(
-  entries: readonly (PlanEntry | string)[]
-): PlanEntry[] {
-  return entries.map((entry) =>
-    typeof entry === "string"
-      ? { content: entry, priority: null, status: null }
-      : {
-          content: entry.content,
-          priority: entry.priority ?? null,
-          status: entry.status ?? null,
-        }
-  );
-}
-
 /**
  * The render-order projection of one turn. Text chunks stay as independent atoms so a tool call
  * can sit between two streamed answer fragments without splitting the durable assistant message.
@@ -187,7 +171,6 @@ export interface Turn {
   thoughts: string[];
   tools: ToolEntry[];
   content: TurnContentEntry[];
-  plan: PlanEntry[];
   memory?: MemoryReceipt;
   error?: string;
   stopReason?: string;
@@ -218,7 +201,6 @@ export function newTurn(
     thoughts: [],
     tools: [],
     content: [],
-    plan: [],
     startedAt: Date.now(),
   };
 }
@@ -461,6 +443,7 @@ export function applyEvent(
 ): Turn[] {
   // Events that don't belong to a turn.
   if (
+    ev.event === "provider_changed" ||
     ev.event === "session_created" ||
     ev.event === "session_title_changed" ||
     ev.event === "session_activity_changed" ||
@@ -468,7 +451,6 @@ export function applyEvent(
     ev.event === "models" ||
     ev.event === "config_options" ||
     ev.event === "session_capabilities" ||
-    ev.event === "goal_changed" ||
     ev.event === "permission_request"
   ) {
     return turns;
@@ -674,10 +656,6 @@ export function applyEvent(
       );
       break;
     }
-    case "plan": {
-      cur.plan = normalizePlanEntries(ev.entries);
-      break;
-    }
     case "turn_ended": {
       cur.stopReason = ev.stop_reason;
       cur.endedAt = Date.now();
@@ -710,9 +688,6 @@ export function applyEvent(
     }
     case "hook_turn_started": {
       throw new Error('Not implemented yet: "hook_turn_started" case');
-    }
-    case "provider_changed": {
-      throw new Error('Not implemented yet: "provider_changed" case');
     }
     case "session_cost": {
       throw new Error('Not implemented yet: "session_cost" case');
@@ -881,7 +856,6 @@ export function mergeLoadedTurns(
       liveTurn.content,
       liveTurn.streamBoundaryKnown
     ),
-    plan: liveTurn.plan.length > 0 ? liveTurn.plan : loadedTail.plan,
     error: liveTurn.error ?? loadedTail.error,
     stopReason: liveTurn.stopReason ?? loadedTail.stopReason,
     startedAt: Math.min(loadedTail.startedAt, liveTurn.startedAt),
@@ -913,6 +887,7 @@ export function turnsFromTranscript(
     createdAt?: number,
     startedAt?: number
   ) => {
+    if (part.kind === "plan") return;
     const at = createdAt != null && createdAt > 0 ? createdAt : Date.now();
     if (role === "user" && (part.kind === "text" || part.kind === "prompt")) {
       out.push({
@@ -967,10 +942,6 @@ export function turnsFromTranscript(
           endedAt: terminalToolStatus(part.status) ? at : undefined,
         });
         cur.content = appendToolContent(cur.content, part.id, seq, at);
-        break;
-      }
-      case "plan": {
-        cur.plan = normalizePlanEntries(part.entries);
         break;
       }
     }
