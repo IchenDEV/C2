@@ -235,7 +235,9 @@ async fn supervisor_quick_mode_discovers_public_url_without_leaking_token() {
     .await;
     supervisor.shutdown().await;
     assert_eq!(
-        observed.expect("quick tunnel URL was not discovered").as_deref(),
+        observed
+            .expect("quick tunnel URL was not discovered")
+            .as_deref(),
         Some("https://fake-quick.trycloudflare.com")
     );
     let _ = dir;
@@ -464,6 +466,35 @@ async fn remote_host_middleware_enforces_allowlist() {
     .await;
     assert_eq!(status, 404);
 
+    let client = reqwest::Client::new();
+    for path in ["/api/pair", "/api/ws-ticket"] {
+        let response = client
+            .request(reqwest::Method::OPTIONS, format!("http://{addr}{path}"))
+            .header("host", "remote.example.com")
+            .header("origin", "https://client.example.com")
+            .header("access-control-request-method", "POST")
+            .header(
+                "access-control-request-headers",
+                "authorization,content-type",
+            )
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), reqwest::StatusCode::OK);
+        assert_eq!(response.headers()["access-control-allow-origin"], "*");
+    }
+    let rejected = client
+        .get(format!("http://{addr}/api/devices"))
+        .header("host", "remote.example.com")
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(rejected.status(), reqwest::StatusCode::NOT_FOUND);
+    assert!(rejected.headers()["cache-control"]
+        .to_str()
+        .unwrap()
+        .contains("no-store"));
+
     let (status, _) = raw_request(addr, "evil.example.com", "GET", "/health", None, "").await;
     assert!(status == 421 || status == 403);
 
@@ -531,6 +562,10 @@ fn remote_pairing_ttl_shortens_when_hardening_enabled() {
 #[test]
 fn path_allowlist_matches_specified_routes() {
     assert!(remote_public_path_allowed("POST", "/external-mcp"));
+    assert!(remote_public_path_allowed("OPTIONS", "/api/pair"));
+    assert!(remote_public_path_allowed("OPTIONS", "/api/ws-ticket"));
+    assert!(!remote_public_path_allowed("GET", "/api/pair"));
+    assert!(!remote_public_path_allowed("OPTIONS", "/api/devices"));
     assert!(!remote_public_path_allowed("POST", "/mcp"));
     assert!(!remote_public_path_allowed("GET", "/terminal"));
 }

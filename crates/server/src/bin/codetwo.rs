@@ -13,7 +13,7 @@ use codetwo_server::cli::{
     run_answer, run_approve, run_events, run_mcp_client, run_pair, run_pending, run_project,
     run_send, run_session, run_status, run_stop, run_wait, PairSource,
 };
-use codetwo_server::serve::{ServeConfig, ServeSurface};
+use codetwo_server::serve::{ServeConfig, ServeOptions, ServeSurface};
 
 const HELP: &str = r#"Usage:
   codetwo serve [options]
@@ -88,7 +88,13 @@ fn run_serve_command(args: &[String]) -> ExitCode {
         }
     };
     let runtime = tokio::runtime::Runtime::new().expect("tokio runtime");
-    match runtime.block_on(codetwo_server::serve::run(config)) {
+    // Same Core boot path as `codetwo-server serve`: one owner per data directory, answers
+    // `codetwo-server pair`, stops providers before releasing the directory.
+    let options = ServeOptions {
+        instance_lock: true,
+        public_url: None,
+    };
+    match runtime.block_on(codetwo_server::serve::run_with(config, options)) {
         Ok(()) => ExitCode::Ok,
         Err(error) => {
             eprintln!("codetwo serve: {error}");

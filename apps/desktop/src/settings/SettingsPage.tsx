@@ -18,6 +18,7 @@ import {
   RefreshCw,
   RotateCcw,
   ScanText,
+  Server,
   SlidersHorizontal,
   UserRound,
   Wrench,
@@ -61,6 +62,7 @@ import type {
   WorktreeSettings,
   PluginDeveloperStatus,
 } from "../bridge";
+import { remoteEnvironmentsAvailable } from "../coreTransport";
 import { useLanguage, useT } from "../i18n";
 import type { StringKey } from "../i18n/strings";
 import { useTheme } from "../theme";
@@ -85,6 +87,7 @@ import { PetSettings } from "./PetSettings";
 import { ProfileSettings } from "./ProfileSettings";
 import { ProjectSettingsPage } from "./ProjectSettings";
 import { ProviderSettingsPage } from "./ProviderSettings";
+import { RemoteEnvironmentsSettingsPage } from "./RemoteEnvironmentsSettings";
 import { Page } from "./SettingsPrimitives";
 import { WorktreeSettingsPage } from "./WorktreeSettings";
 
@@ -100,6 +103,7 @@ export type SettingsTab =
   | "worktrees"
   | "memory"
   | "sync"
+  | "environments"
   | "keybindings"
   | "providers"
   | "computer-use"
@@ -143,6 +147,7 @@ const NAV_GROUPS: {
       { id: "memory", icon: BrainCircuit, labelKey: "memory.title" },
       { id: "sync", icon: RefreshCw, labelKey: "settings.sync" },
       { id: "external-mcp", icon: Share2, labelKey: "settings.externalMcp" },
+      { id: "environments", icon: Server, labelKey: "settings.environments" },
     ],
   },
   {
@@ -410,7 +415,11 @@ export function SettingsPage({
             {NAV_GROUPS.map((group) => {
               const items = group.items
                 .filter(({ id }) => memoryEnabled || id !== "memory")
-                .filter(({ id }) => deviceSyncEnabled || id !== "sync");
+                .filter(({ id }) => deviceSyncEnabled || id !== "sync")
+                .filter(
+                  ({ id }) =>
+                    remoteEnvironmentsAvailable || id !== "environments"
+                );
               const headingId = `settings-nav-${group.id}`;
               return (
                 <section
@@ -543,6 +552,10 @@ export function SettingsPage({
             )}
 
             {tab === "external-mcp" && <ExternalMcpSettingsPage />}
+
+            {tab === "environments" && remoteEnvironmentsAvailable && (
+              <RemoteEnvironmentsSettingsPage />
+            )}
 
             {tab === "keybindings" && (
               <KeybindingsSettingsPage

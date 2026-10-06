@@ -13,11 +13,14 @@ use codetwo_core::plugins::{
 use serde::{Deserialize, Serialize};
 
 use crate::cli::config::write_private_file;
+#[cfg(unix)]
+use crate::daemon::write_pairing_file;
+use crate::daemon::{pairing_base_url, InstanceLock};
 use crate::remote::{RemoteConfig, RemoteMode, RemoteSupervisor, SupervisorTiming};
 use crate::{
     bind_and_serve_with_canvas, bind_and_serve_with_web_ui, pairing_endpoints,
-    pairing_url_for_endpoint, print_pairing, remote, AuthState, KernelWebUiCommands,
-    DEFAULT_PAIRING_TTL,
+    pairing_url_for_endpoint, print_pairing, print_pairing_link, remote, AuthState,
+    KernelWebUiCommands, DEFAULT_PAIRING_TTL,
 };
 
 const SERVER_MANIFEST: &str = "server.json";
@@ -26,6 +29,9 @@ const SERVER_MANIFEST: &str = "server.json";
 pub enum ServeSurface {
     Compact,
     WebUi,
+    /// Headless daemon (`codetwo-server serve`): always exposes the command route, serves a Web UI
+    /// build only when one is found, never opens a browser, and always owns its data directory.
+    Daemon,
 }
 
 #[derive(Debug, Clone)]
@@ -40,6 +46,17 @@ pub struct ServeConfig {
     pub external_mcp: bool,
     /// Extra argv (after subcommand) for [`RemoteConfig::from_env_and_args`].
     pub remote_args: Vec<String>,
+}
+
+/// Process-ownership options that sit beside [`ServeConfig`] so its shape stays stable.
+#[derive(Debug, Clone, Default)]
+pub struct ServeOptions {
+    /// Claim the data directory (`server.pid`) for the whole run and answer `codetwo-server pair`.
+    /// [`ServeSurface::Daemon`] always claims it.
+    pub instance_lock: bool,
+    /// Address clients should use (reverse proxy / TLS / tailnet name); owned runs only.
+    /// Falls back to `CODETWO_PUBLIC_URL`, then the remote hostname, then the bind address.
+    pub public_url: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -82,6 +99,20 @@ pub fn resolve_ui_dir(
             candidate.display()
         )
     })
+}
+
+/// A daemon always serves the command route; a Web UI build is optional because a desktop or
+/// phone client may bring its own renderer. An explicit but missing directory is an error.
+fn daemon_ui_dir(cli_dir: Option<PathBuf>) -> Result<Option<PathBuf>, String> {
+    let executable = std::env::current_exe()
+        .map_err(|error| format!("cannot resolve server executable: {error}"))?;
+    let configured = std::env::var_os("CODETWO_WEB_UI_DIR").map(PathBuf::from);
+    let explicit = cli_dir.is_some() || configured.is_some();
+    match resolve_ui_dir(cli_dir, configured, &executable) {
+        Ok(dir) => Ok(Some(dir)),
+        Err(error) if explicit => Err(error),
+        Err(_) => Ok(None),
+    }
 }
 
 fn local_pairing_url(port: u16, pairing_token: &str) -> String {
@@ -171,6 +202,9 @@ struct RunCleanup {
     remote: bool,
     server: Option<tokio::task::AbortHandle>,
     supervisor: Option<Arc<RemoteSupervisor>>,
+    pairing_responder: Option<tokio::task::AbortHandle>,
+    /// Declared last so the data directory is released only after everything above is undone.
+    instance: Option<InstanceLock>,
 }
 
 impl RunCleanup {
@@ -184,6 +218,9 @@ impl RunCleanup {
 
 impl Drop for RunCleanup {
     fn drop(&mut self) {
+        if let Some(responder) = self.pairing_responder.take() {
+            responder.abort();
+        }
         if let Some(server) = self.server.take() {
             server.abort();
         }
@@ -201,23 +238,34 @@ impl Drop for RunCleanup {
 }
 
 pub async fn run(config: ServeConfig) -> Result<(), String> {
+    run_with(config, ServeOptions::default()).await
+}
+
+pub async fn run_with(config: ServeConfig, options: ServeOptions) -> Result<(), String> {
     let mut cleanup = RunCleanup::default();
-    let result = run_inner(config, &mut cleanup).await;
+    let result = run_inner(config, options, &mut cleanup).await;
     cleanup.shutdown().await;
     result
 }
 
-async fn run_inner(config: ServeConfig, cleanup: &mut RunCleanup) -> Result<(), String> {
-    let web_ui_dir = if config.surface == ServeSurface::WebUi {
-        let executable = std::env::current_exe()
-            .map_err(|error| format!("cannot resolve server executable: {error}"))?;
-        Some(resolve_ui_dir(
-            config.ui_dir,
-            std::env::var_os("CODETWO_WEB_UI_DIR").map(PathBuf::from),
-            &executable,
-        )?)
-    } else {
-        None
+async fn run_inner(
+    config: ServeConfig,
+    options: ServeOptions,
+    cleanup: &mut RunCleanup,
+) -> Result<(), String> {
+    let owned = options.instance_lock || config.surface == ServeSurface::Daemon;
+    let web_ui_dir = match config.surface {
+        ServeSurface::Compact => None,
+        ServeSurface::Daemon => daemon_ui_dir(config.ui_dir)?,
+        ServeSurface::WebUi => {
+            let executable = std::env::current_exe()
+                .map_err(|error| format!("cannot resolve server executable: {error}"))?;
+            Some(resolve_ui_dir(
+                config.ui_dir,
+                std::env::var_os("CODETWO_WEB_UI_DIR").map(PathBuf::from),
+                &executable,
+            )?)
+        }
     };
 
     let data_dir = resolve_data_dir(config.data_dir);
@@ -227,6 +275,14 @@ async fn run_inner(config: ServeConfig, cleanup: &mut RunCleanup) -> Result<(), 
             data_dir.display()
         )
     })?;
+    // One data directory, one live Core owner: claimed before Core opens the store, released last.
+    // `codetwo-server pair` signals the pid in the claim, so the handler exists before the claim
+    // is published; an unhandled SIGUSR1 would terminate this process.
+    let mut pairing_requests = None;
+    if owned {
+        pairing_requests = pairing_request_stream();
+        cleanup.instance = Some(InstanceLock::acquire(&data_dir)?);
+    }
     let core = Arc::new(
         CoreApp::boot(AppConfig::new(&data_dir))
             .await
@@ -257,7 +313,7 @@ async fn run_inner(config: ServeConfig, cleanup: &mut RunCleanup) -> Result<(), 
 
     // Before the tunnel spawns or anything is published, so a signal can never hit the default
     // action (instant exit, tunnel child orphaned, `server.json` left behind) mid-startup.
-    let mut signals = shutdown_signals();
+    let mut signals = shutdown_signals(config.surface != ServeSurface::Daemon);
 
     let mut remote_config =
         RemoteConfig::from_env_and_args(config.remote_args).map_err(|error| error.to_string())?;
@@ -283,7 +339,8 @@ async fn run_inner(config: ServeConfig, cleanup: &mut RunCleanup) -> Result<(), 
         .and_then(|value| value.parse().ok())
         .map(Duration::from_secs)
         .unwrap_or(DEFAULT_PAIRING_TTL);
-    let pairing_token = auth.issue_pairing_token(auth.effective_pairing_ttl(pair_ttl));
+    let pair_ttl = auth.effective_pairing_ttl(pair_ttl);
+    let pairing_token = auth.issue_pairing_token(pair_ttl);
     let addr: SocketAddr = format!("{}:{}", config.host, config.port)
         .parse()
         .map_err(|error| {
@@ -293,7 +350,7 @@ async fn run_inner(config: ServeConfig, cleanup: &mut RunCleanup) -> Result<(), 
             )
         })?;
 
-    let (local, handle) = if let Some(web_ui_dir) = web_ui_dir {
+    let (local, mut handle) = if config.surface == ServeSurface::Daemon || web_ui_dir.is_some() {
         let plugin_manager = core
             .service::<PluginManager>()
             .ok_or_else(|| "plugin manager did not load".to_string())?;
@@ -306,7 +363,7 @@ async fn run_inner(config: ServeConfig, cleanup: &mut RunCleanup) -> Result<(), 
             canvas_gate,
             None,
             Some(Arc::new(KernelWebUiCommands::new(plugin_manager))),
-            Some(web_ui_dir),
+            web_ui_dir,
         )
         .await
         .map_err(|error| error.to_string())?
@@ -333,13 +390,48 @@ async fn run_inner(config: ServeConfig, cleanup: &mut RunCleanup) -> Result<(), 
             .map_err(|error| error.to_string())?;
     }
 
-    print_pairing(local.port(), &pairing_token);
     let paired = auth.list_devices().len();
-    if paired > 0 {
-        println!("  {paired} previously paired device(s) can reconnect without a new link.\n");
+    if owned {
+        let public_url = options
+            .public_url
+            .or_else(|| std::env::var("CODETWO_PUBLIC_URL").ok())
+            .or_else(|| {
+                remote_config
+                    .remote_host
+                    .as_ref()
+                    .map(|host| format!("https://{host}"))
+            });
+        let (base, shareable) = pairing_base_url(
+            config.host.trim_matches(['[', ']']),
+            local.port(),
+            public_url.as_deref(),
+        );
+        println!("\n  C2 server is live on {local}");
+        println!("  data directory: {}", data_dir.display());
+        print_pairing_link(
+            &pairing_url_for_endpoint(&base, &pairing_token),
+            shareable,
+            pair_ttl,
+        );
+        if paired > 0 {
+            println!("  {paired} previously paired device(s) can reconnect without a new link.");
+        }
+        println!(
+            "  More devices: run `codetwo-server pair --data-dir {}`\n",
+            data_dir.display()
+        );
+        if let Some(requests) = pairing_requests.take() {
+            cleanup.pairing_responder =
+                spawn_pairing_responder(requests, auth.clone(), data_dir.clone(), base, pair_ttl);
+        }
+    } else {
+        print_pairing(local.port(), &pairing_token);
+        if paired > 0 {
+            println!("  {paired} previously paired device(s) can reconnect without a new link.\n");
+        }
+        println!("  listening on {local}");
+        println!("  data directory: {}\n", data_dir.display());
     }
-    println!("  listening on {local}");
-    println!("  data directory: {}\n", data_dir.display());
     if let Some(host) = &remote_config.remote_host {
         println!("  remote hostname: https://{host}/");
     }
@@ -357,11 +449,72 @@ async fn run_inner(config: ServeConfig, cleanup: &mut RunCleanup) -> Result<(), 
         }
     }
 
-    let _core = core;
-    tokio::select! {
-        result = handle => result.map_err(|error| error.to_string()),
+    let result = tokio::select! {
+        result = &mut handle => result.map_err(|error| error.to_string()),
         _ = wait_for_shutdown(&mut signals) => Ok(()),
+    };
+    if owned {
+        // Stop the tunnel and the listener, then providers and the store, before the data
+        // directory is released by `cleanup`.
+        cleanup.shutdown().await;
+        handle.abort();
+        if let Some(responder) = cleanup.pairing_responder.take() {
+            responder.abort();
+        }
+        core.stop().await;
     }
+    result
+}
+
+#[cfg(unix)]
+type PairingRequests = Option<tokio::signal::unix::Signal>;
+#[cfg(not(unix))]
+type PairingRequests = Option<()>;
+
+/// SIGUSR1 is how `codetwo-server pair` asks the owner for a fresh link.
+fn pairing_request_stream() -> PairingRequests {
+    #[cfg(unix)]
+    {
+        tokio::signal::unix::signal(tokio::signal::unix::SignalKind::user_defined1()).ok()
+    }
+    #[cfg(not(unix))]
+    {
+        None
+    }
+}
+
+/// Answer each pairing request with a new one-time link in a private file (see `daemon`).
+#[cfg(unix)]
+fn spawn_pairing_responder(
+    mut requests: tokio::signal::unix::Signal,
+    auth: Arc<AuthState>,
+    data_dir: PathBuf,
+    base: String,
+    ttl: Duration,
+) -> Option<tokio::task::AbortHandle> {
+    Some(
+        tokio::spawn(async move {
+            while requests.recv().await.is_some() {
+                let token = auth.issue_pairing_token(ttl);
+                let link = pairing_url_for_endpoint(&base, &token);
+                if let Err(error) = write_pairing_file(&data_dir, &link) {
+                    eprintln!("codetwo-server: {error}");
+                }
+            }
+        })
+        .abort_handle(),
+    )
+}
+
+#[cfg(not(unix))]
+fn spawn_pairing_responder(
+    _requests: (),
+    _auth: Arc<AuthState>,
+    _data_dir: PathBuf,
+    _base: String,
+    _ttl: Duration,
+) -> Option<tokio::task::AbortHandle> {
+    None
 }
 
 #[cfg(unix)]
@@ -371,18 +524,21 @@ type Signals = ();
 
 /// Ctrl-C, SIGTERM or SIGHUP (terminal closed): lets `run` stop the tunnel child and remove
 /// `server.json`. Registering here (not lazily at the wait) closes the startup window.
-fn shutdown_signals() -> Signals {
+fn shutdown_signals(handle_hangup: bool) -> Signals {
+    #[cfg(not(unix))]
+    let _ = handle_hangup;
     #[cfg(unix)]
     {
         use tokio::signal::unix::{signal, SignalKind};
-        [
-            SignalKind::interrupt(),
-            SignalKind::terminate(),
-            SignalKind::hangup(),
-        ]
-        .into_iter()
-        .filter_map(|kind| signal(kind).ok())
-        .collect()
+        let mut kinds = vec![SignalKind::interrupt(), SignalKind::terminate()];
+        // Preserve the daemon's inherited SIGHUP policy (including nohup SIG_IGN).
+        if handle_hangup {
+            kinds.push(SignalKind::hangup());
+        }
+        kinds
+            .into_iter()
+            .filter_map(|kind| signal(kind).ok())
+            .collect()
     }
 }
 

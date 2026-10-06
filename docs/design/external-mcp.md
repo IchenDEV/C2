@@ -250,6 +250,8 @@ The `codetwo` binary is registered in `crates/server/Cargo.toml` and shares the 
 | `codetwo pair` | Import and validate an external MCP credential; separate from Web UI device pairing |
 | `codetwo mcp client create\|list\|revoke` | Local credential file edits (server reloads by mtime) |
 
+`codetwo-server serve` and `codetwo serve` use one shared Core startup path and hold the data-directory instance lock. `codetwo-server pair --data-dir <path>` requests a fresh Web UI device-pairing link from either running owner; it does not mint an external MCP credential. The daemon binds loopback by default and can serve remote C2 commands without a bundled Web UI. Its `--public-url` controls the advertised pairing address.
+
 `codetwo pair --url https://host (--token-file FILE | --stdin)` validates one external credential through the read-only capabilities tool before saving `cli.token` (0600) and `cli.url`. Plain HTTP is permitted only for loopback. stdin must be redirected rather than an echoing terminal. No redirects or automatic retries are used. Pairing does not mint a new credential or exchange a Web UI device Bearer. URL discovery order: `--url`, `CODETWO_URL`, saved `cli.url`, then local `server.json`.
 
 **Credentials for CLI:** `CODETWO_TOKEN`, `--token-file`, or `<data-dir>/cli.token` (0600), never argv. **`--json` on all commands.**

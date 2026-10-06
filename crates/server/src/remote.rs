@@ -387,7 +387,8 @@ pub fn remote_public_path_allowed(method: &str, path: &str) -> bool {
         return true;
     }
     if path == "/api/pair" || path == "/api/ws-ticket" {
-        return method.eq_ignore_ascii_case("POST");
+        // Preflight carries no credential and performs no pairing or ticket issuance.
+        return method.eq_ignore_ascii_case("POST") || method.eq_ignore_ascii_case("OPTIONS");
     }
     if path == "/ws" || path == "/api/web-ui/call" || path == "/external-mcp" {
         return true;

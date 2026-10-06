@@ -68,6 +68,69 @@ Configure it with env vars:
 | `CODETWO_PORT` | `4599` | port |
 | `CODETWO_PAIR_TTL` | `900` | pairing-token lifetime (seconds) |
 
+## Run C2 on a server (headless)
+
+`codetwo-server serve` is the daemon for a remote machine. It runs the same engine as the desktop
+app with no window, and serves the full C2 web UI too when the `web-ui` assets sit next to the
+binary (or `--ui-dir` points at them). Sessions, workspaces, provider logins and terminals all live
+on the server.
+
+```sh
+codetwo-server serve --data-dir /srv/c2 --host 127.0.0.1 --port 4599
+```
+
+- **Safe by default.** It binds `127.0.0.1`. Reach it with an SSH tunnel
+  (`ssh -L 4599:127.0.0.1:4599 server`), put it on a tailnet with `--host <tailscale-ip>`, or front
+  it with an HTTPS reverse proxy and tell clients the public address with
+  `--public-url https://c2.example.com`. Do not publish the raw port to the internet.
+- **One owner per data directory.** A second `serve` against the same `--data-dir` refuses to start
+  instead of fighting the first for the database.
+- **More devices later.** Startup prints a one-time pairing link. On the server,
+  `codetwo-server pair --data-dir /srv/c2` asks the running daemon for a new link; nothing on the
+  network can mint credentials.
+- **Clean shutdown.** `SIGTERM` stops providers and flushes the store.
+
+The provider CLIs (Codex, Claude Code, …) must be installed and signed in **on the server**; the
+server's sessions use the server's checkout of your code.
+
+### Connect from your desktop C2
+
+Open **Settings → Remote environments**, paste the pairing link, and press **Connect**. The server
+then behaves as part of this app:
+
+- its sessions are listed in the sidebar beside this Mac's, marked with the server's name, and
+  update live;
+- opening one shows the same transcript, permission prompts, model and mode controls, and
+  Stop button; each action is sent to the machine that owns the session;
+- to start a new session on the server, pick it in the **Environment** menu (it then names the
+  header button), optionally setting a *Workspace on the server* in Settings. Pick **Local** to go
+  back.
+
+Pairing stores a per-device credential on this Mac. **Remove** forgets it on this Mac only. To cut a
+device off on the server, press **Manage devices** under the environment: it lists every device
+paired with that server (this app is marked), and **Revoke → Revoke now** disconnects one at once,
+without restarting the daemon. Revoking this app's own entry also removes the environment here.
+Any paired device can revoke any other, so treat a pairing link like a login. If the server is unreachable its sessions disappear from the list while
+the rest keeps working, and they come back when it returns.
+
+A remote session's folder is shown as `c2env://<environment>/path` in this app. That prefix is what
+sends the file editor, workspace search, Source Control and the terminal to the server instead of
+this Mac, so a path that exists on both machines is never confused.
+
+::: info What a remote session can and cannot do (today)
+Remote sessions support chat (prompts, queue/steer, cancel, permission and question answers,
+model/mode/sandbox changes, rename, pin and archive), the file browser and editor, workspace search,
+Source Control (status, diff, stage, commit, push, revert, checkpoints) and terminals. A terminal
+reattaches to the same shell after a network drop and after the app restarts.
+
+Still local-only: running project scripts, GitHub pull-request actions, language servers, the
+browser dock, parallel tasks and worktree creation, and "reveal in Finder". They show an error or
+stay empty for a remote session. The server's own web UI (its address, `/`) remains available.
+:::
+
+The same server also works from a phone: open its pairing link in the phone's browser, or use T3
+Code mobile with a `codetwo-agent` node.
+
 ## Mobile clients
 
 In the desktop app, choose **T3 Code mobile**, then scan the pairing QR from T3 Code mobile's
@@ -97,8 +160,9 @@ event stream, so a turn you start remotely streams to both.
 
 - **Desktop**: the Remote control modal lists paired devices with pair date and last-seen time;
   **Revoke** cuts a device off immediately (including any unredeemed tickets).
-- **Standalone**: delete an entry from `~/.codetwo/remote-devices.json` (or the whole file) and
-  restart the server.
+- **From another C2 desktop**: Settings → Remote environments → **Manage devices** on that server.
+- **Standalone, no other desktop**: delete an entry from `~/.codetwo/remote-devices.json` (or the
+  whole file) and restart the server.
 - A fresh pairing link never invalidates existing devices; revoke explicitly.
 
 ## Security

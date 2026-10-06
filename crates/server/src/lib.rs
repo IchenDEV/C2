@@ -25,6 +25,7 @@ pub mod remote;
 pub mod external_mcp;
 pub mod external_mcp_stream;
 pub mod host_mcp;
+pub mod daemon;
 pub mod t3_compat;
 pub mod terminal;
 
@@ -50,6 +51,7 @@ use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
 use tokio::net::TcpListener;
 use tokio::sync::{broadcast, mpsc};
+use tower_http::cors::{Any, CorsLayer};
 use tower_http::services::{ServeDir, ServeFile};
 
 use codetwo_core::device_sync::DeviceSyncDocument;
@@ -144,6 +146,34 @@ fn web_ui_command_allowed(name: &str) -> bool {
             | "engine.set_model"
             | "engine.set_config_option"
             | "engine.cancel"
+            // Workspace file and Git panels of a paired desktop. Every command takes the
+            // session's `cwd` explicitly; scripts, GitHub and LSP stay unavailable.
+            | "workspace.list_dir"
+            | "workspace.list_files"
+            | "workspace.read_text"
+            | "workspace.read_binary"
+            | "workspace.write_text"
+            | "workspace.create_file"
+            | "workspace.create_dir"
+            | "workspace.rename"
+            | "workspace.copy"
+            | "workspace.delete"
+            | "workspace.search"
+            | "workspace.cancel_search"
+            | "workspace.rules"
+            | "workspace.source_control"
+            | "git.status"
+            | "git.diff"
+            | "git.diff_stat"
+            | "git.diff_since"
+            | "git.stage"
+            | "git.unstage"
+            | "git.commit"
+            | "git.push"
+            | "git.revert"
+            | "git.checkpoint"
+            | "git.checkpoints"
+            | "git.suggest_message"
     )
 }
 
@@ -820,6 +850,8 @@ pub async fn bind_and_serve_with_web_ui(
         .route("/health", get(|| async { "ok" }))
         .route("/api/pair", post(pair))
         .route("/api/ws-ticket", post(ws_ticket))
+        .route("/api/devices", get(list_paired_devices))
+        .route("/api/devices/:id/revoke", post(revoke_paired_device))
         .route("/api/team/v1/workspace", get(team_workspace))
         .route("/api/team/v1/attention", get(team_attention))
         .route("/api/team/v1/tasks", get(team_tasks).post(team_create_task))
@@ -902,8 +934,9 @@ pub async fn bind_and_serve_with_web_ui(
     } else {
         app.route("/", get(index)).route("/pair", get(index))
     }
-    .layer(axum::middleware::from_fn(remote::remote_access_guard))
-    .layer(axum::middleware::map_response(no_store_headers));
+    .layer(axum::middleware::map_response(no_store_headers))
+    .layer(remote_client_cors())
+    .layer(axum::middleware::from_fn(remote::remote_access_guard));
 
     let listener = TcpListener::bind(addr).await?;
     let local = listener.local_addr()?;
@@ -1060,6 +1093,22 @@ async fn write_device_sync_snapshot(
         }
         Err(error) => (StatusCode::BAD_REQUEST, error).into_response(),
     }
+}
+
+/// Cross-origin policy for another C2 client (the desktop renderer's own origin is not this
+/// server's). Every credential travels in the `Authorization` header or a single-use ticket,
+/// never in a cookie, so a foreign page can neither read nor drive an endpoint without already
+/// holding a bearer. Allowing any origin therefore adds no ambient authority.
+fn remote_client_cors() -> CorsLayer {
+    CorsLayer::new()
+        .allow_origin(Any)
+        .allow_methods([
+            axum::http::Method::GET,
+            axum::http::Method::POST,
+            axum::http::Method::PUT,
+        ])
+        .allow_headers([header::AUTHORIZATION, header::CONTENT_TYPE])
+        .max_age(std::time::Duration::from_secs(600))
 }
 
 async fn no_store_headers(mut response: Response) -> Response {
@@ -2102,6 +2151,52 @@ async fn ws_handler(
     ws.on_upgrade(move |socket| handle_socket(socket, st, device_id))
 }
 
+#[derive(Serialize)]
+struct PairedDeviceEntry {
+    #[serde(flatten)]
+    info: auth::DeviceInfo,
+    /// The device that made this request, so a client can warn before it signs itself out.
+    current: bool,
+}
+
+/// The devices paired with this server, for a paired owner device to review and revoke.
+async fn list_paired_devices(State(st): State<Arc<ServerState>>, headers: HeaderMap) -> Response {
+    let me = match require_device(&st, &headers, None) {
+        Ok(device_id) => device_id,
+        Err(response) => return response,
+    };
+    let devices: Vec<PairedDeviceEntry> = st
+        .auth
+        .list_devices()
+        .into_iter()
+        .map(|info| PairedDeviceEntry {
+            current: info.id == me,
+            info,
+        })
+        .collect();
+    Json(devices).into_response()
+}
+
+/// Revoke a paired device; its bearer and live sockets stop working at once. Revoking the caller's
+/// own device is allowed and reported, which is how a client signs itself out.
+async fn revoke_paired_device(
+    State(st): State<Arc<ServerState>>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+) -> Response {
+    let me = match require_device(&st, &headers, None) {
+        Ok(device_id) => device_id,
+        Err(response) => return response,
+    };
+    match st.auth.try_revoke_device(&id) {
+        Ok(true) => {
+            Json(serde_json::json!({ "revoked": true, "was_current": id == me })).into_response()
+        }
+        Ok(false) => (StatusCode::NOT_FOUND, "no such device").into_response(),
+        Err(error) => (StatusCode::INTERNAL_SERVER_ERROR, error).into_response(),
+    }
+}
+
 /// List live terminals so a reconnecting browser can reattach instead of respawning.
 async fn list_terminals(State(st): State<Arc<ServerState>>, headers: HeaderMap) -> Response {
     if let Err(response) = require_device(&st, &headers, None) {
@@ -2867,6 +2962,24 @@ pub fn print_pairing(port: u16, pairing_token: &str) {
     }
 }
 
+/// Print an already-resolved pairing link (headless daemon). A QR code is shown only when another
+/// device could actually reach the address.
+pub fn print_pairing_link(url: &str, shareable: bool, ttl: std::time::Duration) {
+    println!(
+        "\n  Pair a device (one-time link, expires in {} minutes):\n    {url}\n",
+        (ttl.as_secs() / 60).max(1)
+    );
+    if shareable {
+        if let Ok(code) = qrcode::QrCode::new(url.as_bytes()) {
+            let img = code
+                .render::<qrcode::render::unicode::Dense1x2>()
+                .quiet_zone(true)
+                .build();
+            println!("{img}\n");
+        }
+    }
+}
+
 /// A pairing QR code as an SVG document, for embedding in a UI.
 pub fn pairing_qr_svg(url: &str) -> Option<String> {
     let code = qrcode::QrCode::new(url.as_bytes()).ok()?;
@@ -2934,7 +3047,27 @@ mod tests {
         assert!(web_ui_command_allowed("workspace.default_cwd"));
         assert!(!web_ui_command_allowed("plugins.set_trusted"));
         assert!(!web_ui_command_allowed("remote.stop"));
-        assert!(!web_ui_command_allowed("workspace.delete"));
+        // Workspace and Git panels are reachable, but running project scripts, GitHub operations,
+        // LSP processes and the raw terminal command surface are not.
+        for command in [
+            "workspace.read_text",
+            "workspace.write_text",
+            "workspace.delete",
+            "git.status",
+            "git.commit",
+        ] {
+            assert!(web_ui_command_allowed(command), "{command}");
+        }
+        for command in [
+            "workspace.run_script",
+            "workspace.save_script",
+            "git.create_pr",
+            "github.merge_pr",
+            "lsp.start",
+            "terminal.spawn",
+        ] {
+            assert!(!web_ui_command_allowed(command), "{command}");
+        }
     }
 
     fn git(cwd: &std::path::Path, args: &[&str]) {
