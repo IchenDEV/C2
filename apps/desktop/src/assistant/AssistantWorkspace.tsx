@@ -56,11 +56,13 @@ export function AssistantWorkspace({
   onSelect,
   onClose,
   api = assistantApi,
+  initialTab = "thread",
 }: {
   activity: ReactNode;
   onSelect: (id: string) => void;
   onClose: () => void;
   api?: Api;
+  initialTab?: string;
 }) {
   const { locale } = useLanguage();
   const zh = locale.startsWith("zh");
@@ -68,7 +70,7 @@ export function AssistantWorkspace({
   const [snapshot, setSnapshot] = useState<AssistantSnapshot | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);
   const [providers, setProviders] = useState<ProviderInfo[]>([]);
-  const [tab, setTab] = useState("thread");
+  const [tab, setTab] = useState(initialTab);
   const [project, setProject] = useState("");
   const [focusGoal, setFocusGoal] = useState("");
   const [error, setError] = useState("");

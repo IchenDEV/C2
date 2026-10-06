@@ -1,5 +1,0 @@
-   Compiling reqwest v0.12.28
-   Compiling axum v0.7.9
-   Compiling libghostty-vt v0.2.1
-   Compiling codetwo-core v0.0.0 (/Users/chenli/.t3/worktrees/codeTwo/t3code-6738e658/crates/core)
-    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1m 21s

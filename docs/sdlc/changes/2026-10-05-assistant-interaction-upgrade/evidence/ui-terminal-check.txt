@@ -1,1 +1,0 @@
-PASS: final paused goal and persisted stopped notification rendered; prior request/message outcomes preserved, no replay.

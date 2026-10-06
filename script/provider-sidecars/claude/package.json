@@ -1,0 +1,10 @@
+{
+  "name": "@codetwo/sidecar-claude",
+  "private": true,
+  "type": "module",
+  "version": "0.0.0",
+  "description": "C2 sidecar for the Claude Agent SDK. The SDK is pinned exactly; upgrade only through the compatibility canary.",
+  "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "0.3.290"
+  }
+}

@@ -71,7 +71,6 @@ function renderDialog(overrides = {}) {
       <MissionControlPage {...props} />
     </I18nProvider>
   );
-  click(button(dom.document.body, "Execution"));
   return { rendered, calls };
 }
 

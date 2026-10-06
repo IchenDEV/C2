@@ -1,2 +1,0 @@
-[docs] catalog, links, schemas, and assets valid
-[sdlc] contract valid

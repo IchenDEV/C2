@@ -1,5 +1,0 @@
-$ ultracite check
-Checking formatting...
-
-All matched files use the correct format.
-Finished in 274ms on 525 files using 18 threads.

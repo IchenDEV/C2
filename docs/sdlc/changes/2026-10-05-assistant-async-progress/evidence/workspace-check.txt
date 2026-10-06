@@ -1,5 +1,0 @@
-    Checking codetwo-core v0.0.0 (/Users/chenli/.t3/worktrees/codeTwo/t3code-6738e658/crates/core)
-    Checking codetwo-server v0.0.0 (/Users/chenli/.t3/worktrees/codeTwo/t3code-6738e658/crates/server)
-    Checking codetwo-napi v0.0.0 (/Users/chenli/.t3/worktrees/codeTwo/t3code-6738e658/crates/napi)
-    Checking codetwo-desktop-host v0.0.0 (/Users/chenli/.t3/worktrees/codeTwo/t3code-6738e658/apps/desktop/src-host)
-    Finished `dev` profile [unoptimized + debuginfo] target(s) in 10.82s

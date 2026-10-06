@@ -211,7 +211,8 @@ const maybe = (name) => {
 async function type(value) {
   const root = composer();
   root.focus();
-  const inline = root.querySelector(".bn-inline-content");
+  const inline = root?.querySelector(".bn-inline-content") ?? root;
+  if (!inline) return;
   const range = dom.document.createRange();
   range.selectNodeContents(inline);
   const selection = dom.window.getSelection();

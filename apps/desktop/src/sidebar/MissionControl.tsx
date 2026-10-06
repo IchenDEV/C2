@@ -195,6 +195,7 @@ export function MissionControlPage({
     <AssistantWorkspace
       onSelect={onSelect}
       onClose={onClose}
+      initialTab="activity"
       activity={
         rows.length === 0 ? (
           <p className="text-callout text-muted-foreground px-2 py-4">
@@ -209,3 +210,5 @@ export function MissionControlPage({
     />
   );
 }
+
+export { MissionControlPage as MissionControlDialog };

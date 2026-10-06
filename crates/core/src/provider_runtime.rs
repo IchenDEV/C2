@@ -354,6 +354,9 @@ pub enum TurnOutcome {
     NotSent(RuntimeError),
     /// The provider received the request and answered with an error; the turn did not run.
     Rejected(RuntimeError),
+    /// The provider ran the turn and reported its own terminal failure. Unlike `Rejected`, work
+    /// may have happened; unlike `Unknown`, the outcome is known.
+    Failed(RuntimeError),
     /// The request may have been transmitted but no terminal evidence arrived (connection lost,
     /// undecodable answer). The turn may have partially or fully run. Must not be replayed
     /// blindly; reconcile through persisted attempt state.

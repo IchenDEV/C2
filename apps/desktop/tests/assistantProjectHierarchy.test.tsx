@@ -175,7 +175,8 @@ function render({ preference = "en", extraTurns = [] } = {}) {
           id: "turn-atlas-1",
           created_at: "2026-10-06T03:05:00Z",
           author: "assistant",
-          content: "Project Atlas manager here. Router implementation is ready for review.",
+          content:
+            "Project Atlas manager here. Router implementation is ready for review.",
           reply_to: null,
           project_paths: ["/work/atlas"],
           status: "handled",
@@ -226,7 +227,8 @@ function render({ preference = "en", extraTurns = [] } = {}) {
 async function typeHtml(html) {
   const root = textbox();
   root.focus();
-  const inline = root.querySelector(".bn-inline-content");
+  const inline = root?.querySelector(".bn-inline-content") ?? root;
+  if (!inline) return;
   const range = dom.document.createRange();
   range.selectNodeContents(inline);
   const selection = dom.window.getSelection();
@@ -254,11 +256,15 @@ test("renders scope switcher defaulting to Global and displays actor badges on t
   expect(switcher.textContent).toContain("Global");
 
   // Turns with actor render distinct attribution badges
-  const globalActor = dom.document.querySelector('[data-testid="turn-actor-turn-global-1"]');
+  const globalActor = dom.document.querySelector(
+    '[data-testid="turn-actor-turn-global-1"]'
+  );
   expect(globalActor).not.toBeNull();
   expect(globalActor.textContent).toContain("Global");
 
-  const atlasActor = dom.document.querySelector('[data-testid="turn-actor-turn-atlas-1"]');
+  const atlasActor = dom.document.querySelector(
+    '[data-testid="turn-actor-turn-atlas-1"]'
+  );
   expect(atlasActor).not.toBeNull();
   expect(atlasActor.textContent).toContain("Project Atlas");
 });
@@ -273,7 +279,9 @@ test("scope switcher allows choosing Project Atlas and sends project-scoped mess
   await flush();
 
   // Find and select Project Atlas
-  const atlasOption = dom.document.querySelector('[data-testid="scope-option-proj-atlas"]');
+  const atlasOption = dom.document.querySelector(
+    '[data-testid="scope-option-proj-atlas"]'
+  );
   expect(atlasOption).not.toBeNull();
   click(atlasOption);
   await flush();
@@ -308,7 +316,9 @@ test("switching back to Global sends chief-scoped message", async () => {
   // Switch back to Global
   click(switcher);
   await flush();
-  const globalOption = dom.document.querySelector('[data-testid="scope-option-global"]');
+  const globalOption = dom.document.querySelector(
+    '[data-testid="scope-option-global"]'
+  );
   expect(globalOption).not.toBeNull();
   click(globalOption);
   await flush();
@@ -329,11 +339,15 @@ test("on-demand observe button toggles scope inspector displaying instructions, 
   render();
   await waitFor(() => expect(textbox()).not.toBeNull());
 
-  const observeButton = dom.document.querySelector('[data-testid="observe-scope-button"]');
+  const observeButton = dom.document.querySelector(
+    '[data-testid="observe-scope-button"]'
+  );
   expect(observeButton).not.toBeNull();
 
   // Panel is closed by default
-  expect(dom.document.querySelector('[data-testid="observe-scope-panel"]')).toBeNull();
+  expect(
+    dom.document.querySelector('[data-testid="observe-scope-panel"]')
+  ).toBeNull();
 
   // Toggle on Global scope observation
   click(observeButton);
@@ -342,7 +356,9 @@ test("on-demand observe button toggles scope inspector displaying instructions, 
   let panel = dom.document.querySelector('[data-testid="observe-scope-panel"]');
   expect(panel).not.toBeNull();
   expect(panel.textContent).toContain("Scope: Global");
-  expect(panel.textContent).toContain("Global standard: prefer TypeScript and Rust.");
+  expect(panel.textContent).toContain(
+    "Global standard: prefer TypeScript and Rust."
+  );
   expect(panel.textContent).toContain("codetwo://chief-of-staff");
 
   // Switch to Project Atlas while observe panel is open
@@ -355,14 +371,18 @@ test("on-demand observe button toggles scope inspector displaying instructions, 
   panel = dom.document.querySelector('[data-testid="observe-scope-panel"]');
   expect(panel).not.toBeNull();
   expect(panel.textContent).toContain("Scope: Project Atlas");
-  expect(panel.textContent).toContain("Atlas rule: ensure all API endpoints return JSON.");
+  expect(panel.textContent).toContain(
+    "Atlas rule: ensure all API endpoints return JSON."
+  );
   expect(panel.textContent).toContain("codetwo://managed-project/proj-atlas");
   expect(panel.textContent).toContain("Deliver Atlas API Gateway");
 
   // Toggle off observation
   click(observeButton);
   await flush();
-  expect(dom.document.querySelector('[data-testid="observe-scope-panel"]')).toBeNull();
+  expect(
+    dom.document.querySelector('[data-testid="observe-scope-panel"]')
+  ).toBeNull();
 });
 
 test("Chinese localization applies to scope switcher and observe panel", async () => {
@@ -372,11 +392,15 @@ test("Chinese localization applies to scope switcher and observe panel", async (
   const switcher = dom.document.querySelector('[data-testid="scope-switcher"]');
   expect(switcher.textContent).toContain("全局");
 
-  const observeButton = dom.document.querySelector('[data-testid="observe-scope-button"]');
+  const observeButton = dom.document.querySelector(
+    '[data-testid="observe-scope-button"]'
+  );
   click(observeButton);
   await flush();
 
-  const panel = dom.document.querySelector('[data-testid="observe-scope-panel"]');
+  const panel = dom.document.querySelector(
+    '[data-testid="observe-scope-panel"]'
+  );
   expect(panel).not.toBeNull();
   expect(panel.textContent).toContain("当前范围：全局");
   expect(panel.textContent).toContain("作用域指令：");

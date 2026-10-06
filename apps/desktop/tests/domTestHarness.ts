@@ -22,6 +22,37 @@ if (typeof dom.Element.prototype.getAnimations !== "function") {
   });
 }
 
+dom.HTMLCanvasElement.prototype.getContext = function () {
+  return {
+    filter: "none",
+    canvas: {},
+    drawImage: () => {},
+    getImageData: () => ({ data: [] }),
+    putImageData: () => {},
+    createImageData: () => ({ data: [] }),
+    setTransform: () => {},
+    resetTransform: () => {},
+    save: () => {},
+    restore: () => {},
+    beginPath: () => {},
+    closePath: () => {},
+    moveTo: () => {},
+    lineTo: () => {},
+    stroke: () => {},
+    fill: () => {},
+    arc: () => {},
+    rect: () => {},
+    fillRect: () => {},
+    strokeRect: () => {},
+    clearRect: () => {},
+    measureText: () => ({ width: 0 }),
+    transform: () => {},
+    scale: () => {},
+    translate: () => {},
+    rotate: () => {},
+  } as any;
+};
+
 const DOM_KEYS = [
   "window",
   "document",

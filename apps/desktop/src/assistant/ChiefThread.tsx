@@ -110,15 +110,15 @@ export function ChiefThread({
     (p) => p.status === "active"
   );
   const selectedProject =
-    selectedScope !== "global"
-      ? state.hierarchy?.projects.find((p) => p.id === selectedScope) ?? null
-      : null;
+    selectedScope === "global"
+      ? null
+      : (state.hierarchy?.projects.find((p) => p.id === selectedScope) ?? null);
   const currentScopeName =
     selectedScope === "global"
       ? zh
         ? "全局"
         : "Global"
-      : selectedProject?.name ?? selectedScope;
+      : (selectedProject?.name ?? selectedScope);
   const attempt = useRef<{ id: string; key: string } | null>(null);
   const getBlocksRef = useRef<(() => DocBlock[]) | null>(null);
   const getMarkdownRef = useRef<(() => Promise<string | null>) | null>(null);
@@ -181,9 +181,9 @@ export function ChiefThread({
         data-conversation-id={turn.id}
         data-reply-to={turn.reply_to ?? undefined}
       >
-        {turn.actor && (
+        {turn.actor != null && turn.actor !== "" && (
           <div
-            className="flex items-center gap-1.5 text-xs text-muted-foreground pb-0.5"
+            className="text-muted-foreground flex items-center gap-1.5 pb-0.5 text-xs"
             data-testid={`turn-actor-${turn.id}`}
           >
             {turn.actor === "chief" ? (
@@ -197,8 +197,7 @@ export function ChiefThread({
                 <span className="font-medium">
                   {state.hierarchy?.projects.find(
                     (p) =>
-                      turn.actor === `project:${p.id}` ||
-                      turn.actor === p.id
+                      turn.actor === `project:${p.id}` || turn.actor === p.id
                   )?.name ?? turn.actor}
                 </span>
               </>
@@ -311,9 +310,9 @@ export function ChiefThread({
       const effectivePaths =
         selectedScope === "global"
           ? paths
-          : selectedProject?.bindings
+          : (selectedProject?.bindings
               .filter((b) => b.active)
-              .map((b) => b.path) ?? paths;
+              .map((b) => b.path) ?? paths);
 
       const key = JSON.stringify([content, effectivePaths, effectiveActor]);
       if (attempt.current?.key !== key)
@@ -494,11 +493,11 @@ export function ChiefThread({
                       ) : (
                         <Folder className="size-4 shrink-0" aria-hidden />
                       )}
-                      <span className="truncate max-w-[120px]">
+                      <span className="max-w-[120px] truncate">
                         {currentScopeName}
                       </span>
                       <ChevronDown
-                        className="size-3 text-muted-foreground shrink-0"
+                        className="text-muted-foreground size-3 shrink-0"
                         aria-hidden
                       />
                     </Button>
@@ -514,11 +513,11 @@ export function ChiefThread({
                     data-testid="scope-option-global"
                   >
                     <Globe className="size-4 shrink-0" aria-hidden />
-                    <div className="flex flex-col min-w-0 flex-1">
-                      <span className="font-medium text-xs">
+                    <div className="flex min-w-0 flex-1 flex-col">
+                      <span className="text-xs font-medium">
                         {zh ? "全局" : "Global"}
                       </span>
-                      <span className="text-[10px] text-muted-foreground truncate">
+                      <span className="text-muted-foreground truncate text-[10px]">
                         {zh
                           ? "统筹全部项目与全局偏好"
                           : "Coordinates all projects & global preferences"}
@@ -527,7 +526,7 @@ export function ChiefThread({
                   </DropdownMenuItem>
                   {activeProjects.length > 0 && (
                     <>
-                      <div className="my-1 h-px bg-border" role="separator" />
+                      <div className="bg-border my-1 h-px" role="separator" />
                       {activeProjects.map((p) => (
                         <DropdownMenuItem
                           key={p.id}
@@ -542,11 +541,11 @@ export function ChiefThread({
                           data-testid={`scope-option-${p.id}`}
                         >
                           <Folder className="size-4 shrink-0" aria-hidden />
-                          <div className="flex flex-col min-w-0 flex-1">
-                            <span className="font-medium text-xs truncate">
+                          <div className="flex min-w-0 flex-1 flex-col">
+                            <span className="truncate text-xs font-medium">
                               {p.name}
                             </span>
-                            <span className="text-[10px] text-muted-foreground truncate">
+                            <span className="text-muted-foreground truncate text-[10px]">
                               {p.bindings
                                 .filter((b) => b.active)
                                 .map((b) => b.path)
@@ -668,13 +667,13 @@ export function ChiefThread({
           )}
           {observeOpen && (
             <div
-              className="mx-4 mb-2 rounded-lg border border-border bg-muted/40 p-3 text-xs space-y-3"
+              className="rounded-module border-border bg-muted/40 mx-4 mb-2 space-y-3 border p-3 text-xs"
               role="region"
               aria-label={zh ? "范围观察详情" : "Scope observation details"}
               data-testid="observe-scope-panel"
             >
-              <div className="flex items-center justify-between border-b border-border/60 pb-2">
-                <span className="font-semibold flex items-center gap-1.5">
+              <div className="border-border/60 flex items-center justify-between border-b pb-2">
+                <span className="flex items-center gap-1.5 font-semibold">
                   {selectedScope === "global" ? (
                     <Globe className="size-3.5" aria-hidden />
                   ) : (
@@ -683,7 +682,7 @@ export function ChiefThread({
                   {zh ? "当前范围：" : "Scope: "}
                   {currentScopeName}
                 </span>
-                <span className="text-[10px] text-muted-foreground">
+                <span className="text-muted-foreground text-[10px]">
                   {selectedScope === "global"
                     ? GLOBAL_MEMORY
                     : `codetwo://managed-project/${selectedScope}`}
@@ -692,7 +691,7 @@ export function ChiefThread({
 
               {/* Instructions Section */}
               <div className="space-y-1">
-                <span className="font-medium text-foreground/80">
+                <span className="text-foreground/80 font-medium">
                   {zh ? "作用域指令：" : "Scope Instructions:"}
                 </span>
                 {(() => {
@@ -712,13 +711,13 @@ export function ChiefThread({
                     );
                   }
                   return (
-                    <div className="rounded bg-background/80 p-2 border border-border/40 font-mono text-[11px] leading-relaxed break-words">
-                      <div className="flex items-center justify-between text-[10px] text-muted-foreground mb-1">
+                    <div className="rounded-control bg-background/80 border-border/40 border p-2 font-mono text-[11px] leading-relaxed break-words">
+                      <div className="text-muted-foreground mb-1 flex items-center justify-between text-[10px]">
                         <span>rev {active.revision}</span>
                         <span>hash: {active.hash.slice(0, 10)}...</span>
                         <span>reach: {active.reach}</span>
                       </div>
-                      <p className="font-sans text-xs text-foreground whitespace-pre-wrap">
+                      <p className="text-foreground font-sans text-xs whitespace-pre-wrap">
                         {active.text}
                       </p>
                     </div>
@@ -728,7 +727,7 @@ export function ChiefThread({
 
               {/* Memory Shares Section */}
               <div className="space-y-1">
-                <span className="font-medium text-foreground/80">
+                <span className="text-foreground/80 font-medium">
                   {zh ? "共享记忆：" : "Memory Shares:"}
                 </span>
                 {(() => {
@@ -752,10 +751,10 @@ export function ChiefThread({
                       {shares.map((s) => (
                         <div
                           key={s.id}
-                          className="flex items-center justify-between rounded bg-background/80 px-2 py-1 border border-border/40 text-[11px]"
+                          className="rounded-control bg-background/80 border-border/40 flex items-center justify-between border px-2 py-1 text-[11px]"
                         >
                           <span className="truncate">{s.source_scope}</span>
-                          <span className="text-[10px] text-muted-foreground font-mono">
+                          <span className="text-muted-foreground font-mono text-[10px]">
                             {s.content_hash.slice(0, 8)}...
                           </span>
                         </div>
@@ -767,7 +766,7 @@ export function ChiefThread({
 
               {/* Tasks Section */}
               <div className="space-y-1">
-                <span className="font-medium text-foreground/80">
+                <span className="text-foreground/80 font-medium">
                   {zh ? "关联持续任务：" : "Scope Tasks:"}
                 </span>
                 {(() => {
@@ -788,10 +787,12 @@ export function ChiefThread({
                       {goals.map((g) => (
                         <div
                           key={g.id}
-                          className="flex items-center justify-between rounded bg-background/80 px-2 py-1 border border-border/40 text-[11px]"
+                          className="rounded-control bg-background/80 border-border/40 flex items-center justify-between border px-2 py-1 text-[11px]"
                         >
-                          <span className="font-medium truncate">{g.title}</span>
-                          <span className="text-[10px] text-muted-foreground">
+                          <span className="truncate font-medium">
+                            {g.title}
+                          </span>
+                          <span className="text-muted-foreground text-[10px]">
                             {g.status}
                           </span>
                         </div>

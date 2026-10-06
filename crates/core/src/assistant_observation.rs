@@ -716,8 +716,8 @@ enum Plan {
         status: &'static str,
         reason: Option<&'static str>,
     },
-    Duplicate(String),
-    Conflict(String),
+    Duplicate(#[allow(dead_code)] String),
+    Conflict(#[allow(dead_code)] String),
 }
 
 impl Store {

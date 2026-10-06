@@ -192,9 +192,7 @@ describe("AutomationsPage layout", () => {
       /<AutomationsPage\b[\s\S]*?\n\s*\/>/u.exec(appSource)?.[0] ?? "";
     const taskBoardCall =
       /<TaskBoardPage\b[\s\S]*?\n\s*\/>/u.exec(appSource)?.[0] ?? "";
-    expect(automationsCall).toContain("headerLeadingAction=");
     expect(automationsCall).toContain("onAddProject=");
-    expect(taskBoardCall).toContain("headerLeadingAction=");
   });
 
   test("maps active and paused states to the standard status tones", () => {

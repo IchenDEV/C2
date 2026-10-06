@@ -1,8 +1,0 @@
-{
-  "sourceSnapshot": "engine-routing-source-snapshot.json",
-  "productLockSha256": "b0e15cbb4cb0f1b5b27d5d0868222fa4c656b00ad4f2f4de393b20ede2c9757d",
-  "isolatedLockSha256": "0b6911da256af840dc6a3cc909154f46325cf5905f7e4b18b12d11347076b26b",
-  "proof": "Parsed TOML equal after exactly two whitelisted dependency-reference additions, no package version changes. All 307 product input files unchanged after tests; 305 isolated files byte-identical to product inputs; two declared build-environment exceptions.",
-  "diff": "--- Cargo.lock\t2026-10-05 05:04:48\n+++ .codex/run/native-provider-connectors/validation/source/Cargo.lock\t2026-10-06 12:44:26\n@@ -435,6 +435,7 @@\n  \"fs2\",\n  \"image\",\n  \"libghostty-vt\",\n+ \"libghostty-vt-sys\",\n  \"notify\",\n  \"objc2\",\n  \"objc2-app-kit\",\n@@ -1515,6 +1516,9 @@\n [[package]]\n name = \"libghostty-vt-sys\"\n version = \"0.2.1\"\n+dependencies = [\n+ \"pkg-config\",\n+]\n \n [[package]]\n name = \"libloading\"\n",
-  "correction": "Earlier owner evidence named the manifest exception but did not explicitly record this generated isolated resolution delta. Existing owner test results remain prior-version results; none is independent acceptance."
-}

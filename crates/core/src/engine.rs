@@ -47,8 +47,10 @@ use crate::permission::{
 };
 use crate::provider::{LaunchSpec, Provider, ProviderId, ProviderToolset};
 use crate::provider_runtime::{
-    RuntimeCapabilities, RuntimeContent, RuntimeHandle, RuntimeInit, RuntimeSessionRestore,
-    RuntimeSessionStart, SteerOutcome, SteerSupport, TurnOutcome,
+    RuntimeCallbacks, RuntimeCapabilities, RuntimeContent, RuntimeEvent, RuntimeHandle,
+    RuntimeInit, RuntimePermissionOutcome, RuntimePermissionRequest, RuntimeQuestionOutcome,
+    RuntimeQuestionRequest, RuntimeSessionRestore, RuntimeSessionStart, SteerOutcome,
+    SteerSupport, TurnOutcome,
 };
 use crate::session::{
     initial_session_title, tool_status_is_in_flight, tool_status_is_terminal,
@@ -2599,6 +2601,149 @@ impl ClientHandler for SessionHandler {
         let response = rx.await.unwrap_or(CreateElicitationResponse::Cancel);
         self.liveness.advance();
         response
+    }
+}
+
+/// Native connectors report through the provider-neutral [`RuntimeCallbacks`]. Engine's tool,
+/// permission and elicitation projection is still written against ACP-shaped DTOs, so this adapter
+/// lowers neutral facts into them and reuses that one projection instead of forking it. The ACP
+/// DTOs stay an Engine-internal detail: no native connector imports them.
+#[async_trait]
+impl RuntimeCallbacks for SessionHandler {
+    async fn event(&self, backend_session_id: &str, event: RuntimeEvent) {
+        use crate::acp::wire::{
+            AvailableCommand, ContentBlock, SessionNotification, SessionUpdate, ToolCall,
+            ToolCallUpdate,
+        };
+        let update = match event {
+            RuntimeEvent::AgentText(text) => SessionUpdate::AgentMessageChunk {
+                content: ContentBlock::Text { text },
+            },
+            RuntimeEvent::AgentThought(text) => SessionUpdate::AgentThoughtChunk {
+                content: ContentBlock::Text { text },
+            },
+            RuntimeEvent::ToolCall(call) => SessionUpdate::ToolCall(ToolCall {
+                tool_call_id: call.id,
+                title: call.title,
+                kind: call.kind,
+                status: call.status,
+                content: call.content,
+                raw_input: call.raw_input,
+                raw_output: call.raw_output,
+                meta: None,
+            }),
+            RuntimeEvent::ToolUpdate(call) => SessionUpdate::ToolCallUpdate(ToolCallUpdate {
+                tool_call_id: call.id,
+                title: call.title,
+                status: call.status,
+                content: call.content,
+                kind: call.kind,
+                raw_input: call.raw_input,
+                raw_output: call.raw_output,
+                meta: None,
+            }),
+            RuntimeEvent::ConfigOptions(options) => {
+                if !self.active.load(Ordering::Acquire)
+                    || self.replaying.load(Ordering::SeqCst)
+                {
+                    return;
+                }
+                self.liveness.advance();
+                self.emit(Event::ConfigOptions {
+                    session: self.session_id.clone(),
+                    options,
+                });
+                return;
+            }
+            RuntimeEvent::Commands(names) => SessionUpdate::AvailableCommandsUpdate {
+                available_commands: names
+                    .into_iter()
+                    .map(|name| AvailableCommand {
+                        name,
+                        description: String::new(),
+                        input: None,
+                    })
+                    .collect(),
+            },
+            RuntimeEvent::Usage {
+                used,
+                size,
+                cost_usd,
+            } => SessionUpdate::UsageUpdate {
+                used,
+                size,
+                cost: cost_usd.map(Value::from),
+            },
+        };
+        ClientHandler::session_update(
+            self,
+            SessionNotification {
+                session_id: backend_session_id.to_string(),
+                update,
+            },
+        )
+        .await;
+    }
+
+    async fn request_permission(
+        &self,
+        backend_session_id: &str,
+        request: RuntimePermissionRequest,
+    ) -> RuntimePermissionOutcome {
+        use crate::acp::wire::{PermissionOption, PermissionOutcome, RequestPermissionRequest};
+        let response = ClientHandler::request_permission(
+            self,
+            RequestPermissionRequest {
+                session_id: backend_session_id.to_string(),
+                tool_call: request.tool_call,
+                options: request
+                    .options
+                    .into_iter()
+                    .map(|option| PermissionOption {
+                        option_id: option.id,
+                        name: option.name,
+                        kind: option.kind,
+                    })
+                    .collect(),
+                meta: request.meta,
+            },
+        )
+        .await;
+        match response.outcome {
+            PermissionOutcome::Selected { option_id } => {
+                RuntimePermissionOutcome::Selected(option_id)
+            }
+            PermissionOutcome::Cancelled => RuntimePermissionOutcome::Cancelled,
+        }
+    }
+
+    async fn ask_question(
+        &self,
+        backend_session_id: &str,
+        request: RuntimeQuestionRequest,
+    ) -> RuntimeQuestionOutcome {
+        use crate::acp::wire::{CreateElicitationRequest, CreateElicitationResponse};
+        let response = ClientHandler::create_elicitation(
+            self,
+            CreateElicitationRequest {
+                mode: Some("form".into()),
+                session_id: Some(backend_session_id.to_string()),
+                tool_call_id: request.tool_call_id,
+                message: request.message,
+                requested_schema: Some(request.schema),
+                url: None,
+                elicitation_id: None,
+                meta: None,
+            },
+        )
+        .await;
+        match response {
+            CreateElicitationResponse::Accept { content } => {
+                RuntimeQuestionOutcome::Answered(content.unwrap_or_default())
+            }
+            CreateElicitationResponse::Decline => RuntimeQuestionOutcome::Declined,
+            CreateElicitationResponse::Cancel => RuntimeQuestionOutcome::Cancelled,
+        }
     }
 }
 
@@ -7005,6 +7150,7 @@ impl Engine {
                         ProviderPromptOutcome::Completed(
                             TurnOutcome::NotSent(e)
                             | TurnOutcome::Rejected(e)
+                            | TurnOutcome::Failed(e)
                             | TurnOutcome::Unknown(e),
                         ) => {
                             let message = e.to_string();

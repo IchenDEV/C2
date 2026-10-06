@@ -1,7 +1,13 @@
 //! Backends for [`crate::provider_runtime::ProviderRuntime`].
 //!
-//! Only the ACP adapter exists in this foundation slice. Official native connectors (Codex App
-//! Server, Claude Agent SDK, Cursor SDK, OpenCode) are separate adapters that must pass their own
-//! verified capability contract before Engine selects them; none is claimed here.
+//! `acp` adapts any Agent Client Protocol subprocess. The native connectors drive the official
+//! provider interfaces directly (`codex` over Codex App Server JSON-RPC) or through a supervised
+//! sidecar that wraps the official SDK (`sidecar`: Claude Agent SDK, Cursor SDK, OpenCode V1/V2).
+//! None of them depends on ACP types; they report into Engine only through
+//! [`crate::provider_runtime::RuntimeCallbacks`]. Engine selects a backend per session; a native
+//! backend is never silently replaced by ACP.
 
 pub mod acp;
+pub mod codex;
+pub mod rpc;
+pub mod sidecar;
