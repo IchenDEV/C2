@@ -227,3 +227,42 @@ async fn browser_command_route_fails_closed_without_a_host_adapter() {
     assert!(response.contains("commands are unavailable"));
     handle.abort();
 }
+
+#[tokio::test]
+async fn another_c2_client_origin_may_preflight_and_call_with_a_bearer_header() {
+    let auth = Arc::new(AuthState::load(None));
+    let (addr, handle) = server(auth, Some(Arc::new(RecordingCaller::default()))).await;
+    let client = reqwest::Client::new();
+
+    let preflight = client
+        .request(
+            reqwest::Method::OPTIONS,
+            format!("http://{addr}/api/web-ui/call"),
+        )
+        .header("Origin", "views://mainview")
+        .header("Access-Control-Request-Method", "POST")
+        .header(
+            "Access-Control-Request-Headers",
+            "authorization,content-type",
+        )
+        .send()
+        .await
+        .unwrap();
+    assert!(preflight.status().is_success());
+    let headers = preflight.headers();
+    assert_eq!(headers["access-control-allow-origin"], "*");
+    let allowed = headers["access-control-allow-headers"].to_str().unwrap();
+    assert!(allowed.contains("authorization") && allowed.contains("content-type"));
+    // Credentials stay header-only: the server must never opt in to ambient cookies.
+    assert!(headers.get("access-control-allow-credentials").is_none());
+
+    let denied = client
+        .post(format!("http://{addr}/api/web-ui/call"))
+        .header("Origin", "views://mainview")
+        .json(&json!({ "name": "sessions.list" }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(denied.status(), 401);
+    handle.abort();
+}

@@ -1,4 +1,10 @@
 import { desktopCall, isElectrobun, listenDesktop } from "./container";
+import {
+  createEnvironmentRegistry,
+  createFederatedCore,
+} from "./remoteEnvironments";
+import type { EnvironmentRegistry } from "./remoteEnvironments";
+import { createRemoteTerminals } from "./remoteTerminals";
 
 export interface CoreTransport {
   call<T>(name: string, args: unknown, projectPath: string | null): Promise<T>;
@@ -316,9 +322,61 @@ function browserWebTransport(): CoreTransport | null {
   });
 }
 
-const selectedTransport = isElectrobun
-  ? desktopCoreTransport
-  : browserWebTransport();
+function memoryStorage(): StorageLike {
+  const values = new Map<string, string>();
+  return {
+    getItem: (key) => values.get(key) ?? null,
+    setItem: (key, value) => void values.set(key, value),
+    removeItem: (key) => void values.delete(key),
+  };
+}
+
+/**
+ * Remote C2 servers this desktop is paired with. Only the desktop federates: it has a local Core
+ * of its own, whereas a paired browser is already a client of exactly one remote Core.
+ */
+export const environmentRegistry: EnvironmentRegistry =
+  createEnvironmentRegistry({
+    storage:
+      typeof localStorage === "undefined" ? memoryStorage() : localStorage,
+    fetch: async (input, init) => await fetch(input, init),
+    createSocket: (url) => new WebSocket(url),
+    createTransport: createWebCoreTransport,
+    newId: () => crypto.randomUUID(),
+    onError: (error) => console.error("C2 remote environment error", error),
+    reconnectDelayMs: 3000,
+  });
+
+const remoteTerminals = createRemoteTerminals({
+  registry: environmentRegistry,
+  fetch: async (input, init) => await fetch(input, init),
+  createSocket: (url) => new WebSocket(url),
+  reconnectDelayMs: 3000,
+});
+
+const federation = isElectrobun
+  ? createFederatedCore(
+      desktopCoreTransport,
+      environmentRegistry,
+      remoteTerminals
+    )
+  : null;
+
+const selectedTransport: CoreTransport | null =
+  federation ?? browserWebTransport();
+
+/** True when this app can reach other C2 servers alongside its own Core. */
+export const remoteEnvironmentsAvailable = federation !== null;
+
+/** Call one specific remote environment, regardless of which sessions it owns. */
+export async function coreCallEnvironment<T>(
+  environmentId: string,
+  name: string,
+  args: unknown
+): Promise<T> {
+  if (!federation) throw new Error("Remote environments are unavailable");
+  return await federation.callEnvironment<T>(environmentId, name, args);
+}
 
 /** True when product commands have a real Core behind them, independent of the desktop shell. */
 export const coreAvailable = selectedTransport !== null;

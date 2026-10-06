@@ -1284,6 +1284,26 @@ export const en = {
   "settings.syncScope": "Included",
   "settings.syncScopeHint":
     "Conversations, the project list, and saved memories sync. Project files, automation schedules, plugins, credentials, and terminal history stay on this Mac.",
+  "settings.environments": "Remote environments",
+  "settings.environmentsHint":
+    "Use C2 running on another machine. Its sessions appear beside this Mac's, and each one keeps running on the machine that owns it.",
+  "settings.environmentsHelp":
+    "On the server run codetwo-server serve. It prints a one-time pairing link; codetwo-server pair prints a new one. Reach it over SSH forwarding, a tailnet, or an HTTPS reverse proxy.",
+  "settings.environmentPairingLink": "Pairing link",
+  "settings.environmentPairingPlaceholder": "http://server:4599/pair#token=…",
+  "settings.environmentName": "Name",
+  "settings.environmentWorkspace": "Workspace on the server",
+  "settings.environmentWorkspaceHint":
+    "Folder used for new sessions. Leave empty to use the server's default.",
+  "settings.environmentAdd": "Connect",
+  "settings.environmentAdding": "Connecting…",
+  "settings.environmentRemove": "Remove",
+  "settings.environmentEmpty": "No remote environments yet.",
+  "settings.environmentOnline": "Connected",
+  "settings.environmentOffline": "Unreachable",
+  "settings.environmentConnecting": "Connecting…",
+  "environment.remote": "Remote",
+  "environment.newSessionIn": "New sessions run on",
   "settings.appearance": "Appearance",
   "settings.appearanceHint":
     "Choose a scheme, tune a theme, and set the typography used across C2.",
@@ -4148,6 +4168,26 @@ export const zhCN: Record<StringKey, string> = {
   "settings.syncScope": "同步内容",
   "settings.syncScopeHint":
     "会话、项目列表和已保存记忆会同步。项目文件、自动化计划、插件、凭据和终端历史只保存在这台 Mac 上。",
+  "settings.environments": "远程环境",
+  "settings.environmentsHint":
+    "使用运行在另一台机器上的 C2。它的会话会和这台 Mac 的会话并列显示，每个会话仍在拥有它的机器上运行。",
+  "settings.environmentsHelp":
+    "在服务器上运行 codetwo-server serve，它会打印一次性配对链接；codetwo-server pair 可生成新的链接。可通过 SSH 端口转发、tailnet 或 HTTPS 反向代理访问。",
+  "settings.environmentPairingLink": "配对链接",
+  "settings.environmentPairingPlaceholder": "http://server:4599/pair#token=…",
+  "settings.environmentName": "名称",
+  "settings.environmentWorkspace": "服务器上的工作区",
+  "settings.environmentWorkspaceHint":
+    "新会话使用的文件夹。留空则使用服务器的默认目录。",
+  "settings.environmentAdd": "连接",
+  "settings.environmentAdding": "连接中…",
+  "settings.environmentRemove": "移除",
+  "settings.environmentEmpty": "还没有远程环境。",
+  "settings.environmentOnline": "已连接",
+  "settings.environmentOffline": "无法连接",
+  "settings.environmentConnecting": "连接中…",
+  "environment.remote": "远程",
+  "environment.newSessionIn": "新会话运行于",
   "settings.appearance": "外观",
   "settings.appearanceHint":
     "选择配色方案、调整主题，并设置 C2 全局使用的字体。",

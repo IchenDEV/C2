@@ -55,7 +55,13 @@ export {
   type AppUpdateStatus,
   type WorkspaceOpenTarget,
 } from "./container";
-import { coreAvailable, coreCall, listenCore } from "./coreTransport";
+import {
+  coreAvailable,
+  coreCall,
+  coreCallEnvironment,
+  environmentRegistry,
+  listenCore,
+} from "./coreTransport";
 import type {
   PluginConnectorContribution,
   PluginRuntimeCommandContribution,
@@ -522,6 +528,8 @@ export interface SessionInfo {
   last_active_at?: number;
   /** Core-owned, revisioned run/input state; survives renderer and remote reconnects. */
   activity?: SessionActivity;
+  /** Set on sessions owned by a paired remote C2 server; absent for this machine's own. */
+  environment_id?: string | null;
 }
 
 export type PendingInputKind = "permission" | "elicitation";
@@ -2214,6 +2222,37 @@ export async function newSession(
   initialReasoningEffort?: string | null,
   parallelTask?: { taskId: string; goal: string } | null
 ): Promise<void> {
+  const environmentId = environmentRegistry.activeId();
+  if (coreAvailable && environmentId != null) {
+    // The session lives on the remote machine, so a local folder or checkout means nothing there.
+    if (parallelTask) {
+      throw new Error(
+        "Parallel tasks run on this machine. Switch the environment to Local."
+      );
+    }
+    const environment = environmentRegistry.get(environmentId);
+    const remoteCwd =
+      environment?.workspace ??
+      (await coreCallEnvironment<string>(
+        environmentId,
+        "workspace.default_cwd",
+        null
+      ));
+    await call("engine.new_session", {
+      provider,
+      cwd: remoteCwd,
+      use_worktree: false,
+      worktree_base: null,
+      worktree_base_sha: null,
+      request_id: requestId,
+      initial_policy: initialPolicy ?? null,
+      model: initialModel ?? null,
+      transient,
+      reasoning_effort: initialReasoningEffort ?? null,
+      environment_id: environmentId,
+    });
+    return;
+  }
   if (coreAvailable) {
     if (parallelTask) {
       if (worktreeBase === null) {
@@ -5212,7 +5251,7 @@ export async function onPtyOutput(
     return () => {
       /* empty */
     };
-  return listenDesktop<PtyOutput>("pty-output", cb);
+  return listenCore<PtyOutput>("pty-output", cb);
 }
 
 export async function onPtyTitle(
@@ -5222,7 +5261,7 @@ export async function onPtyTitle(
     return () => {
       /* empty */
     };
-  return listenDesktop<PtyTitle>("pty-title", cb);
+  return listenCore<PtyTitle>("pty-title", cb);
 }
 
 /** Fires when a terminal's child process exits. */
@@ -5233,7 +5272,7 @@ export async function onPtyExit(
     return () => {
       /* empty */
     };
-  return listenDesktop<PtyExit>("pty-exit", cb);
+  return listenCore<PtyExit>("pty-exit", cb);
 }
 
 export function providerLabel(p: string | { custom: string }): string {

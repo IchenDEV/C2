@@ -1422,3 +1422,41 @@ describe("SessionRail empty projects", () => {
     view.unmount();
   });
 });
+
+describe("SessionRail remote sessions", () => {
+  test("shows a remote folder by its name, marks the session, and never asks GitHub about it", async () => {
+    activateDom();
+    const asked: string[] = [];
+    const remote = {
+      ...session("remote", "On the server"),
+      cwd: "c2env://env-1/srv/app",
+      project_path: "c2env://env-1/srv/app",
+      environment_id: "env-1",
+    };
+    const view = renderRail({
+      projects: [],
+      sessions: [remote],
+      previews: {},
+      activeSession: null,
+      loadPullRequest: (path: string) => {
+        asked.push(path);
+        return Promise.resolve(null);
+      },
+    });
+    await waitFor(() =>
+      expect(
+        view.container.querySelector('[data-session-id="remote"]')
+      ).toBeTruthy()
+    );
+
+    const text = view.container.textContent ?? "";
+    expect(text).toContain("app");
+    expect(text).not.toContain("c2env://");
+    expect(
+      view.container.querySelector('[data-session-environment="env-1"]')
+    ).toBeTruthy();
+    expect(asked).toEqual([]);
+
+    view.unmount();
+  });
+});

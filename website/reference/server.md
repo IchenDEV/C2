@@ -7,8 +7,18 @@ guide for the walkthrough.
 ## Run
 
 ```sh
-cargo run -p codetwo-server
+cargo run -p codetwo-server            # compact remote (LAN)
+codetwo-server webui                   # full React UI, opens a pairing link locally
+codetwo-server serve                   # headless daemon for a server
+codetwo-server pair                    # new pairing link from the running daemon
 ```
+
+`serve` options: `--host` (default `CODETWO_HOST` or `127.0.0.1`), `--port` (default
+`CODETWO_PORT` or `4599`), `--data-dir`, `--ui-dir` (optional web UI assets) and `--public-url`
+(default `CODETWO_PUBLIC_URL`; the address clients are told to use behind a proxy or tunnel). It
+holds `<data-dir>/server.pid` so only one daemon owns a data directory, and answers
+`codetwo-server pair` (Unix) through a private `pairing.url` file in that directory. See
+[Run C2 on a server](/guide/remote#run-c2-on-a-server-headless).
 
 ## Environment
 
@@ -40,8 +50,13 @@ Three credential tiers, so no long-lived secret ever travels in a URL:
 | `GET /` | the mobile web client (pairs via `#token=…` in the fragment, then stores its bearer) |
 | `GET /health` | returns `ok` |
 | `POST /api/pair` | body `{"token":"…","device_name":"…"}` → `{"device_id":"…","bearer":"…"}`; 401 if invalid/expired/used |
+| `POST /api/web-ui/call` | `Authorization: Bearer …`, body `{"name","args","project_path"}` → `{"result":…}`; only the session/engine commands and the workspace file and Git commands the renderer's panels need are allowed; scripts, GitHub, LSP and terminal commands are not (`serve` and `webui` only) |
 | `POST /api/ws-ticket` | `Authorization: Bearer …` → `{"ticket":"…","expires_in":300}` |
 | `GET /ws?ticket=…` | the WebSocket control channel (single-use ticket) |
+
+All routes answer cross-origin preflights so another C2 (the desktop app) can call them; every
+credential travels in the `Authorization` header or a single-use ticket and the server never sets
+cookies, so a foreign page cannot act without already holding a bearer.
 
 ## WebSocket protocol
 

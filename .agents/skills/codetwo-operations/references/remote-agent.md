@@ -50,6 +50,31 @@ context before the new prompt.
 Dirty submodules are rejected because their nested repository state cannot be represented by the
 parent repository bundle. Resolve or separately transfer a dirty submodule before moving the task.
 
+## Run a full headless C2 server
+
+`codetwo-agent` is a single-workspace ACP node. For a machine that should host many projects and
+sessions and be used from a desktop C2, browser or phone, run `codetwo-server serve`:
+
+```bash
+codetwo-server serve --data-dir /srv/c2 --host <tailnet-or-loopback-ip> [--public-url https://…]
+codetwo-server pair --data-dir /srv/c2     # fresh one-time link for another device
+```
+
+It owns `/srv/c2` exclusively (a second `serve` is refused and a stale `server.pid` from a crash is
+replaced), stops cleanly on `SIGTERM`, and is probed at `/health`. Use `--public-url` when clients
+reach it through a proxy. The desktop pairs from **Settings → Remote environments**; a revoked or
+removed device loses access immediately. Never stop another operator's daemon to reuse its data
+directory or port; pick a new `--data-dir`.
+
+Example `systemd` unit:
+
+```ini
+[Service]
+ExecStart=/usr/local/bin/codetwo-server serve --data-dir /srv/c2 --host 100.x.y.z
+Restart=on-failure
+KillSignal=SIGTERM
+```
+
 ## Network boundary
 
 The agent listens on all interfaces. Bind it to a trusted LAN or tailnet, or place it behind an

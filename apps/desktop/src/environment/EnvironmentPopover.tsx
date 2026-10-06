@@ -18,6 +18,7 @@ import {
   Globe2,
   Laptop,
   Monitor,
+  Server,
   Settings,
   SlidersHorizontal,
   SquarePlus,
@@ -33,9 +34,11 @@ import { cn } from "@/lib/utils";
 
 import { getArtifact } from "../bridge";
 import type { GitStatus, Project } from "../bridge";
+import { environmentRegistry } from "../coreTransport";
 import { GitSyncStatus } from "../git/GitSyncStatus";
 import { useT } from "../i18n";
 import type { InteractiveToolPreview } from "../session/toolActivity";
+import { useEnvironments } from "./useEnvironments";
 
 function EnvironmentRow({
   icon: Icon,
@@ -223,6 +226,9 @@ export function EnvironmentPopover({
   const [open, setOpen] = useState(false);
   const [projectsOpen, setProjectsOpen] = useState(false);
   const isRepo = git?.is_repo === true;
+  const { environments, statuses, activeId } = useEnvironments();
+  const activeEnvironment =
+    environments.find((environment) => environment.id === activeId) ?? null;
 
   useEffect(() => {
     if (suppressed) setOpen(false);
@@ -280,7 +286,7 @@ export function EnvironmentPopover({
               aria-hidden
             />
             <span className="session-header-context-label">
-              {t("environment.title")}
+              {activeEnvironment?.name ?? t("environment.title")}
             </span>
           </Button>
         }
@@ -309,6 +315,39 @@ export function EnvironmentPopover({
             <Settings className="size-3.5" />
           </Button>
         </div>
+
+        {environments.length > 0 && (
+          <div
+            className="mb-1"
+            role="group"
+            aria-label={t("environment.newSessionIn")}
+          >
+            <p className="text-metadata text-muted-foreground px-module-inset pb-1">
+              {t("environment.newSessionIn")}
+            </p>
+            <EnvironmentRow
+              icon={Laptop}
+              label={t("environment.local")}
+              active={activeEnvironment === null}
+              onClick={() => environmentRegistry.setActive(null)}
+            />
+            {environments.map((environment) => (
+              <EnvironmentRow
+                key={environment.id}
+                icon={Server}
+                label={environment.name}
+                description={environment.baseUrl}
+                detail={
+                  statuses[environment.id]?.state === "offline"
+                    ? t("settings.environmentOffline")
+                    : undefined
+                }
+                active={activeEnvironment?.id === environment.id}
+                onClick={() => environmentRegistry.setActive(environment.id)}
+              />
+            ))}
+          </div>
+        )}
 
         <EnvironmentRow
           icon={SquarePlus}
