@@ -10,4 +10,5 @@
 pub mod acp;
 pub mod codex;
 pub mod rpc;
+pub mod select;
 pub mod sidecar;

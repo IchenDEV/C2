@@ -115,9 +115,20 @@ pub enum StoreError {
     InvalidHandoff(String),
     #[error("invalid device sync document: {0}")]
     InvalidDeviceSync(String),
+    #[error("session {session_id} is bound to runtime backend {bound}; refusing to use {requested}")]
+    RuntimeBindingConflict {
+        session_id: String,
+        bound: String,
+        requested: String,
+    },
 }
 
 const SCHEMA: &str = "
+CREATE TABLE IF NOT EXISTS session_runtime (
+  session_id       TEXT PRIMARY KEY,
+  backend          TEXT NOT NULL,
+  contract_version INTEGER NOT NULL
+);
 CREATE TABLE IF NOT EXISTS sessions (
   id              TEXT PRIMARY KEY,
   title           TEXT NOT NULL,
@@ -2182,6 +2193,28 @@ impl Store {
         model: Option<&str>,
         continuation_context: &serde_json::Value,
     ) -> Result<bool, StoreError> {
+        self.switch_session_provider_with_runtime(
+            session_id,
+            expected_provider,
+            provider,
+            model,
+            continuation_context,
+            None,
+        )
+    }
+
+    /// [`Self::switch_session_provider`] that also records the replacement's native backend in the
+    /// same transaction, so a crash can never leave a native-intended session looking like ACP.
+    /// `None` means ACP (no binding row).
+    pub fn switch_session_provider_with_runtime(
+        &self,
+        session_id: &str,
+        expected_provider: &crate::provider::ProviderId,
+        provider: &crate::provider::ProviderId,
+        model: Option<&str>,
+        continuation_context: &serde_json::Value,
+        native_backend: Option<crate::provider_runtime::RuntimeBackendKind>,
+    ) -> Result<bool, StoreError> {
         let mut conn = self.conn.lock().unwrap();
         let tx = conn.transaction()?;
         require_session_active_on(&tx, session_id)?;
@@ -2217,8 +2250,79 @@ impl Store {
                 expected_provider,
             ],
         )?;
+        if changed == 1 {
+            // The replacement provider has no backend session yet; it binds on its first launch.
+            tx.execute("DELETE FROM session_runtime WHERE session_id=?1", [session_id])?;
+            if let Some(backend) = native_backend.filter(|kind| kind.is_native()) {
+                tx.execute(
+                    "INSERT INTO session_runtime(session_id,backend,contract_version) VALUES (?1,?2,?3)",
+                    rusqlite::params![
+                        session_id,
+                        backend.as_str(),
+                        crate::provider_runtime::RUNTIME_CONTRACT_VERSION
+                    ],
+                )?;
+            }
+        }
         tx.commit()?;
         Ok(changed == 1)
+    }
+
+    /// Backend persisted for a session, if any. A session without a row predates native
+    /// backends and is an ACP session.
+    pub fn session_runtime_binding(
+        &self,
+        session_id: &str,
+    ) -> Result<Option<(crate::provider_runtime::RuntimeBackendKind, u32)>, StoreError> {
+        let conn = self.conn.lock().unwrap();
+        let row = conn
+            .query_row(
+                "SELECT backend,contract_version FROM session_runtime WHERE session_id=?1",
+                [session_id],
+                |row| Ok((row.get::<_, String>(0)?, row.get::<_, u32>(1)?)),
+            )
+            .optional()?;
+        Ok(row.and_then(|(name, version)| {
+            crate::provider_runtime::RuntimeBackendKind::parse(&name).map(|kind| (kind, version))
+        }))
+    }
+
+    /// Bind a session to one backend before its first provider call. Idempotent for the same
+    /// backend; a different backend is refused, so a native session can never be re-launched
+    /// through ACP (or the reverse) by a later code path.
+    pub fn bind_session_runtime(
+        &self,
+        session_id: &str,
+        backend: crate::provider_runtime::RuntimeBackendKind,
+        contract_version: u32,
+    ) -> Result<(), StoreError> {
+        let mut conn = self.conn.lock().unwrap();
+        let tx = conn.transaction()?;
+        let bound: Option<String> = tx
+            .query_row(
+                "SELECT backend FROM session_runtime WHERE session_id=?1",
+                [session_id],
+                |row| row.get(0),
+            )
+            .optional()?;
+        match bound {
+            Some(name) if name == backend.as_str() => {}
+            Some(name) => {
+                return Err(StoreError::RuntimeBindingConflict {
+                    session_id: session_id.to_string(),
+                    bound: name,
+                    requested: backend.as_str().to_string(),
+                });
+            }
+            None => {
+                tx.execute(
+                    "INSERT INTO session_runtime(session_id,backend,contract_version) VALUES (?1,?2,?3)",
+                    rusqlite::params![session_id, backend.as_str(), contract_version],
+                )?;
+            }
+        }
+        tx.commit()?;
+        Ok(())
     }
 
     /// Atomically add one provider-owned historical session. The deterministic imported session
@@ -2640,6 +2744,7 @@ impl Store {
             ));
         }
         tx.execute("DELETE FROM parts WHERE session_id=?1", [session_id])?;
+        tx.execute("DELETE FROM session_runtime WHERE session_id=?1", [session_id])?;
         tx.execute("DELETE FROM sessions WHERE id=?1", [session_id])?;
         tx.commit()?;
         Ok(())
@@ -2671,6 +2776,7 @@ impl Store {
         tx.execute("DELETE FROM memory_receipts WHERE session_id=?1", [id])?;
         tx.execute("DELETE FROM memories WHERE session_id=?1", [id])?;
         tx.execute("DELETE FROM parts WHERE session_id=?1", [id])?;
+        tx.execute("DELETE FROM session_runtime WHERE session_id=?1", [id])?;
         let changed = tx.execute("DELETE FROM sessions WHERE id=?1 AND transient=1", [id])?;
         tx.commit()?;
         Ok(changed > 0)

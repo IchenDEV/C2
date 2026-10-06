@@ -1158,3 +1158,192 @@ async fn codex_real_app_server_initializes_and_creates_a_thread_without_a_turn()
     runtime.terminate();
     assert!(runtime.diagnostics().process.termination_requested);
 }
+
+
+// ---- SDK sidecar: real child process ------------------------------------------------------------
+//
+// These run the real `script/provider-sidecars/claude/sidecar.mjs` under Node with a fake SDK
+// module, so the process boundary, line framing, shutdown and the Rust `SidecarRuntime` are
+// exercised together. No model, credential or network is involved, and they prove the contract,
+// not Claude behavior.
+
+mod sidecar_process {
+    use super::*;
+    use codetwo_core::connectors::sidecar::{self, SidecarLaunch};
+    use std::path::PathBuf;
+
+    fn repo_root() -> PathBuf {
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")
+    }
+
+    fn node() -> Option<PathBuf> {
+        let output = std::process::Command::new("node").arg("--version").output().ok()?;
+        output.status.success().then(|| PathBuf::from("node"))
+    }
+
+    fn launch_spec(sdk_module: &str) -> Option<SidecarLaunch> {
+        let runtime = node()?;
+        let root = repo_root().join("script/provider-sidecars");
+        Some(SidecarLaunch {
+            backend: RuntimeBackendKind::ClaudeAgentSdk,
+            runtime,
+            args: vec![root.join("claude/sidecar.mjs").to_string_lossy().into_owned()],
+            env: vec![(
+                "CODETWO_SIDECAR_SDK_MODULE".into(),
+                if sdk_module.starts_with('/') {
+                    sdk_module.to_string()
+                } else {
+                    root.join(sdk_module).to_string_lossy().into_owned()
+                },
+            )],
+            cwd: None,
+            client_version: "test".into(),
+        })
+    }
+
+    fn text(value: &str) -> Vec<RuntimeContent> {
+        vec![RuntimeContent::Text(value.into())]
+    }
+
+    #[tokio::test]
+    async fn real_sidecar_process_roundtrip() {
+        let Some(spec) = launch_spec("common/fake-claude-sdk.mjs") else {
+            panic!("node is required for the sidecar process tests");
+        };
+        let recorder = Arc::new(Recorder::default());
+        let runtime = sidecar::launch(&spec, recorder.clone()).await.unwrap();
+        let init = runtime.initialize().await.unwrap();
+        assert_eq!(init.identity.backend, RuntimeBackendKind::ClaudeAgentSdk);
+        assert_eq!(
+            init.identity.adapter_name.as_deref(),
+            Some("@anthropic-ai/claude-agent-sdk")
+        );
+        assert_eq!(init.capabilities.steering, SteerSupport::Unsupported);
+        assert_eq!(init.capabilities.stop, StopSupport::VerifiedTerminal);
+
+        let state = runtime
+            .start_session(RuntimeSessionStart {
+                cwd: std::env::temp_dir().to_string_lossy().into_owned(),
+                mcp_servers: Vec::new(),
+                execution: ASK,
+            })
+            .await
+            .unwrap();
+        assert!(!state.backend_session_id.is_empty());
+        assert_eq!(state.models.as_ref().unwrap().available[0].id, "fake");
+
+        // A plain turn: streamed text, then the SDK's own terminal.
+        let outcome = runtime
+            .send_turn(&state.backend_session_id, text("hello"))
+            .await;
+        assert!(matches!(outcome, TurnOutcome::Terminal(TurnTerminal::EndTurn)), "{outcome:?}");
+        assert_eq!(recorder.texts(), "Hello from fake");
+
+        // A tool turn: the approval crosses the process boundary and back.
+        recorder
+            .permission_script
+            .lock()
+            .unwrap()
+            .push_back(RuntimePermissionOutcome::Selected("allow".into()));
+        let outcome = runtime
+            .send_turn(&state.backend_session_id, text("use a tool"))
+            .await;
+        assert!(matches!(outcome, TurnOutcome::Terminal(TurnTerminal::EndTurn)), "{outcome:?}");
+        let permissions = recorder.permissions.lock().unwrap();
+        assert_eq!(permissions.len(), 1);
+        assert_eq!(permissions[0].tool_call["kind"], "execute");
+        assert_eq!(permissions[0].tool_call["title"], "echo hi");
+        drop(permissions);
+
+        // A dismissed approval is a denial, never an approval.
+        let outcome = runtime
+            .send_turn(&state.backend_session_id, text("another tool"))
+            .await;
+        assert!(matches!(outcome, TurnOutcome::Terminal(TurnTerminal::EndTurn)));
+        let tool_results: Vec<_> = recorder
+            .events
+            .lock()
+            .unwrap()
+            .iter()
+            .filter_map(|(_, e)| match e {
+                RuntimeEvent::ToolUpdate(call) => call.status.clone(),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(tool_results, ["completed", "failed"]);
+
+        runtime.terminate();
+    }
+
+    #[tokio::test]
+    async fn stop_is_a_request_and_the_turn_ends_from_the_sdk_terminal() {
+        let Some(spec) = launch_spec("common/fake-claude-sdk.mjs") else {
+            panic!("node is required for the sidecar process tests");
+        };
+        let recorder = Arc::new(Recorder::default());
+        let runtime = sidecar::launch(&spec, recorder).await.unwrap();
+        runtime.initialize().await.unwrap();
+        let state = runtime
+            .start_session(RuntimeSessionStart {
+                cwd: std::env::temp_dir().to_string_lossy().into_owned(),
+                mcp_servers: Vec::new(),
+                execution: ASK,
+            })
+            .await
+            .unwrap();
+        let session = state.backend_session_id.clone();
+        let turn = {
+            let runtime = runtime.clone();
+            let session = session.clone();
+            tokio::spawn(async move { runtime.send_turn(&session, text("hang")).await })
+        };
+        tokio::time::sleep(Duration::from_millis(300)).await;
+        assert!(!turn.is_finished(), "turn must not end without a terminal");
+        runtime.request_stop(&session).unwrap();
+        let outcome = tokio::time::timeout(Duration::from_secs(5), turn)
+            .await
+            .expect("terminal arrives after stop")
+            .unwrap();
+        assert!(matches!(outcome, TurnOutcome::Terminal(TurnTerminal::Cancelled)), "{outcome:?}");
+        runtime.terminate();
+    }
+
+    #[tokio::test]
+    async fn a_missing_sdk_fails_initialize_before_any_session() {
+        let Some(spec) = launch_spec("/nonexistent/sdk.mjs") else {
+            panic!("node is required for the sidecar process tests");
+        };
+        let runtime = sidecar::launch(&spec, Arc::new(Recorder::default()))
+            .await
+            .unwrap();
+        let error = runtime.initialize().await.unwrap_err();
+        assert!(error.to_string().contains("could not be loaded"), "{error}");
+        runtime.terminate();
+    }
+
+    #[tokio::test]
+    async fn a_sidecar_that_dies_mid_turn_leaves_the_outcome_unknown_and_never_replays() {
+        let Some(spec) = launch_spec("common/fake-claude-sdk.mjs") else {
+            panic!("node is required for the sidecar process tests");
+        };
+        let runtime = sidecar::launch(&spec, Arc::new(Recorder::default()))
+            .await
+            .unwrap();
+        runtime.initialize().await.unwrap();
+        let state = runtime
+            .start_session(RuntimeSessionStart {
+                cwd: std::env::temp_dir().to_string_lossy().into_owned(),
+                mcp_servers: Vec::new(),
+                execution: ASK,
+            })
+            .await
+            .unwrap();
+        let session = state.backend_session_id;
+        let outcome = runtime.send_turn(&session, text("crash now")).await;
+        assert!(matches!(outcome, TurnOutcome::Unknown(_)), "{outcome:?}");
+        // The prompt reached the process, so it is never re-sent; a later send is provably unsent.
+        let later = runtime.send_turn(&session, text("again")).await;
+        assert!(matches!(later, TurnOutcome::NotSent(_)), "{later:?}");
+        runtime.terminate();
+    }
+}

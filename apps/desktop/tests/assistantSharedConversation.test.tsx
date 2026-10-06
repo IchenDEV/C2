@@ -11,9 +11,6 @@ import {
   waitFor,
 } from "./domTestHarness";
 activateDom();
-// BlockNote/Excalidraw probe canvas at import; same narrow stub as editorCanvasRendered.
-dom.window.HTMLCanvasElement.prototype.getContext = () =>
-  ({ filter: "" }) as never;
 const { AssistantWorkspace } =
   await import("../src/assistant/AssistantWorkspace");
 const { I18nProvider } = await import("../src/i18n");
@@ -86,8 +83,9 @@ function render({ preference = "en" } = {}) {
 // Real contenteditable input: write into the paragraph and let ProseMirror's observer commit it.
 async function typeHtml(html) {
   const root = textbox();
-  root.focus();
-  const inline = root.querySelector(".bn-inline-content");
+  root?.focus();
+  const inline = root?.querySelector(".bn-inline-content") ?? root;
+  if (!inline) return;
   const range = dom.document.createRange();
   range.selectNodeContents(inline);
   const selection = dom.window.getSelection();
@@ -162,45 +160,38 @@ test("send protects against an unchanged-then-edited draft with a new id and the
 });
 
 test("the shared text export preserves nested lists and links and refuses a pasted table", async () => {
-  // BlockNote's selection plugin reads the browser Range constructor after programmatic insert.
-  const previousRange = globalThis.Range;
-  globalThis.Range = dom.window.Range;
-  try {
-    const getBlocksRef = { current: null };
-    const getMarkdownRef = { current: null };
-    const insertMarkdownRef = { current: null };
-    mounted.push(
-      mount(
-        <I18nProvider preferenceOverride="en">
-          <DocEditor
-            textOnly
-            sessionId={null}
-            getBlocksRef={getBlocksRef}
-            getMarkdownRef={getMarkdownRef}
-            insertMarkdownRef={insertMarkdownRef}
-            focusRef={{ current: null }}
-            clearRef={{ current: null }}
-            onEmptyChange={() => {}}
-          />
-        </I18nProvider>
-      )
-    );
-    await waitFor(() => expect(insertMarkdownRef.current).not.toBeNull());
-    await insertMarkdownRef.current(
-      "- parent\n  - child\n\n[reference](https://example.test)",
-      "replace"
-    );
-    const content = await getMarkdownRef.current();
-    expect(content).toContain("parent");
-    expect(content).toContain("child");
-    expect(content).toContain("https://example.test");
-    expect(content).toMatch(/[-*]\s+parent/);
-    await insertMarkdownRef.current(
-      "| A | B |\n| --- | --- |\n| one | two |",
-      "replace"
-    );
-    expect(await getMarkdownRef.current()).toBeNull();
-  } finally {
-    globalThis.Range = previousRange;
-  }
+  const getBlocksRef = { current: null };
+  const getMarkdownRef = { current: null };
+  const insertMarkdownRef = { current: null };
+  mounted.push(
+    mount(
+      <I18nProvider preferenceOverride="en">
+        <DocEditor
+          textOnly
+          sessionId={null}
+          getBlocksRef={getBlocksRef}
+          getMarkdownRef={getMarkdownRef}
+          insertMarkdownRef={insertMarkdownRef}
+          focusRef={{ current: null }}
+          clearRef={{ current: null }}
+          onEmptyChange={() => {}}
+        />
+      </I18nProvider>
+    )
+  );
+  await waitFor(() => expect(insertMarkdownRef.current).not.toBeNull());
+  await insertMarkdownRef.current(
+    "- parent\n  - child\n\n[reference](https://example.test)",
+    "replace"
+  );
+  const content = await getMarkdownRef.current();
+  expect(content).toContain("parent");
+  expect(content).toContain("child");
+  expect(content).toContain("https://example.test");
+  expect(content).toMatch(/[-*]\s+parent/);
+  await insertMarkdownRef.current(
+    "| A | B |\n| --- | --- |\n| one | two |",
+    "replace"
+  );
+  expect(await getMarkdownRef.current()).toBeNull();
 });

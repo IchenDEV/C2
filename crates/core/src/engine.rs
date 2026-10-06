@@ -47,7 +47,7 @@ use crate::permission::{
 };
 use crate::provider::{LaunchSpec, Provider, ProviderId, ProviderToolset};
 use crate::provider_runtime::{
-    RuntimeCallbacks, RuntimeCapabilities, RuntimeContent, RuntimeEvent, RuntimeHandle,
+    RuntimeBackendKind, RuntimeCallbacks, RuntimeCapabilities, RuntimeContent, RuntimeEvent, RuntimeHandle,
     RuntimeInit, RuntimePermissionOutcome, RuntimePermissionRequest, RuntimeQuestionOutcome,
     RuntimeQuestionRequest, RuntimeSessionRestore, RuntimeSessionStart, SteerOutcome,
     SteerSupport, TurnOutcome,
@@ -2920,6 +2920,10 @@ struct EngineState {
     /// Optional global parent for new session worktrees. `None` preserves the project-adjacent
     /// `.codetwo-worktrees` layout used by older versions.
     worktree_root: RwLock<Option<std::path::PathBuf>>,
+    native_backends: RwLock<crate::connectors::select::NativeBackends>,
+    /// Turn a user stopped before its prompt reached the backend, per session. A stop request sent
+    /// ahead of the prompt would otherwise be a no-op and the turn would then run unstoppable.
+    stopped_before_send: Mutex<HashMap<String, String>>,
     desktop_mcp: Option<DesktopMcpConfig>,
     /// Live host-backed special tools keyed by provider id. Each session snapshots its provider's
     /// entry on creation because ACP accepts MCP servers only at session creation/load.
@@ -3216,6 +3220,8 @@ impl Engine {
             canvas_gate,
             private_data_dir: RwLock::new(None),
             worktree_root: RwLock::new(None),
+            native_backends: RwLock::new(crate::connectors::select::NativeBackends::from_env()),
+            stopped_before_send: Mutex::new(HashMap::new()),
             desktop_mcp,
             provider_tools,
             turn_liveness_timeouts: RwLock::new(TurnLivenessTimeouts::default()),
@@ -3522,6 +3528,45 @@ impl Engine {
     /// through this root, and non-desktop constructors leave it unavailable.
     pub fn set_private_data_dir(&self, data_dir: impl Into<std::path::PathBuf>) {
         *self.state.private_data_dir.write().unwrap() = Some(data_dir.into());
+    }
+
+    /// Replace the native-backend opt-in set and sidecar location. Affects sessions created or
+    /// provider-switched afterwards; a session keeps the backend it was bound to.
+    pub fn set_native_backends(&self, backends: crate::connectors::select::NativeBackends) {
+        *self.state.native_backends.write().unwrap() = backends;
+    }
+
+    /// Start the backend chosen for a session. A native backend that cannot start is returned as
+    /// an error: it is never replaced by ACP.
+    async fn launch_runtime(
+        &self,
+        kind: RuntimeBackendKind,
+        launch: &LaunchSpec,
+        handler: Arc<SessionHandler>,
+    ) -> Result<RuntimeHandle, crate::provider_runtime::RuntimeError> {
+        let backends = self.state.native_backends.read().unwrap().clone();
+        backends.launch(kind, launch, handler).await
+    }
+
+    fn backend_for_new_session(&self, provider: &ProviderId) -> RuntimeBackendKind {
+        self.state
+            .native_backends
+            .read()
+            .unwrap()
+            .select_for_new_session(provider)
+    }
+
+    /// Backend a persisted session was bound to. No row means the session predates native
+    /// backends: it is ACP.
+    fn backend_for_persisted_session(&self, id: &str) -> Result<RuntimeBackendKind, String> {
+        let Some(store) = &self.state.store else {
+            return Ok(RuntimeBackendKind::Acp);
+        };
+        match store.session_runtime_binding(id) {
+            Ok(Some((kind, _))) => Ok(kind),
+            Ok(None) => Ok(RuntimeBackendKind::Acp),
+            Err(error) => Err(format!("couldn't read session backend: {error}")),
+        }
     }
 
     pub fn set_worktree_root(&self, root: Option<std::path::PathBuf>) {
@@ -4404,6 +4449,13 @@ impl Engine {
             return Ok(());
         };
         liveness.advance();
+        if let Some((turn_id, _)) = &active_turn {
+            self.state
+                .stopped_before_send
+                .lock()
+                .unwrap()
+                .insert(session.to_string(), turn_id.clone());
+        }
         if let Err(error) = client.request_stop(&acp_session_id) {
             if let Some((turn_id, request_id)) = active_turn {
                 let message = format!(
@@ -4632,7 +4684,9 @@ impl Engine {
         let callback_active = handler.activity_flag();
         let native_commands = handler.native_commands();
         let liveness = handler.liveness();
-        let client: RuntimeHandle = crate::connectors::acp::launch(&launch, handler.clone())
+        let backend = self.backend_for_new_session(&provider);
+        let client: RuntimeHandle = self
+            .launch_runtime(backend, &launch, handler.clone())
             .await
             .map_err(|error| format!("couldn't start {}: {error}", target.display_name))?;
         if !self.track_starting_client(&client) {
@@ -4696,12 +4750,13 @@ impl Engine {
             replacement_policy.sandbox = updated.sandbox_policy;
         }
         if let Some(store) = &self.state.store {
-            match store.switch_session_provider(
+            match store.switch_session_provider_with_runtime(
                 session,
                 &original.provider,
                 &provider,
                 model.as_deref(),
                 &continuation,
+                backend.is_native().then_some(backend),
             ) {
                 Ok(true) => {}
                 Ok(false) => {
@@ -5265,7 +5320,9 @@ impl Engine {
         let callback_active = handler.activity_flag();
         let native_commands = handler.native_commands();
         let liveness = handler.liveness();
-        let client: RuntimeHandle = crate::connectors::acp::launch(&launch, handler.clone())
+        let backend = self.backend_for_persisted_session(id)?;
+        let client: RuntimeHandle = self
+            .launch_runtime(backend, &launch, handler.clone())
             .await
             .map_err(|error| format!("couldn't relaunch {}: {error}", prov.display_name))?;
         if !self.track_starting_client(&client) {
@@ -5742,10 +5799,11 @@ impl Engine {
                 let callback_active = handler.activity_flag();
                 let native_commands = handler.native_commands();
                 let liveness = handler.liveness();
-                let client: RuntimeHandle =
-                    crate::connectors::acp::launch(&launch, handler.clone())
-                        .await
-                        .map_err(AcpError::from)?;
+                let backend = self.backend_for_new_session(&sess.provider);
+                let client: RuntimeHandle = self
+                    .launch_runtime(backend, &launch, handler.clone())
+                    .await
+                    .map_err(AcpError::from)?;
                 if !self.track_starting_client(&client) {
                     return Err(AcpError::Closed);
                 }
@@ -5775,6 +5833,24 @@ impl Engine {
                         return Err(error.into());
                     }
                 };
+                if backend.is_native() {
+                    // Bind before the first provider session exists, so a restart can only ever
+                    // resume this session through the backend that created it.
+                    if let Some(store) = &self.state.store {
+                        if let Err(error) = store.bind_session_runtime(
+                            &sess.id,
+                            backend,
+                            crate::provider_runtime::RUNTIME_CONTRACT_VERSION,
+                        ) {
+                            self.untrack_starting_client(&client);
+                            client.terminate();
+                            return Err(AcpError::Rpc(crate::error::RpcError::new(
+                                -32603,
+                                format!("couldn't record the session backend: {error}"),
+                            )));
+                        }
+                    }
+                }
                 let interaction = init.capabilities.steering;
                 handler.set_interaction_capabilities(crate::acp::wire::InteractionCapabilities {
                     steering: interaction == SteerSupport::Native,
@@ -7027,6 +7103,18 @@ impl Engine {
                         turn_lease.fail_provider(error);
                         liveness.end_turn();
                         return;
+                    }
+                    {
+                        let mut stopped = turn_engine.state.stopped_before_send.lock().unwrap();
+                        if stopped.get(&sess_for_task).map(String::as_str)
+                            == Some(turn_lease.turn_id())
+                        {
+                            stopped.remove(&sess_for_task);
+                            drop(stopped);
+                            turn_lease.fail_provider("Stopped before the prompt was sent");
+                            liveness.end_turn();
+                            return;
+                        }
                     }
                     let outcome = await_provider_prompt(
                         client.send_turn(&acp_sid, blocks),

@@ -13,9 +13,6 @@ import {
   flush,
 } from "./domTestHarness";
 activateDom();
-// BlockNote/Excalidraw probe canvas at import; same narrow stub as editorCanvasRendered.
-dom.window.HTMLCanvasElement.prototype.getContext = () =>
-  ({ filter: "" }) as never;
 const { AssistantWorkspace } =
   await import("../src/assistant/AssistantWorkspace");
 const { I18nProvider } = await import("../src/i18n");

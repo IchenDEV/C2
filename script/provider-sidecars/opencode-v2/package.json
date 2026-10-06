@@ -1,0 +1,10 @@
+{
+  "name": "@codetwo/sidecar-opencode-v2",
+  "private": true,
+  "type": "module",
+  "version": "0.0.0",
+  "description": "C2 sidecar for OpenCode V2 (@opencode/sdk, embedded host). Distinct from OpenCode V1. Pinned exactly.",
+  "dependencies": {
+    "@opencode/sdk": "2.0.23"
+  }
+}
