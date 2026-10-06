@@ -191,6 +191,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     break;
                 }
                 Event::Usage { .. } => {}
+                Event::SubagentUpdated { .. } => {}
+                Event::ThreadDisposition { .. } => {}
                 Event::ContextWindow { .. } => {}
                 Event::MemoryContext { receipt, .. } => {
                     println!("memory: {} recalled items", receipt.items.len());

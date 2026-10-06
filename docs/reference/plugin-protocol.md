@@ -205,9 +205,8 @@ dispatch work, steer workers, change control, accept deliverables, confirm memor
 requests or send messages. Paused/budget/attention and unknown receipts stay distinct. Source
 capacity, gaps and ambiguous input references are visible in the existing notification channel and
 on-demand Event sources inspector; arrival does not increment the user's assistant revision.
-See the approved [event ingress design](../sdlc/changes/2026-10-05-assistant-event-ingress/spec.md)
-for the binding, bounded retention and observation-only authority contract. This protocol does not
-implement a platform subscription or a cloud listener.
+The binding, bounded retention and observation-only authority contract above applies to this
+protocol. It does not implement a platform subscription or a cloud listener.
 
 ## Events
 

@@ -211,6 +211,21 @@ async fn shutdown_signal() -> Result<(), String> {
     }
 }
 
+fn wire_external_mcp(engine: &codetwo_core::Engine, data_dir: &Path) {
+    use codetwo_core::external_mcp::state::EXTERNAL_MCP_ENV;
+    if !std::env::var(EXTERNAL_MCP_ENV)
+        .ok()
+        .is_some_and(|value| value == "1" || value.eq_ignore_ascii_case("true"))
+    {
+        return;
+    }
+    engine.external_mcp_state().set_enabled(true);
+    match engine.external_mcp_state().configure_data_dir(data_dir) {
+        Ok(()) => eprintln!("external MCP enabled (POST /external-mcp on this server)"),
+        Err(error) => eprintln!("external MCP not started: {error}"),
+    }
+}
+
 async fn run() -> Result<(), String> {
     let Some(options) = parse_args(std::env::args().skip(1).collect())? else {
         println!("{}", usage());
@@ -230,6 +245,7 @@ async fn run() -> Result<(), String> {
         .ok_or_else(|| "engine plugin did not load".to_string())?
         .0
         .clone();
+    wire_external_mcp(&engine, &options.data_dir);
     let store = core
         .service::<StoreService>()
         .ok_or_else(|| "store plugin did not load".to_string())?

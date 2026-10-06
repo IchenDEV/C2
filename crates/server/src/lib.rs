@@ -19,13 +19,24 @@
 //!   `{"kind":"sessions_error",…}` frames, never successful empty lists.
 
 mod auth;
+pub mod cli;
+pub mod serve;
+pub mod remote;
+pub mod external_mcp;
+pub mod external_mcp_stream;
+pub mod host_mcp;
 pub mod t3_compat;
 pub mod terminal;
 
-pub use auth::{AuthState, Device, DeviceInfo, Paired, DEFAULT_PAIRING_TTL, WS_TICKET_TTL};
+pub use auth::{
+    AuthRateLimit, AuthState, Device, DeviceInfo, Paired, DEFAULT_PAIRING_TTL, REMOTE_PAIRING_TTL,
+    WS_TICKET_TTL,
+};
 
 use std::collections::HashMap;
 use std::net::{Ipv4Addr, SocketAddr};
+
+use axum::extract::ConnectInfo;
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -33,7 +44,7 @@ use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::extract::{Path, Query, State};
 use axum::http::{header, HeaderMap, HeaderValue, StatusCode};
 use axum::response::{Html, IntoResponse, Response};
-use axum::routing::{any, get, post};
+use axum::routing::{any, get, get_service, post};
 use axum::{extract::DefaultBodyLimit, Json, Router};
 use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
@@ -790,6 +801,20 @@ pub async fn bind_and_serve_with_web_ui(
         .route("/api/web-ui/call", post(web_ui_call))
         .with_state(state.clone())
         .layer(DefaultBodyLimit::max(MAX_WEB_UI_CALL_BODY_BYTES));
+    let external_mcp_routes = Router::new()
+        .route(
+            "/external-mcp",
+            post(external_mcp::post_external_mcp)
+                .get(external_mcp_stream::get_external_mcp_stream)
+                .with_state(state.engine.clone()),
+        )
+        .layer(DefaultBodyLimit::max(external_mcp::MAX_EXTERNAL_MCP_BODY_BYTES));
+    let host_mcp_routes = Router::new()
+        .route(
+            "/mcp",
+            post(host_mcp::post_host_mcp).with_state(state.engine.clone()),
+        )
+        .layer(DefaultBodyLimit::max(host_mcp::MAX_HOST_MCP_BODY_BYTES));
     let app = Router::new()
         .route("/terminal", get(index))
         .route("/health", get(|| async { "ok" }))
@@ -857,7 +882,7 @@ pub async fn bind_and_serve_with_web_ui(
         // Axum 0.7/matchit 0.7 uses `/*path` for a safe terminal catch-all.
         .route("/canvas/*path", get(canvas_asset))
         .route("/ws", any(ws_handler))
-        .with_state(state)
+        .with_state(state.clone())
         .merge(t3_compat::router(t3))
         .layer(DefaultBodyLimit::max(
             codetwo_core::canvas::MAX_CANVAS_TOTAL_BYTES + 4_000_000,
@@ -865,19 +890,33 @@ pub async fn bind_and_serve_with_web_ui(
         .merge(handoff_routes)
         .merge(device_sync_pair_route)
         .merge(device_sync_snapshot_routes)
-        .merge(web_ui_routes);
+        .merge(web_ui_routes)
+        .merge(host_mcp_routes)
+        .merge(external_mcp_routes);
     let app = if let Some(web_ui_dir) = web_ui_dir {
         let index = web_ui_dir.join("index.html");
-        app.fallback_service(ServeDir::new(web_ui_dir).not_found_service(ServeFile::new(index)))
+        let spa_index = ServeFile::new(index.clone());
+        app.route("/", get_service(spa_index.clone()))
+            .route("/pair", get_service(spa_index))
+            .fallback_service(ServeDir::new(web_ui_dir).not_found_service(ServeFile::new(index)))
     } else {
         app.route("/", get(index)).route("/pair", get(index))
     }
+    .layer(axum::middleware::from_fn(remote::remote_access_guard))
     .layer(axum::middleware::map_response(no_store_headers));
 
     let listener = TcpListener::bind(addr).await?;
     let local = listener.local_addr()?;
+    state.engine.set_host_mcp_http_endpoint(Some(format!(
+        "http://127.0.0.1:{}/mcp",
+        local.port()
+    )));
     let handle = tokio::spawn(async move {
-        let _ = axum::serve(listener, app.into_make_service()).await;
+        let _ = axum::serve(
+            listener,
+            app.into_make_service_with_connect_info::<SocketAddr>(),
+        )
+        .await;
     });
     Ok((local, handle))
 }
@@ -894,13 +933,14 @@ struct WebUiCallBody {
 
 async fn web_ui_call(
     State(st): State<Arc<ServerState>>,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
     headers: HeaderMap,
     Json(body): Json<WebUiCallBody>,
 ) -> Response {
     let Some(commands) = &st.web_ui_commands else {
         return (StatusCode::NOT_FOUND, "C2 Web UI commands are unavailable").into_response();
     };
-    let device_id = match require_device(&st, &headers) {
+    let device_id = match require_device(&st, &headers, Some(peer)) {
         Ok(device_id) => device_id,
         Err(response) => return response,
     };
@@ -1036,10 +1076,43 @@ async fn no_store_headers(mut response: Response) -> Response {
     response
 }
 
-fn require_device(st: &ServerState, headers: &HeaderMap) -> Result<String, Response> {
-    let device_id = bearer_from(headers)
-        .and_then(|bearer| st.auth.authorize_bearer(bearer))
-        .ok_or_else(|| (StatusCode::UNAUTHORIZED, "invalid bearer").into_response())?;
+fn auth_rate_limit_response(limit: auth::AuthRateLimit) -> Response {
+    let mut response = (
+        StatusCode::TOO_MANY_REQUESTS,
+        "too many authentication attempts",
+    )
+        .into_response();
+    if let Ok(value) = HeaderValue::from_str(&limit.retry_after_secs.to_string()) {
+        response
+            .headers_mut()
+            .insert(header::RETRY_AFTER, value);
+    }
+    response
+}
+
+fn require_device(
+    st: &ServerState,
+    headers: &HeaderMap,
+    peer: Option<SocketAddr>,
+) -> Result<String, Response> {
+    let limit_key = peer.map(|peer| remote::auth_limiter_source_key(headers, peer));
+    if let Some(ref key) = limit_key {
+        if let Err(limit) = st.auth.check_auth_rate_limit(key) {
+            return Err(auth_rate_limit_response(limit));
+        }
+    }
+    let Some(device_id) = bearer_from(headers).and_then(|bearer| st.auth.authorize_bearer(bearer))
+    else {
+        if let Some(key) = limit_key {
+            if let Some(limit) = st.auth.record_auth_failure(&key) {
+                return Err(auth_rate_limit_response(limit));
+            }
+        }
+        return Err((StatusCode::UNAUTHORIZED, "invalid bearer").into_response());
+    };
+    if let Some(key) = limit_key {
+        st.auth.record_auth_success(&key);
+    }
     if st.auth.member_for_device(&device_id).is_some() {
         return Err((
             StatusCode::FORBIDDEN,
@@ -1175,7 +1248,7 @@ fn parse_revision(value: &str) -> Result<CanvasRevision, Response> {
 }
 
 async fn canvas_feature(State(st): State<Arc<ServerState>>, headers: HeaderMap) -> Response {
-    if let Err(response) = require_device(&st, &headers) {
+    if let Err(response) = require_device(&st, &headers, None) {
         return response;
     }
     Json(CanvasFeatureState {
@@ -1191,7 +1264,7 @@ async fn canvas_create_draft(
     headers: HeaderMap,
     Json(body): Json<CanvasCreateBody>,
 ) -> Response {
-    let owner = match require_device(&st, &headers) {
+    let owner = match require_device(&st, &headers, None) {
         Ok(owner) => owner,
         Err(response) => return response,
     };
@@ -1209,7 +1282,7 @@ async fn canvas_get_draft(
     headers: HeaderMap,
     Path(id): Path<String>,
 ) -> Response {
-    let owner = match require_device(&st, &headers) {
+    let owner = match require_device(&st, &headers, None) {
         Ok(owner) => owner,
         Err(response) => return response,
     };
@@ -1226,7 +1299,7 @@ async fn canvas_update_draft(
     Path(id): Path<String>,
     Json(body): Json<CanvasUpdateBody>,
 ) -> Response {
-    let owner = match require_device(&st, &headers) {
+    let owner = match require_device(&st, &headers, None) {
         Ok(owner) => owner,
         Err(response) => return response,
     };
@@ -1247,7 +1320,7 @@ async fn canvas_normalize_media(
     headers: HeaderMap,
     Json(body): Json<CanvasMediaBody>,
 ) -> Response {
-    if let Err(response) = require_device(&st, &headers) {
+    if let Err(response) = require_device(&st, &headers, None) {
         return response;
     }
     if let Err(error) = st.canvas_gate.require() {
@@ -1265,7 +1338,7 @@ async fn canvas_normalize_draft_media(
     Path(id): Path<String>,
     Json(body): Json<CanvasMediaBody>,
 ) -> Response {
-    let owner = match require_device(&st, &headers) {
+    let owner = match require_device(&st, &headers, None) {
         Ok(owner) => owner,
         Err(response) => return response,
     };
@@ -1290,7 +1363,7 @@ async fn canvas_freeze_draft(
     Path(id): Path<String>,
     Json(body): Json<CanvasFreezeBody>,
 ) -> Response {
-    let owner = match require_device(&st, &headers) {
+    let owner = match require_device(&st, &headers, None) {
         Ok(owner) => owner,
         Err(response) => return response,
     };
@@ -1311,7 +1384,7 @@ async fn canvas_get_snapshot(
     headers: HeaderMap,
     Path((id, revision)): Path<(String, String)>,
 ) -> Response {
-    if let Err(response) = require_device(&st, &headers) {
+    if let Err(response) = require_device(&st, &headers, None) {
         return response;
     }
     let revision = match parse_revision(&revision) {
@@ -1332,7 +1405,7 @@ async fn artifact_download(
     headers: HeaderMap,
     Path(id): Path<String>,
 ) -> Response {
-    if let Err(response) = require_device(&st, &headers) {
+    if let Err(response) = require_device(&st, &headers, None) {
         return response;
     }
     let Some(artifacts) = codetwo_core::ArtifactStore::from_store(st.store.clone()) else {
@@ -1403,7 +1476,7 @@ async fn canvas_get_asset(
     headers: HeaderMap,
     Path((id, revision, asset_id)): Path<(String, String, String)>,
 ) -> Response {
-    if let Err(response) = require_device(&st, &headers) {
+    if let Err(response) = require_device(&st, &headers, None) {
         return response;
     }
     let revision = match parse_revision(&revision) {
@@ -1435,7 +1508,7 @@ async fn canvas_get_export(
     headers: HeaderMap,
     Path((id, revision, export_id)): Path<(String, String, String)>,
 ) -> Response {
-    if let Err(response) = require_device(&st, &headers) {
+    if let Err(response) = require_device(&st, &headers, None) {
         return response;
     }
     let revision = match parse_revision(&revision) {
@@ -1467,7 +1540,7 @@ async fn canvas_duplicate(
     headers: HeaderMap,
     Path((id, revision)): Path<(String, String)>,
 ) -> Response {
-    let owner = match require_device(&st, &headers) {
+    let owner = match require_device(&st, &headers, None) {
         Ok(owner) => owner,
         Err(response) => return response,
     };
@@ -1492,7 +1565,7 @@ async fn canvas_tombstone(
     headers: HeaderMap,
     Path(id): Path<String>,
 ) -> Response {
-    let owner = match require_device(&st, &headers) {
+    let owner = match require_device(&st, &headers, None) {
         Ok(owner) => owner,
         Err(response) => return response,
     };
@@ -1507,7 +1580,7 @@ async fn canvas_restore(
     headers: HeaderMap,
     Path(id): Path<String>,
 ) -> Response {
-    let owner = match require_device(&st, &headers) {
+    let owner = match require_device(&st, &headers, None) {
         Ok(owner) => owner,
         Err(response) => return response,
     };
@@ -1522,7 +1595,7 @@ async fn canvas_purge(
     headers: HeaderMap,
     Path(id): Path<String>,
 ) -> Response {
-    let owner = match require_device(&st, &headers) {
+    let owner = match require_device(&st, &headers, None) {
         Ok(owner) => owner,
         Err(response) => return response,
     };
@@ -1540,10 +1613,27 @@ struct PairBody {
 }
 
 /// Exchange a one-time pairing token for a per-device bearer.
-async fn pair(State(st): State<Arc<ServerState>>, Json(body): Json<PairBody>) -> Response {
+async fn pair(
+    State(st): State<Arc<ServerState>>,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
+    Json(body): Json<PairBody>,
+) -> Response {
+    let key = remote::auth_limiter_source_key(&headers, peer);
+    if let Err(limit) = st.auth.check_auth_rate_limit(&key) {
+        return auth_rate_limit_response(limit);
+    }
     match st.auth.try_pair(&body.token, &body.device_name) {
-        Ok(Some(paired)) => Json(paired).into_response(),
-        Ok(None) => (StatusCode::UNAUTHORIZED, "invalid or expired pairing token").into_response(),
+        Ok(Some(paired)) => {
+            st.auth.record_auth_success(&key);
+            Json(paired).into_response()
+        }
+        Ok(None) => {
+            if let Some(limit) = st.auth.record_auth_failure(&key) {
+                return auth_rate_limit_response(limit);
+            }
+            (StatusCode::UNAUTHORIZED, "invalid or expired pairing token").into_response()
+        }
         Err(error) => (
             StatusCode::INTERNAL_SERVER_ERROR,
             format!("could not persist the paired device: {error}"),
@@ -1964,10 +2054,22 @@ struct WsTicketReply {
 
 /// Mint a short-lived single-use WebSocket ticket for a paired device (bearer in the
 /// `Authorization` header).
-async fn ws_ticket(State(st): State<Arc<ServerState>>, headers: HeaderMap) -> Response {
+async fn ws_ticket(
+    State(st): State<Arc<ServerState>>,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
+) -> Response {
+    let key = remote::auth_limiter_source_key(&headers, peer);
+    if let Err(limit) = st.auth.check_auth_rate_limit(&key) {
+        return auth_rate_limit_response(limit);
+    }
     let Some(device_id) = bearer_from(&headers).and_then(|b| st.auth.authorize_bearer(b)) else {
+        if let Some(limit) = st.auth.record_auth_failure(&key) {
+            return auth_rate_limit_response(limit);
+        }
         return (StatusCode::UNAUTHORIZED, "invalid bearer").into_response();
     };
+    st.auth.record_auth_success(&key);
     let ticket = st.auth.issue_ws_ticket(&device_id);
     Json(WsTicketReply {
         ticket,
@@ -2002,7 +2104,7 @@ async fn ws_handler(
 
 /// List live terminals so a reconnecting browser can reattach instead of respawning.
 async fn list_terminals(State(st): State<Arc<ServerState>>, headers: HeaderMap) -> Response {
-    if let Err(response) = require_device(&st, &headers) {
+    if let Err(response) = require_device(&st, &headers, None) {
         return response;
     }
     Json(st.terminals.list()).into_response()
@@ -2015,7 +2117,7 @@ async fn kill_terminal(
     headers: HeaderMap,
     Path(id): Path<String>,
 ) -> Response {
-    if let Err(response) = require_device(&st, &headers) {
+    if let Err(response) = require_device(&st, &headers, None) {
         return response;
     }
     if st.terminals.kill(&id) {

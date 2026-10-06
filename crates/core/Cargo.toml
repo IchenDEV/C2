@@ -33,6 +33,7 @@ tempfile = "3"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 notify = "8.2"
 fs2 = "0.4.3"
+libc = "0.2"
 # Ghostty's VT engine (parsing, scrollback, reflow) behind a C API. NOTE: this builds Ghostty from
 # source with Zig — see the terminal section of docs/reference/architecture.md for the toolchain requirement.
 libghostty-vt = { version = "0.2", optional = true }

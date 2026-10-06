@@ -39,6 +39,11 @@ use crate::connectors::acp::encode_mcp_servers;
 use crate::connectors::acp::reasoning_option_from_models;
 use crate::error::AcpError;
 use crate::event::{ConfigOptionInfo, Event, ModelChoice, Op};
+use crate::external_mcp::events::EventSender;
+use crate::host_mcp::{
+    tools as host_mcp_tools, HostMcpAuditRecord, HostMcpCapability, HostMcpScope, HostMcpState,
+    ResolvedHostMcpCredential,
+};
 use crate::memory::{prompt_source, MemoryCanvasRef, MemoryCapability, MemoryTurnProvenance};
 use crate::models::available_models;
 use crate::permission::{
@@ -50,7 +55,7 @@ use crate::provider_runtime::{
     RuntimeBackendKind, RuntimeCallbacks, RuntimeCapabilities, RuntimeContent, RuntimeEvent, RuntimeHandle,
     RuntimeInit, RuntimePermissionOutcome, RuntimePermissionRequest, RuntimeQuestionOutcome,
     RuntimeQuestionRequest, RuntimeSessionRestore, RuntimeSessionStart, SteerOutcome,
-    SteerSupport, TurnOutcome,
+    SteerSupport, ThreadDisposition, TurnOutcome,
 };
 use crate::session::{
     initial_session_title, tool_status_is_in_flight, tool_status_is_terminal,
@@ -694,7 +699,7 @@ where
 /// parts, resolves permissions, and advances the provider-neutral liveness clock.
 pub struct SessionHandler {
     session_id: SessionId,
-    events: mpsc::UnboundedSender<Event>,
+    events: EventSender,
     policy: Arc<Mutex<PermissionPolicy>>,
     router: PermissionRouter,
     store: Option<Arc<Store>>,
@@ -713,26 +718,29 @@ pub struct SessionHandler {
     /// Provider activity can start a turn without a matching `session/prompt` future.
     /// Retain its activity lease until a provider-owned `session_info_update` closes the turn.
     external_turn: Mutex<Option<TurnLease>>,
+    subagent_status: Mutex<HashMap<String, crate::subagent::SubagentStatus>>,
+    subagent_runs: Option<Arc<Mutex<HashMap<String, crate::subagent::SubagentRun>>>>,
 }
 
 impl SessionHandler {
     pub fn new(
         session_id: SessionId,
-        events: mpsc::UnboundedSender<Event>,
+        events: impl Into<EventSender>,
         policy: Arc<Mutex<PermissionPolicy>>,
         router: PermissionRouter,
         store: Option<Arc<Store>>,
     ) -> Self {
-        Self::new_with_activity(session_id, events, policy, router, store, true)
+        Self::new_with_activity(session_id, events.into(), policy, router, store, true, None)
     }
 
     fn new_with_activity(
         session_id: SessionId,
-        events: mpsc::UnboundedSender<Event>,
+        events: EventSender,
         policy: Arc<Mutex<PermissionPolicy>>,
         router: PermissionRouter,
         store: Option<Arc<Store>>,
         active: bool,
+        subagent_runs: Option<Arc<Mutex<HashMap<String, crate::subagent::SubagentRun>>>>,
     ) -> Self {
         Self {
             session_id,
@@ -750,17 +758,28 @@ impl SessionHandler {
             replaying: Arc::default(),
             active: Arc::new(AtomicBool::new(active)),
             external_turn: Mutex::new(None),
+            subagent_status: Mutex::new(HashMap::new()),
+            subagent_runs,
         }
     }
 
     fn inactive(
         session_id: SessionId,
-        events: mpsc::UnboundedSender<Event>,
+        events: EventSender,
         policy: Arc<Mutex<PermissionPolicy>>,
         router: PermissionRouter,
         store: Option<Arc<Store>>,
+        subagent_runs: Option<Arc<Mutex<HashMap<String, crate::subagent::SubagentRun>>>>,
     ) -> Self {
-        Self::new_with_activity(session_id, events, policy, router, store, false)
+        Self::new_with_activity(
+            session_id,
+            events,
+            policy,
+            router,
+            store,
+            false,
+            subagent_runs,
+        )
     }
 
     fn activity_flag(&self) -> Arc<AtomicBool> {
@@ -867,6 +886,60 @@ impl SessionHandler {
             .cloned()
             .unwrap_or_default()
     }
+
+    fn session_provider(&self) -> crate::provider::ProviderId {
+        self.store
+            .as_ref()
+            .and_then(|store| store.get_session(self.session_id.as_str()).ok())
+            .and_then(|session| session)
+            .map(|session| session.provider)
+            .unwrap_or(crate::provider::ProviderId::Custom("unknown".into()))
+    }
+
+    fn maybe_emit_subagent(
+        &self,
+        tool_call_id: &str,
+        title: &str,
+        kind: &Option<String>,
+        status: &str,
+        agent_input: Option<&serde_json::Value>,
+        raw_output: Option<&serde_json::Value>,
+        outputs: &[ToolOutput],
+        started_at_ms: Option<i64>,
+    ) {
+        use crate::subagent::{derive_subagent_run, now_unix_ms, SubagentStatus};
+        let completed_at_ms = crate::session::tool_status_is_terminal(status).then(now_unix_ms);
+        let Some(run) = derive_subagent_run(
+            &self.session_id,
+            self.session_provider(),
+            tool_call_id,
+            title,
+            kind.as_deref(),
+            status,
+            agent_input,
+            raw_output,
+            outputs,
+            started_at_ms,
+            completed_at_ms,
+            None,
+        ) else {
+            return;
+        };
+        let mut statuses = self.subagent_status.lock().unwrap();
+        let previous = statuses.get(&run.id).copied();
+        if !SubagentStatus::should_replace(previous, run.status) {
+            return;
+        }
+        statuses.insert(run.id.clone(), run.status);
+        drop(statuses);
+        if let Some(index) = &self.subagent_runs {
+            index.lock().unwrap().insert(run.id.clone(), run.clone());
+        }
+        self.emit(Event::SubagentUpdated {
+            session: self.session_id.clone(),
+            subagent: run,
+        });
+    }
 }
 
 #[derive(Debug, Clone, Default)]
@@ -882,6 +955,10 @@ struct ToolContext {
     test_command: Option<String>,
     /// One signal per tool call: set when the terminal outcome has been emitted.
     test_signaled: bool,
+    agent_input: Option<serde_json::Value>,
+    subagent_started_at_ms: Option<i64>,
+    /// Latest provider-side structured output for subagent result projection.
+    last_raw_output: Option<serde_json::Value>,
 }
 
 const MAX_PERSISTED_TOOL_UPDATE_PREVIEW_CHARS: usize = 2_048;
@@ -1453,6 +1530,8 @@ fn session_create_receipt(request_id: Option<&str>) -> Option<(&'static str, Str
     let (protocol, encoded) = if let Some(encoded) = request_id.strip_prefix("c2-assistant-create:")
     {
         ("c2-assistant-create", encoded)
+    } else if let Some(encoded) = request_id.strip_prefix("c2-external-create:") {
+        ("c2-external-create", encoded)
     } else {
         ("t3-create", request_id.strip_prefix("t3-create:")?)
     };
@@ -1533,7 +1612,7 @@ fn agent_input_projection(
         "workflow",
     ];
     const NESTED: [&str; 4] = ["arguments", "args", "input", "params"];
-    const ALLOWED: [&str; 20] = [
+    const ALLOWED: [&str; 21] = [
         "agent_type",
         "agentType",
         "subagent_type",
@@ -1554,6 +1633,7 @@ fn agent_input_projection(
         "tool_name",
         "toolName",
         "operation",
+        "model",
     ];
 
     fn normalize(value: &str) -> String {
@@ -1712,6 +1792,121 @@ mod agent_input_projection_tests {
             projected["message"].as_str().unwrap().chars().count(),
             2_048
         );
+    }
+}
+
+#[cfg(test)]
+mod subagent_emission_tests {
+    use super::SessionHandler;
+    use crate::acp::wire::{SessionNotification, SessionUpdate, ToolCall, ToolCallUpdate};
+    use crate::acp::ClientHandler;
+    use crate::engine::PermissionRouter;
+    use crate::event::Event;
+    use crate::permission::PermissionPolicy;
+    use crate::provider::ProviderId;
+    use crate::session::Session;
+    use crate::store::Store;
+    use crate::subagent::SubagentStatus;
+    use serde_json::json;
+    use std::sync::{Arc, Mutex};
+    use tokio::sync::mpsc;
+
+    #[tokio::test]
+    async fn agent_like_tool_calls_emit_bounded_subagent_updated_events() {
+        let store = Arc::new(Store::open_in_memory().unwrap());
+        let mut session = Session::new(ProviderId::ClaudeCode, "/work");
+        session.id = "session-1".into();
+        store.upsert_session(&session).unwrap();
+        let (events, mut received) = mpsc::unbounded_channel();
+        let handler = SessionHandler::new(
+            session.id.clone(),
+            events,
+            Arc::new(Mutex::new(PermissionPolicy::default())),
+            PermissionRouter::default(),
+            Some(store),
+        );
+
+        handler
+            .session_update(SessionNotification {
+                session_id: "provider".into(),
+                update: SessionUpdate::ToolCall(ToolCall {
+                    tool_call_id: "task-1".into(),
+                    title: Some("Explore auth".into()),
+                    kind: Some("agent".into()),
+                    status: Some("in_progress".into()),
+                    content: None,
+                    raw_input: Some(json!({"prompt": "Find login", "model": "sonnet"})),
+                    raw_output: None,
+                    meta: None,
+                }),
+            })
+            .await;
+        assert!(matches!(
+            received.recv().await,
+            Some(Event::ToolCall { kind: Some(kind), .. }) if kind == "agent"
+        ));
+        match received.recv().await {
+            Some(Event::SubagentUpdated { subagent, .. }) => {
+                assert_eq!(subagent.id, "session-1:task-1");
+                assert_eq!(subagent.parent_tool_call_id, "task-1");
+                assert_eq!(subagent.prompt_summary.as_deref(), Some("Find login"));
+                assert_eq!(subagent.model.as_deref(), Some("sonnet"));
+                assert_eq!(subagent.status, SubagentStatus::Running);
+            }
+            other => panic!("expected SubagentUpdated, got {other:?}"),
+        }
+
+        handler
+            .session_update(SessionNotification {
+                session_id: "provider".into(),
+                update: SessionUpdate::ToolCallUpdate(ToolCallUpdate {
+                    tool_call_id: "task-1".into(),
+                    title: None,
+                    status: Some("completed".into()),
+                    content: Some(json!({"type": "text", "text": "Found OAuth flow"})),
+                    kind: None,
+                    raw_input: None,
+                    raw_output: Some(json!({"result_summary": "OAuth flow documented"})),
+                    meta: None,
+                }),
+            })
+            .await;
+        assert!(matches!(
+            received.recv().await,
+            Some(Event::ToolCall { status, .. }) if status == "completed"
+        ));
+        match received.recv().await {
+            Some(Event::SubagentUpdated { subagent, .. }) => {
+                assert_eq!(subagent.status, SubagentStatus::Completed);
+                assert_eq!(
+                    subagent.result_summary.as_deref(),
+                    Some("OAuth flow documented")
+                );
+                assert!(subagent.completed_at.is_some());
+            }
+            other => panic!("expected terminal SubagentUpdated, got {other:?}"),
+        }
+
+        handler
+            .session_update(SessionNotification {
+                session_id: "provider".into(),
+                update: SessionUpdate::ToolCallUpdate(ToolCallUpdate {
+                    tool_call_id: "task-1".into(),
+                    title: None,
+                    status: Some("in_progress".into()),
+                    content: Some(json!({"type": "text", "text": "should not regress"})),
+                    kind: None,
+                    raw_input: None,
+                    raw_output: None,
+                    meta: None,
+                }),
+            })
+            .await;
+        assert!(matches!(
+            received.recv().await,
+            Some(Event::ToolCall { .. })
+        ));
+        assert!(received.try_recv().is_err());
     }
 }
 
@@ -2251,6 +2446,7 @@ impl ClientHandler for SessionHandler {
                     tc.raw_input.as_ref(),
                 );
                 let tool_kind = rich_tool_kind(provider_kind, &source, &title);
+                let started_at_ms = Some(crate::subagent::now_unix_ms());
                 let mut context = ToolContext {
                     title: title.clone(),
                     kind: tool_kind.clone(),
@@ -2258,6 +2454,9 @@ impl ClientHandler for SessionHandler {
                     outputs: Vec::new(),
                     test_command,
                     test_signaled: false,
+                    agent_input: agent_input.clone(),
+                    subagent_started_at_ms: started_at_ms,
+                    last_raw_output: tc.raw_output.clone(),
                 };
                 let normalized = self.normalizer.normalize(
                     tc.content.as_ref(),
@@ -2327,6 +2526,13 @@ impl ClientHandler for SessionHandler {
                 } else {
                     outputs.clone()
                 };
+                let agent_input = u
+                    .raw_input
+                    .as_ref()
+                    .and_then(|raw| {
+                        agent_input_projection(kind.as_deref(), Some(&title), Some(raw))
+                    })
+                    .or(previous.agent_input.clone());
                 self.remember_tool(
                     &u.tool_call_id,
                     ToolContext {
@@ -2337,6 +2543,12 @@ impl ClientHandler for SessionHandler {
                         // The initial ToolCall owns classification; updates only carry it through.
                         test_command: previous.test_command.clone(),
                         test_signaled: previous.test_signaled,
+                        agent_input: agent_input.clone(),
+                        subagent_started_at_ms: previous.subagent_started_at_ms,
+                        last_raw_output: u
+                            .raw_output
+                            .clone()
+                            .or(previous.last_raw_output.clone()),
                     },
                 );
                 (
@@ -2351,11 +2563,11 @@ impl ClientHandler for SessionHandler {
                         transcript_seq: None,
                     }),
                     Some(Part::ToolCall {
-                        id: u.tool_call_id,
-                        title,
-                        status,
-                        tool_kind: kind,
-                        agent_input: None,
+                        id: u.tool_call_id.clone(),
+                        title: title.clone(),
+                        status: status.clone(),
+                        tool_kind: kind.clone(),
+                        agent_input: agent_input.clone(),
                         outputs: persisted_outputs,
                     }),
                     normalized.warnings,
@@ -2454,6 +2666,29 @@ impl ClientHandler for SessionHandler {
             _ => None,
         };
         if let Some(mut event) = event {
+            let subagent_followup = if let Event::ToolCall {
+                id,
+                title,
+                status,
+                kind,
+                outputs,
+                ..
+            } = &event
+            {
+                let ctx = self.tool_context(id);
+                Some((
+                    id.clone(),
+                    title.clone(),
+                    kind.clone(),
+                    status.clone(),
+                    ctx.agent_input.clone(),
+                    ctx.last_raw_output.clone(),
+                    outputs.clone(),
+                    ctx.subagent_started_at_ms,
+                ))
+            } else {
+                None
+            };
             match &mut event {
                 Event::AgentText {
                     transcript_seq: seq,
@@ -2470,6 +2705,28 @@ impl ClientHandler for SessionHandler {
                 _ => {}
             }
             self.emit(event);
+            if let Some((
+                id,
+                title,
+                kind,
+                status,
+                agent_input,
+                raw_output,
+                outputs,
+                started_at_ms,
+            )) = subagent_followup
+            {
+                self.maybe_emit_subagent(
+                    &id,
+                    &title,
+                    &kind,
+                    &status,
+                    agent_input.as_ref(),
+                    raw_output.as_ref(),
+                    &outputs,
+                    started_at_ms,
+                );
+            }
         }
         if let Some(signal) = test_signal {
             self.emit(signal);
@@ -2810,6 +3067,8 @@ struct SessionRuntime {
     /// MCP servers already attached to the live ACP session. ACP only accepts them on session
     /// creation/load, so later turns may reuse but cannot silently add a new server.
     mcp_servers: Vec<McpServer>,
+    /// Process-local bearer for the built-in HTTP host MCP server. Never logged or serialized.
+    host_mcp_bearer: Option<String>,
     /// Mutes this session's [`SessionHandler`] while `session/load` replays history.
     replaying: Arc<AtomicBool>,
     callback_active: Arc<AtomicBool>,
@@ -2861,6 +3120,17 @@ struct SessionCreationOptions {
     reasoning_effort: Option<String>,
 }
 
+/// Result of one execution-policy commit, decided against the state actually in force.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PolicyCommit {
+    /// The pair was durably stored and applied to the live session.
+    Applied(ExecutionPolicy),
+    /// A tighten-only request would have loosened an axis; nothing was written.
+    Loosens(ExecutionPolicy),
+    /// No such session.
+    NoSession,
+}
+
 /// Native creation request for the user-visible parallel-task action. Core generates the runtime
 /// Work Item and Agent identities so a renderer cannot pretend that local UI state is an Agent.
 #[derive(Debug, Clone)]
@@ -2896,7 +3166,8 @@ struct EngineState {
     scenes: Mutex<Arc<crate::scene::SceneLibrary>>,
     /// Scene-artifact capture layer for the TurnEnded auto-capture glue; `None` without a store.
     scene_artifacts: Mutex<Option<crate::scene_artifact::SceneArtifactStore>>,
-    events: mpsc::UnboundedSender<Event>,
+    /// The one authoritative event sender: every clone feeds the external-MCP tap exactly once.
+    events: EventSender,
     sessions: Mutex<HashMap<SessionId, SessionRuntime>>,
     /// Process-local half of the task-transfer fence. The durable store fence protects restarts;
     /// this set closes the interval before and during the SQLite handoff transaction.
@@ -2933,6 +3204,12 @@ struct EngineState {
     coordination_bridge: RwLock<Option<crate::assistant_bridge::AssistantBridge>>,
     assistant_creations: Mutex<HashMap<String, (Arc<AtomicBool>, Option<RuntimeHandle>)>>,
     revivals: Mutex<HashMap<String, (Arc<AtomicBool>, Option<RuntimeHandle>)>>,
+    host_mcp: HostMcpState,
+    external_mcp: crate::external_mcp::state::ExternalMcpState,
+    subagent_runs: Arc<Mutex<HashMap<String, crate::subagent::SubagentRun>>>,
+    plugin_command_bridge: RwLock<
+        Option<Arc<dyn Fn(&str, serde_json::Value) -> Result<serde_json::Value, String> + Send + Sync>>,
+    >,
 }
 
 struct ProviderSwitchGuard {
@@ -3192,12 +3469,15 @@ impl Engine {
         desktop_mcp: Option<DesktopMcpConfig>,
         provider_tools: Arc<RwLock<HashMap<String, ProviderToolset>>>,
     ) -> (Engine, mpsc::UnboundedReceiver<Event>) {
-        let (events, rx) = mpsc::unbounded_channel();
+        let (tx, rx) = mpsc::unbounded_channel();
         if let Some(store) = &store {
             if let Err(error) = store.normalize_interrupted_activities() {
                 tracing::warn!("normalize interrupted session activity failed: {error}");
             }
         }
+        // The external-MCP tap must exist before any producer clones the sender.
+        let external_mcp = crate::external_mcp::state::ExternalMcpState::with_store(store.clone());
+        let events = EventSender::tapped(tx, external_mcp.tap());
         let activity = ActivityTracker::new(events.clone(), store.clone());
         let router = PermissionRouter::with_tracker(activity.clone());
         let state = Arc::new(EngineState {
@@ -3229,8 +3509,29 @@ impl Engine {
             coordination_bridge: RwLock::new(None),
             assistant_creations: Mutex::new(HashMap::new()),
             revivals: Mutex::new(HashMap::new()),
+            host_mcp: HostMcpState::new(),
+            external_mcp,
+            subagent_runs: Arc::new(Mutex::new(HashMap::new())),
+            plugin_command_bridge: RwLock::new(None),
         });
-        (Engine { state }, rx)
+        let engine = Engine { state: state.clone() };
+        if engine.state.store.is_some() {
+            let draining = engine.clone();
+            engine.state.activity.set_turn_terminal_hook(Arc::new(
+                move || {
+                    let engine = draining.clone();
+                    tokio::spawn(async move {
+                        if let Err(error) = engine.drain_prompt_deliveries().await {
+                            tracing::warn!(
+                                %error,
+                                "prompt delivery drain after turn terminal failed"
+                            );
+                        }
+                    });
+                },
+            ));
+        }
+        (engine, rx)
     }
 
     pub fn router(&self) -> &PermissionRouter {
@@ -3479,9 +3780,15 @@ impl Engine {
         {
             liveness.advance();
         }
-        self.state
+        // The pending snapshot the tracker publishes is the authority for `*.resolved`; these
+        // hooks only label a removal caused by this answer as `answered`.
+        self.state.external_mcp.begin_answer(request_id);
+        let accepted = self
+            .state
             .router
-            .answer_for_session(session, request_id, option_id)
+            .answer_for_session(session, request_id, option_id);
+        self.state.external_mcp.finish_answer(request_id, accepted);
+        accepted
     }
 
     /// Answer a parked structured question. Returns false when the id is unknown or already
@@ -3502,9 +3809,13 @@ impl Engine {
         {
             liveness.advance();
         }
-        self.state
+        self.state.external_mcp.begin_answer(request_id);
+        let accepted = self
+            .state
             .router
-            .answer_elicitation_for_session(session, request_id, answer)
+            .answer_elicitation_for_session(session, request_id, answer);
+        self.state.external_mcp.finish_answer(request_id, accepted);
+        accepted
     }
 
     /// The shared skill library (for the picker / management UI).
@@ -3563,6 +3874,14 @@ impl Engine {
             return Ok(RuntimeBackendKind::Acp);
         };
         match store.session_runtime_binding(id) {
+            // A newer build may have changed what the contract means; refuse rather than guess.
+            // Bumping `RUNTIME_CONTRACT_VERSION` must come with handling for older bindings.
+            Ok(Some((_, version))) if version > crate::provider_runtime::RUNTIME_CONTRACT_VERSION => {
+                Err(format!(
+                    "session was created with provider runtime contract v{version}, but this build supports up to v{}; update the app to continue it",
+                    crate::provider_runtime::RUNTIME_CONTRACT_VERSION
+                ))
+            }
             Ok(Some((kind, _))) => Ok(kind),
             Ok(None) => Ok(RuntimeBackendKind::Acp),
             Err(error) => Err(format!("couldn't read session backend: {error}")),
@@ -3577,6 +3896,29 @@ impl Engine {
     /// `reload_scenes` calls both). Prompts compiled afterwards see the new definitions.
     pub fn set_scenes(&self, library: Arc<crate::scene::SceneLibrary>) {
         *self.state.scenes.lock().unwrap() = library;
+    }
+
+    pub fn scenes(&self) -> Arc<crate::scene::SceneLibrary> {
+        self.state.scenes.lock().unwrap().clone()
+    }
+
+    pub fn subagent_runs(&self, session: &str) -> Vec<crate::subagent::SubagentRun> {
+        self.state.subagent_runs.lock().unwrap().values()
+            .filter(|run| run.id == crate::subagent::subagent_id(&session.to_owned(), &run.parent_tool_call_id))
+            .cloned().collect()
+    }
+
+    pub(crate) fn set_plugin_command_bridge(&self, bridge: Option<Arc<dyn Fn(&str, Value) -> Result<Value, String> + Send + Sync>>) {
+        *self.state.plugin_command_bridge.write().unwrap() = bridge;
+    }
+
+    pub(crate) fn call_scene_command(&self, name: &str, args: Value) -> Result<Value, String> {
+        if !matches!(name, "scenes.apply" | "pipelines.start") {
+            return Err("scene command is not exported".into());
+        }
+        let bridge = self.state.plugin_command_bridge.read().unwrap().clone()
+            .ok_or("scene commands are unavailable on this host")?;
+        bridge(name, args)
     }
 
     /// Attach the scene-artifact capture layer (desktop wiring; mirrors store wiring).
@@ -4468,13 +4810,7 @@ impl Engine {
                 {
                     client.terminate();
                     if self.state.store.is_some() {
-                        let mut sessions = self.state.sessions.lock().unwrap();
-                        if sessions
-                            .get(session)
-                            .is_some_and(|runtime| Arc::ptr_eq(&runtime.client, &client))
-                        {
-                            sessions.remove(session);
-                        }
+                        self.evict_runtime_if_current(session, &client);
                     }
                     self.emit(Event::Error {
                         session: Some(session.to_string()),
@@ -4487,6 +4823,42 @@ impl Engine {
             return Err(error.into());
         }
         Ok(())
+    }
+
+    /// Reserve an idle session's single turn slot. `try_start_turn` falls back to the durable
+    /// snapshot, so a persisted Running session is busy even before the tracker has seen it.
+    /// Hold the lease for the whole mutation; dropping it releases the slot. Work done under it
+    /// (policy/scene/store writes) must not submit a prompt for the same session: that needs
+    /// this very slot.
+    pub fn reserve_idle_session(&self, session: &str) -> Result<TurnLease, String> {
+        self.try_start_turn(session, None).map_err(str::to_string)
+    }
+
+    /// Delete an idle session while reserving its single-writer slot. Keep workspace files.
+    pub fn delete_idle_session(&self, session: &str) -> Result<bool, String> {
+        let store = self.state.store.as_ref().ok_or("persistence unavailable")?;
+        if store.get_session(session).map_err(|_| "session lookup failed")?.is_none() {
+            return Ok(false);
+        }
+        let _reservation = self.reserve_idle_session(session)?;
+        // Do not terminate any active turn. The reservation excludes every new prompt writer.
+        // Store first: on failure the live runtime is untouched; on success the tombstone makes
+        // any late runtime write a no-op before the runtime is evicted below.
+        let deleted = store.delete_idle_session(session).map_err(|error| match error {
+            StoreError::SessionLeaseConflict { .. } => "session is referenced by task history".to_string(),
+            StoreError::SessionHandoffFenced { .. } => "session is fenced by a task handoff".to_string(),
+            _ => "session deletion refused".to_string(),
+        })?;
+        if deleted {
+            self.revoke_host_mcp_session(session);
+            if let Some(runtime) = self.state.sessions.lock().unwrap().remove(session) {
+                runtime.client.terminate();
+            }
+            self.state.subagent_runs.lock().unwrap().retain(|_, run| {
+                run.id != crate::subagent::subagent_id(&session.to_owned(), &run.parent_tool_call_id)
+            });
+        }
+        Ok(deleted)
     }
 
     /// Stop and forget one app-lifetime side chat. Durable sessions are deliberately refused.
@@ -4661,6 +5033,7 @@ impl Engine {
             policy.clone(),
             self.state.router.clone(),
             self.state.store.clone(),
+            Some(self.state.subagent_runs.clone()),
         ));
         let provider_toolset = self.provider_toolset(&provider);
         let provider_context_injected = provider == ProviderId::Codex;
@@ -4778,6 +5151,7 @@ impl Engine {
             }
         }
 
+        self.revoke_host_mcp_session(session);
         let old_runtime = live_sessions.remove(session);
         callback_active.store(true, Ordering::Release);
         self.untrack_starting_client(&client);
@@ -4796,6 +5170,7 @@ impl Engine {
                 native_commands: native_commands.clone(),
                 liveness,
                 mcp_servers: Vec::new(),
+                host_mcp_bearer: None,
                 replaying,
                 callback_active,
                 cwd: updated.cwd.clone(),
@@ -4848,6 +5223,231 @@ impl Engine {
         bridge: Option<crate::assistant_bridge::AssistantBridge>,
     ) {
         *self.state.coordination_bridge.write().unwrap() = bridge;
+    }
+
+    pub fn set_host_mcp_enabled(&self, enabled: bool) {
+        self.state.host_mcp.set_enabled(enabled);
+    }
+
+    pub fn host_mcp_enabled(&self) -> bool {
+        self.state.host_mcp.is_enabled()
+    }
+
+    /// Loopback HTTP MCP URL (for example `http://127.0.0.1:PORT/mcp`). Tokens are never logged.
+    pub fn set_host_mcp_http_endpoint(&self, url: Option<String>) {
+        self.state.host_mcp.set_endpoint(url);
+    }
+
+    pub fn host_mcp_http_endpoint(&self) -> Option<String> {
+        self.state.host_mcp.endpoint()
+    }
+
+    pub fn host_mcp_state(&self) -> &HostMcpState {
+        &self.state.host_mcp
+    }
+
+    /// Runtime state of the external MCP surface (credentials, event hub, audit; default off).
+    pub fn external_mcp_state(&self) -> &crate::external_mcp::state::ExternalMcpState {
+        &self.state.external_mcp
+    }
+
+    pub fn registered_providers(&self) -> &[Provider] {
+        &self.state.providers
+    }
+
+    pub fn native_backends_snapshot(&self) -> crate::connectors::select::NativeBackends {
+        self.state.native_backends.read().unwrap().clone()
+    }
+
+    /// MCP servers attached to the live provider session (for diagnostics/tests).
+    pub fn attached_mcp_servers_for_session(&self, session: &str) -> Vec<McpServer> {
+        self.state
+            .sessions
+            .lock()
+            .unwrap()
+            .get(session)
+            .map(|runtime| runtime.mcp_servers.clone())
+            .unwrap_or_default()
+    }
+
+    pub fn handle_host_mcp_json(&self, bearer: &str, body: &Value) -> Value {
+        self.state
+            .host_mcp
+            .handle_http_json(self, bearer, body)
+    }
+
+    pub fn authorize_host_mcp_call(
+        &self,
+        resolved: &ResolvedHostMcpCredential,
+        tool: &str,
+        arguments: &Value,
+    ) -> Result<Value, String> {
+        let required = host_mcp_tools::required_capability(tool)
+            .ok_or_else(|| format!("unknown tool: {tool}"))?;
+        if !resolved.scope.capabilities.contains(&required) {
+            self.record_host_mcp_audit(resolved, tool, false, "missing capability");
+            return Err("tool capability not granted".into());
+        }
+        if tool == host_mcp_tools::TOOL_SESSION_READ {
+            if let Some(target) = arguments.get("session_id").and_then(Value::as_str) {
+                if target != resolved.scope.session_id
+                    && !resolved
+                        .scope
+                        .capabilities
+                        .contains(&HostMcpCapability::SessionReadCross)
+                {
+                    self.record_host_mcp_audit(resolved, tool, false, "cross-session denied");
+                    return Err("cross-session read denied".into());
+                }
+            }
+        }
+        // Fail closed: a credential whose session is no longer live (evicted, stopped) has no
+        // execution policy or project to scope against, so it must not be served at all.
+        let live = self
+            .state
+            .sessions
+            .lock()
+            .unwrap()
+            .get(&resolved.scope.session_id)
+            .map(|runtime| {
+                (
+                    ExecutionPolicy {
+                        mode: runtime.session.permission_mode,
+                        sandbox: runtime.session.sandbox_policy,
+                    },
+                    runtime
+                        .session
+                        .project_path
+                        .clone()
+                        .or_else(|| Some(runtime.session.cwd.clone())),
+                )
+            });
+        let Some((execution, caller_project)) = live else {
+            self.record_host_mcp_audit(resolved, tool, false, "session not live");
+            return Err("session is not live".into());
+        };
+        let policy = PermissionPolicy {
+            mode: execution.mode,
+            sandbox: execution.sandbox,
+            ..Default::default()
+        };
+        if policy.decide("read", tool) == Action::Deny {
+            self.record_host_mcp_audit(resolved, tool, false, "execution policy deny");
+            return Err("denied by execution policy".into());
+        }
+        self.record_host_mcp_audit(resolved, tool, true, "allowed");
+        host_mcp_tools::dispatch(
+            self,
+            &resolved.scope.session_id,
+            caller_project.as_deref(),
+            &resolved.scope.capabilities,
+            tool,
+            arguments,
+        )
+    }
+
+    fn record_host_mcp_audit(
+        &self,
+        resolved: &ResolvedHostMcpCredential,
+        tool: &str,
+        allowed: bool,
+        reason: &str,
+    ) {
+        let record = HostMcpAuditRecord {
+            session_id: resolved.scope.session_id.clone(),
+            provider_id: resolved.scope.provider_id.clone(),
+            tool: tool.to_string(),
+            allowed,
+            reason: reason.to_string(),
+        };
+        tracing::info!(
+            session = %record.session_id,
+            provider = %record.provider_id,
+            tool = %record.tool,
+            allowed = record.allowed,
+            reason = %record.reason,
+            "host_mcp_tool"
+        );
+    }
+
+    fn inject_codetwo_host_mcp_server(
+        &self,
+        session: &str,
+        provider: &ProviderId,
+        target: &mut Vec<McpServer>,
+    ) {
+        if !self.state.host_mcp.injection_ready() {
+            return;
+        }
+        let is_native = self
+            .state
+            .sessions
+            .lock()
+            .unwrap()
+            .get(session)
+            .map(|runtime| runtime.negotiated.identity.backend.is_native())
+            .unwrap_or(false);
+        if !is_native {
+            return;
+        }
+        let endpoint = match self.state.host_mcp.endpoint() {
+            Some(url) => url,
+            None => return,
+        };
+        let bearer = {
+            let mut sessions = self.state.sessions.lock().unwrap();
+            let Some(runtime) = sessions.get_mut(session) else {
+                return;
+            };
+            if let Some(existing) = runtime.host_mcp_bearer.clone() {
+                existing
+            } else {
+                let scope = HostMcpScope {
+                    session_id: session.to_string(),
+                    provider_id: provider.as_str().to_string(),
+                    capabilities: HostMcpCapability::default_read_only_set(),
+                };
+                let issued = self.state.host_mcp.registry().lock().unwrap().issue(scope);
+                let Ok((_credential_id, token)) = issued else {
+                    tracing::warn!("host MCP credential issue failed");
+                    return;
+                };
+                runtime.host_mcp_bearer = Some(token.clone());
+                token
+            }
+        };
+        let server = self.state.host_mcp.build_server(&bearer, &endpoint);
+        attach_host_mcp_servers(target, [server]);
+    }
+
+    /// Drops the live runtime when it still owns `client` and revokes the session's host MCP
+    /// credentials, so a discarded connection cannot keep calling `/mcp`. The next send
+    /// re-resumes the session and issues fresh credentials.
+    fn evict_runtime_if_current(&self, session: &str, client: &RuntimeHandle) {
+        let removed = {
+            let mut sessions = self.state.sessions.lock().unwrap();
+            if sessions
+                .get(session)
+                .is_some_and(|runtime| Arc::ptr_eq(&runtime.client, client))
+            {
+                sessions.remove(session);
+                true
+            } else {
+                false
+            }
+        };
+        if removed {
+            self.revoke_host_mcp_session(session);
+        }
+    }
+
+    fn revoke_host_mcp_session(&self, session: &str) {
+        if let Ok(mut registry) = self.state.host_mcp.registry().lock() {
+            registry.revoke_session(session);
+        }
+        if let Some(runtime) = self.state.sessions.lock().unwrap().get_mut(session) {
+            runtime.host_mcp_bearer = None;
+        }
     }
 
     /// One persistent path for ordinary queued input and managed communication.
@@ -5291,12 +5891,14 @@ impl Engine {
             sandbox: sess.sandbox_policy,
             ..Default::default()
         }));
-        let handler = Arc::new(SessionHandler::new(
+        let handler = Arc::new(SessionHandler::new_with_activity(
             id.to_string(),
             self.state.events.clone(),
             policy.clone(),
             self.state.router.clone(),
             self.state.store.clone(),
+            true,
+            Some(self.state.subagent_runs.clone()),
         ));
         let provider_toolset = self.provider_toolset(&sess.provider);
         let provider_context_injected = sess.provider == ProviderId::Codex;
@@ -5378,6 +5980,7 @@ impl Engine {
                 native_commands: native_commands.clone(),
                 liveness,
                 mcp_servers: Vec::new(),
+                host_mcp_bearer: None,
                 replaying,
                 callback_active,
                 cwd: cwd.clone(),
@@ -5415,6 +6018,41 @@ impl Engine {
         mode: Option<PermissionMode>,
         sandbox: Option<SandboxPolicy>,
     ) -> Result<Option<ExecutionPolicy>, StoreError> {
+        Ok(match self.commit_execution_policy(session, mode, sandbox, false)? {
+            PolicyCommit::Applied(policy) => Some(policy),
+            PolicyCommit::Loosens(_) | PolicyCommit::NoSession => None,
+        })
+    }
+
+    /// Tighten-only policy change for callers that must never loosen (the external MCP surface).
+    /// Axes left `None` keep the value in force at commit time, and the "never loosens either
+    /// axis" check is made against that same value under the lock every other policy writer
+    /// (`update_execution_policy`) takes, so a concurrent change cannot be overwritten or
+    /// loosened by a stale read. Success is broadcast like any other policy change.
+    pub fn tighten_execution_policy(
+        &self,
+        session: &str,
+        mode: Option<PermissionMode>,
+        sandbox: Option<SandboxPolicy>,
+    ) -> Result<PolicyCommit, StoreError> {
+        let outcome = self.commit_execution_policy(session, mode, sandbox, true)?;
+        if let PolicyCommit::Applied(policy) = outcome {
+            self.emit(Event::ExecutionPolicyChanged {
+                session: session.to_string(),
+                policy,
+                request_id: None,
+            });
+        }
+        Ok(outcome)
+    }
+
+    fn commit_execution_policy(
+        &self,
+        session: &str,
+        mode: Option<PermissionMode>,
+        sandbox: Option<SandboxPolicy>,
+        tighten_only: bool,
+    ) -> Result<PolicyCommit, StoreError> {
         let mut sessions = self.state.sessions.lock().unwrap();
         let current = if let Some(runtime) = sessions.get(session) {
             Some(ExecutionPolicy {
@@ -5430,12 +6068,15 @@ impl Engine {
             None
         };
         let Some(current) = current else {
-            return Ok(None);
+            return Ok(PolicyCommit::NoSession);
         };
         let next = ExecutionPolicy {
             mode: mode.unwrap_or(current.mode),
             sandbox: sandbox.unwrap_or(current.sandbox),
         };
+        if tighten_only && !crate::external_mcp::ops_write::policy_tightens(&current, &next) {
+            return Ok(PolicyCommit::Loosens(current));
+        }
 
         // Block permission decisions while the durable and live projections cross the commit
         // boundary. A callback can observe either the complete old pair or the complete new pair,
@@ -5447,7 +6088,7 @@ impl Engine {
         // restart can never resurrect a different execution posture from the one just used.
         if let Some(store) = &self.state.store {
             if !store.set_execution_policy(session, next.mode, next.sandbox)? {
-                return Ok(None);
+                return Ok(PolicyCommit::NoSession);
             }
         }
 
@@ -5463,7 +6104,7 @@ impl Engine {
                 runtime.client.set_execution_policy(backend_session, next);
             }
         }
-        Ok(Some(next))
+        Ok(PolicyCommit::Applied(next))
     }
 
     /// Publish one terminal, authoritative outcome for an execution-policy mutation. Success is
@@ -6051,6 +6692,7 @@ impl Engine {
                         native_commands: native_commands.clone(),
                         liveness,
                         mcp_servers: Vec::new(),
+                        host_mcp_bearer: None,
                         replaying,
                         callback_active,
                         cwd: cwd_stored.clone(),
@@ -6458,6 +7100,11 @@ impl Engine {
                         }
                     }
                 }
+                self.inject_codetwo_host_mcp_server(
+                    &session,
+                    &current_provider,
+                    &mut compiled.mcp_servers,
+                );
                 attach_host_mcp_servers(
                     &mut compiled.mcp_servers,
                     provider_toolset.mcp_servers.iter().cloned(),
@@ -7236,13 +7883,30 @@ impl Engine {
                             }
                         }
                         ProviderPromptOutcome::Completed(
-                            TurnOutcome::NotSent(e)
-                            | TurnOutcome::Rejected(e)
-                            | TurnOutcome::Failed(e)
-                            | TurnOutcome::Unknown(e),
+                            failure @ (TurnOutcome::NotSent(_)
+                            | TurnOutcome::Rejected(_)
+                            | TurnOutcome::Failed(_)
+                            | TurnOutcome::Unknown(_)),
                         ) => {
-                            let message = e.to_string();
+                            let disposition = failure.thread_disposition();
+                            let message = match &failure {
+                                TurnOutcome::NotSent(e)
+                                | TurnOutcome::Rejected(e)
+                                | TurnOutcome::Failed(e)
+                                | TurnOutcome::Unknown(e) => e.to_string(),
+                                TurnOutcome::Terminal(_) => String::new(),
+                            };
+                            if disposition == ThreadDisposition::Broken {
+                                // The connection state is unproven: drop it so the next send
+                                // re-resumes the session. The failed prompt is never replayed.
+                                client.terminate();
+                                turn_engine.evict_runtime_if_current(&sess_for_task, &client);
+                            }
                             if turn_lease.fail_provider(message.clone()) {
+                                let _ = events.send(Event::ThreadDisposition {
+                                    session: sess_for_task.clone(),
+                                    disposition,
+                                });
                                 let _ = events.send(Event::Error {
                                     session: Some(sess_for_task),
                                     message,
@@ -7257,15 +7921,7 @@ impl Engine {
                         } => {
                             let _ = client.request_stop(&acp_sid);
                             client.terminate();
-                            {
-                                let mut sessions = turn_engine.state.sessions.lock().unwrap();
-                                if sessions
-                                    .get(&sess_for_task)
-                                    .is_some_and(|runtime| Arc::ptr_eq(&runtime.client, &client))
-                                {
-                                    sessions.remove(&sess_for_task);
-                                }
-                            }
+                            turn_engine.evict_runtime_if_current(&sess_for_task, &client);
                             let minutes = timeout.as_secs().div_ceil(60);
                             let context = if active_tools > 0 {
                                 " while a tool was active"
@@ -7277,6 +7933,10 @@ impl Engine {
                                 if minutes == 1 { "" } else { "s" }
                             );
                             if turn_lease.fail_provider(message.clone()) {
+                                let _ = events.send(Event::ThreadDisposition {
+                                    session: sess_for_task.clone(),
+                                    disposition: ThreadDisposition::Broken,
+                                });
                                 let _ = events.send(Event::Error {
                                     session: Some(sess_for_task),
                                     message,
@@ -7562,6 +8222,7 @@ impl Engine {
     }
 
     fn emit(&self, event: Event) {
+        // Ingestion into the external-MCP ring happens inside the sender, once per event.
         let _ = self.state.events.send(event);
     }
 }
@@ -10011,6 +10672,7 @@ mod cancel_recovery_tests {
                 native_commands: Arc::new(RwLock::new(HashSet::new())),
                 liveness: ProviderLiveness::default(),
                 mcp_servers: Vec::new(),
+                host_mcp_bearer: None,
                 replaying: Arc::new(AtomicBool::new(false)),
                 callback_active: Arc::new(AtomicBool::new(true)),
                 cwd: "/tmp".into(),

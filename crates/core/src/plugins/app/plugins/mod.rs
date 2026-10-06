@@ -6,6 +6,7 @@
 mod assistant;
 mod canvas;
 mod engine;
+mod external_mcp;
 mod extensions;
 mod foundation;
 mod handoff;
@@ -23,6 +24,7 @@ mod workspace_io;
 
 pub use canvas::{CanvasPlugin, DocumentPlugin};
 pub use engine::{EngineBuilder, EngineInputs, EnginePlugin};
+pub use external_mcp::ExternalMcpPlugin;
 pub use extensions::ExtensionsPlugin;
 pub use foundation::{BusPlugin, PathsPlugin, ProvidersPlugin, StorePlugin};
 pub use handoff::HandoffPlugin;
@@ -70,6 +72,7 @@ pub const BUILTIN: &[&str] = &[
     "skills",
     "scenes",
     "engine",
+    "external-mcp",
     "handoff",
     "assistant",
     "git",
@@ -104,6 +107,7 @@ pub fn builtin_registry() -> PluginRegistry {
     registry.register(|| SkillsPlugin);
     registry.register(|| ScenesPlugin);
     registry.register(EnginePlugin::new);
+    registry.register(|| external_mcp::ExternalMcpPlugin);
     registry.register(|| HandoffPlugin);
     registry.register(|| assistant::AssistantPlugin);
     registry.register(|| GitPlugin);
@@ -132,6 +136,7 @@ pub fn builtin_registry() -> PluginRegistry {
         ("bus", PluginCategory::Foundation),
         ("providers", PluginCategory::Foundation),
         ("engine", PluginCategory::Foundation),
+        ("external-mcp", PluginCategory::Integration),
         ("handoff", PluginCategory::Integration),
         ("assistant", PluginCategory::Automation),
         ("memory", PluginCategory::Foundation),

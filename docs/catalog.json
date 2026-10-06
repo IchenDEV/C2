@@ -57,7 +57,8 @@
         "docs/design/scenes-v2-implementation-plan.md",
         "docs/design/taskboard-concept.png",
         "docs/design/taskboard-editor-concept.png",
-        "docs/design/desktop-development-profiles.md"
+        "docs/design/desktop-development-profiles.md",
+        "docs/design/external-mcp.md"
       ]
     },
     {

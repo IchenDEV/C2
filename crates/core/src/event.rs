@@ -280,6 +280,14 @@ pub enum Event {
         session: SessionId,
         stop_reason: String,
     },
+    /// Whether the provider connection behind a session survived a failed turn. `Broken` means
+    /// the connection was discarded and the next send re-resumes the session; the failed prompt
+    /// is never replayed. Emitted immediately before the terminal [`Event::Error`]; consumers
+    /// must tolerate it never firing.
+    ThreadDisposition {
+        session: SessionId,
+        disposition: crate::provider_runtime::ThreadDisposition,
+    },
     /// Terminal receipt of the explicit worktree discard flow: the session's isolated checkout
     /// and `codetwo/…` branch are permanently gone, while the session itself remains readable
     /// history that can no longer run prompts.
@@ -363,6 +371,11 @@ pub enum Event {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         burn_rate_usd_per_hour: Option<f64>,
         priced: bool,
+    },
+    /// Bounded provider-native subagent lifecycle derived from agent-like tool calls.
+    SubagentUpdated {
+        session: SessionId,
+        subagent: crate::subagent::SubagentRun,
     },
     Error {
         session: Option<SessionId>,

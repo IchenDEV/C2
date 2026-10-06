@@ -44,6 +44,14 @@ jobs:
               - 'Cargo.lock'
       - name: Install dependencies
         run: bun install --frozen-lockfile --cwd apps/desktop
+      - name: Repository lifecycle and documentation
+        run: |
+          bun script/verify/sdlc.ts
+          bun script/verify/docs.ts
+          bun test script/verify/checks.test.ts script/verify/four-stage.test.ts script/devflow.test.ts
+      - name: PR scope and readiness
+        if: github.event_name == 'pull_request'
+        run: bun script/devflow.ts check-pr
       - name: Desktop lint and typecheck
         working-directory: apps/desktop
         run: |

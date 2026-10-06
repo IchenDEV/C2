@@ -4361,6 +4361,88 @@ export async function remoteRevokeDevice(id: string): Promise<boolean> {
     : false;
 }
 
+// ---- external MCP credentials -------------------------------------------------------------
+
+export interface ExternalMcpStatus {
+  enabled: boolean;
+  endpoint: string | null;
+  data_dir_configured: boolean;
+  client_count: number;
+  active_client_count: number;
+}
+
+export type ExternalMcpScope = "read" | "operate" | "approve" | "admin";
+
+export type ExternalMcpTtlKind = "default" | "days90" | "days365" | "permanent";
+
+export interface ExternalMcpClient {
+  id: string;
+  name: string;
+  scopes: ExternalMcpScope[];
+  created_at: string;
+  expires_at?: string | null;
+  last_used_at?: string | null;
+  revoked_at?: string | null;
+  status: string;
+  expires_never: boolean;
+  projects_label: string;
+}
+
+export interface ExternalMcpCreateInput {
+  name: string;
+  scopes: ExternalMcpScope[];
+  projects: "all" | string[];
+  ttl:
+    | { kind: "default" }
+    | { kind: "permanent" }
+    | { kind: "days"; days: number };
+}
+
+export interface ExternalMcpCreateResult {
+  record: ExternalMcpClient;
+  token: string;
+  config_snippet: Record<string, unknown>;
+  expires_never: boolean;
+}
+
+export async function externalMcpStatus(): Promise<ExternalMcpStatus | null> {
+  return inDesktop
+    ? await call<ExternalMcpStatus>("external_mcp.status")
+    : null;
+}
+
+export async function externalMcpSetEnabled(
+  enabled: boolean
+): Promise<ExternalMcpStatus | null> {
+  return inDesktop
+    ? await call<ExternalMcpStatus>("external_mcp.set_enabled", { enabled })
+    : null;
+}
+
+export async function externalMcpClientsList(): Promise<ExternalMcpClient[]> {
+  return inDesktop
+    ? await call<ExternalMcpClient[]>("external_mcp.clients.list")
+    : [];
+}
+
+export async function createExternalMcpClient(
+  input: ExternalMcpCreateInput
+): Promise<ExternalMcpCreateResult> {
+  if (!inDesktop) {
+    throw new Error(
+      "External MCP credentials are only available in the desktop app"
+    );
+  }
+  return await call<ExternalMcpCreateResult>(
+    "external_mcp.clients.create",
+    input
+  );
+}
+
+export async function revokeExternalMcpClient(id: string): Promise<void> {
+  if (inDesktop) await call("external_mcp.clients.revoke", { id });
+}
+
 export interface TaskHandoffResult {
   session: string;
   handoff: string;

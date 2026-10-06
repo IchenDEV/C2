@@ -363,6 +363,31 @@ pub enum TurnOutcome {
     Unknown(RuntimeError),
 }
 
+/// Whether the provider thread behind a session can accept another turn on the same live
+/// connection after a failed one. `Broken` means the connection must be discarded and the
+/// session re-resumed; it never implies the failed prompt is replayed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ThreadDisposition {
+    Reusable,
+    Broken,
+}
+
+impl TurnOutcome {
+    /// `Unknown` is the only provider outcome that leaves the connection state unproven: the
+    /// transport may have died or desynchronized. Every other outcome proves the provider
+    /// answered coherently, so the thread stays usable.
+    pub fn thread_disposition(&self) -> ThreadDisposition {
+        match self {
+            TurnOutcome::Unknown(_) => ThreadDisposition::Broken,
+            TurnOutcome::Terminal(_)
+            | TurnOutcome::NotSent(_)
+            | TurnOutcome::Rejected(_)
+            | TurnOutcome::Failed(_) => ThreadDisposition::Reusable,
+        }
+    }
+}
+
 /// Result of a steering request.
 #[derive(Debug, Clone, PartialEq)]
 pub enum SteerOutcome {
@@ -598,5 +623,43 @@ pub trait RuntimeCallbacks: Send + Sync + 'static {
         _request: RuntimeQuestionRequest,
     ) -> RuntimeQuestionOutcome {
         RuntimeQuestionOutcome::Declined
+    }
+}
+
+#[cfg(test)]
+mod thread_disposition_tests {
+    use super::*;
+
+    #[test]
+    fn only_an_unknown_outcome_breaks_the_thread() {
+        let err = || RuntimeError::Closed;
+        assert_eq!(
+            TurnOutcome::Terminal(TurnTerminal::EndTurn).thread_disposition(),
+            ThreadDisposition::Reusable
+        );
+        assert_eq!(
+            TurnOutcome::NotSent(err()).thread_disposition(),
+            ThreadDisposition::Reusable
+        );
+        assert_eq!(
+            TurnOutcome::Rejected(err()).thread_disposition(),
+            ThreadDisposition::Reusable
+        );
+        assert_eq!(
+            TurnOutcome::Failed(err()).thread_disposition(),
+            ThreadDisposition::Reusable
+        );
+        assert_eq!(
+            TurnOutcome::Unknown(err()).thread_disposition(),
+            ThreadDisposition::Broken
+        );
+    }
+
+    #[test]
+    fn disposition_serializes_as_snake_case() {
+        assert_eq!(
+            serde_json::to_string(&ThreadDisposition::Broken).unwrap(),
+            "\"broken\""
+        );
     }
 }

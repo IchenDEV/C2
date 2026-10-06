@@ -48,6 +48,8 @@ pub mod github_skills;
 pub mod handoff;
 pub mod harness;
 pub mod host_tools;
+pub mod external_mcp;
+pub mod host_mcp;
 pub mod issue_delivery;
 pub mod issues;
 pub mod kernel;
@@ -74,6 +76,7 @@ pub mod session_import;
 pub mod skill;
 pub mod source_control;
 pub mod store;
+pub mod subagent;
 pub mod task;
 pub mod task_capsule;
 pub mod task_store;
@@ -123,6 +126,10 @@ pub use host_tools::{
     BrowserUseBackendOption, BrowserUseSettings, ComputerUseBackendOption, ComputerUseSettings,
     HostToolDiscovery,
 };
+pub use host_mcp::{
+    HostMcpAuditRecord, HostMcpCapability, HostMcpRegistry, HostMcpScope, HostMcpState,
+    ResolvedHostMcpCredential, HOST_MCP_SERVER_NAME, PROTOCOL_VERSION as HOST_MCP_PROTOCOL_VERSION,
+};
 pub use issues::Issue;
 pub use keymap::{Action as KeyAction, Keymap};
 pub use market::MarketEntry;
@@ -152,8 +159,8 @@ pub use provider_runtime::{
     RuntimePermissionRequest, RuntimeProcessDiagnostics, RuntimeProtocolAnomaly,
     RuntimeProtocolDiagnostics, RuntimeQuestionOutcome, RuntimeQuestionRequest,
     RuntimeSessionRestore, RuntimeSessionStart, RuntimeSessionState, RuntimeToolCall,
-    SteerOutcome, SteerSupport, StopSupport, Support, TurnOutcome, TurnTerminal,
-    RUNTIME_CONTRACT_VERSION,
+    SteerOutcome, SteerSupport, StopSupport, Support, ThreadDisposition, TurnOutcome,
+    TurnTerminal, RUNTIME_CONTRACT_VERSION,
 };
 pub use pty::PtySession;
 pub use risk_v2::{effect_requires_risk_gate, RiskGateDecision, RiskGateReceipt, UserRiskDecision};
