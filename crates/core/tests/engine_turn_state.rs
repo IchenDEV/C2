@@ -340,8 +340,22 @@ async fn provider_prompt_failure_keeps_the_prompt_correlation() {
         .await
         .unwrap();
     let mut saw_start = false;
+    let mut final_activity = None;
+    let mut saw_broken = false;
     loop {
         match next_event(&mut rx).await {
+            Event::SessionActivityChanged {
+                session: routed,
+                activity,
+            } if routed == session => {
+                final_activity = Some(activity);
+            }
+            Event::ThreadDisposition {
+                session: routed,
+                disposition: codetwo_core::ThreadDisposition::Broken,
+            } if routed == session => {
+                saw_broken = true;
+            }
             Event::TurnStarted {
                 session: routed,
                 request_id,
@@ -367,13 +381,15 @@ async fn provider_prompt_failure_keeps_the_prompt_correlation() {
         }
     }
     assert!(saw_start);
-    let failed = engine
+    // Unknown discards the runtime. The failure snapshot is still published even
+    // when this Engine has no Store from which list_sessions could recover it.
+    assert!(saw_broken);
+    assert!(!engine
         .list_sessions()
         .unwrap()
-        .into_iter()
-        .find(|candidate| candidate.id == session)
-        .unwrap()
-        .activity;
+        .iter()
+        .any(|candidate| candidate.id == session));
+    let failed = final_activity.expect("failed activity published before terminal error");
     assert_eq!(failed.revision, 2);
     assert!(matches!(
         failed.state,

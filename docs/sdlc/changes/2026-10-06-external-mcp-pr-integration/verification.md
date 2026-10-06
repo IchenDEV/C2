@@ -9,7 +9,7 @@ based_on: plan.md
 revision: "Isolated assembled worktree on origin/main 40a2c7c48fc51cbe373a89c5073be7234a931207; excludes unrelated worktree lanes"
 verification_mode: fresh-context
 verified_by: "Cursor Sonnet 5.5 scoped prerequisite reviewer; retained independent core/events/transport reviewers"
-verified_at: 2026-10-06
+verified_at: 2026-10-07
 release_target: none
 cleanup_status: complete
 ---
@@ -54,3 +54,11 @@ Independent pr246-provider-switch-review-r2 returned static PASS for credential 
 Root `cargo test --locked -p codetwo-core --lib engine` passed 67; seven selected host/native/external/prompt integration targets passed 94. Both delegated tasks are terminal and ran no tests. Applicable tests and local verification pass; the prior cancelled CI is not accepted as passing. GitHub CI for the new pushed head remains a separate merge prerequisite. The package's passed state denotes local verification under the workflow, not remote CI success.
 
 Cleanup follow-up: the bounded reproduction process group was terminated/reaped and final tests exited. `ps -axo pid,ppid,command` found no matching task test/fixture child; no user process was touched. New `/tmp/c2-pr-ci-cancelled.log`, switch/Engine/regression logs are retained under the existing root ownership and next-CI checkpoint. The independent review is terminal. No retry job or fee change was created.
+
+### CI turn-state fixture repair and acceptance
+
+GitHub run 37490537058 on 1941c36f passed engine_provider_switch (9 PASS, 1 ignored) and then failed provider_prompt_failure_keeps_the_prompt_correlation in engine_turn_state. Its no-Store fixture queried list_sessions after Unknown had correctly evicted the runtime. The test now observes the already-published SessionActivityChanged failure snapshot and additionally asserts Broken disposition and runtime removal. Existing request correlation, transcript absence, revision and provider-error assertions remain. No production behavior, timeout or skip changed.
+
+Root ran `cargo test --locked -p codetwo-core --test engine_turn_state`: 5 PASS. Root then ran all 45 Core integration targets in one bounded Cargo invocation: all targets PASS (the log is /tmp/c2-pr-core-all-integrations.log). This broader local evidence does not claim full-workspace CI success. Documentation, SDLC and Ready checks are rerun before push; current-head GitHub CI remains the merge gate.
+
+Cleanup checkpoint 2026-10-07: the bounded integration command exited normally and its process group was reaped. Task-only delivery worktree, build output and logs remain owned by root for the next CI completion; dispose after merge or an explicit final blockage handoff. No user service, data directory or unrelated cache was changed.
