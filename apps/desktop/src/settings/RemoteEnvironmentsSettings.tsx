@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -8,14 +8,158 @@ import { Spinner } from "@/components/ui/spinner";
 import { environmentRegistry } from "../coreTransport";
 import { useEnvironments } from "../environment/useEnvironments";
 import { useT } from "../i18n";
-import type { RemoteEnvironment } from "../remoteEnvironments";
+import type {
+  RemoteEnvironment,
+  RemoteServerDevice,
+} from "../remoteEnvironments";
 import { GroupHeading, Page, Row } from "./SettingsPrimitives";
+
+function lastSeenText(seconds: number, never: string): string {
+  return seconds > 0 ? new Date(seconds * 1000).toLocaleString() : never;
+}
+
+function DeviceList({ environment }: { environment: RemoteEnvironment }) {
+  const t = useT();
+  const [devices, setDevices] = useState<RemoteServerDevice[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [confirming, setConfirming] = useState<string | null>(null);
+  const [revoking, setRevoking] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    setDevices(null);
+    setError(null);
+    environmentRegistry.devices(environment.id).then(
+      (list) => {
+        if (active) setDevices(list);
+      },
+      (failure: unknown) => {
+        if (!active) return;
+        setError(failure instanceof Error ? failure.message : String(failure));
+        setDevices([]);
+      }
+    );
+    return () => {
+      active = false;
+    };
+  }, [environment.id]);
+
+  const revoke = async (device: RemoteServerDevice) => {
+    setRevoking(device.id);
+    setError(null);
+    try {
+      const { wasCurrent } = await environmentRegistry.revokeDevice(
+        environment.id,
+        device.id
+      );
+      // The environment is gone when this app signed itself out; this list unmounts with it.
+      if (!wasCurrent) {
+        setDevices(await environmentRegistry.devices(environment.id));
+      }
+    } catch (failure) {
+      setError(failure instanceof Error ? failure.message : String(failure));
+    } finally {
+      setRevoking(null);
+      setConfirming(null);
+    }
+  };
+
+  return (
+    <div className="border-border/60 mt-1 flex flex-col gap-1 border-l pl-3">
+      <p className="text-metadata text-muted-foreground">
+        {t("settings.environmentDevicesHint")}
+      </p>
+      {error != null && (
+        <p role="alert" className="text-metadata text-destructive">
+          {error}
+        </p>
+      )}
+      {devices === null ? (
+        <p className="text-metadata text-muted-foreground">
+          {t("settings.environmentDevicesLoading")}
+        </p>
+      ) : devices.length === 0 ? (
+        <p className="text-metadata text-muted-foreground">
+          {t("settings.environmentDevicesEmpty")}
+        </p>
+      ) : (
+        <ul className="flex flex-col gap-1">
+          {devices.map((device) => (
+            <li
+              key={device.id}
+              data-device-id={device.id}
+              className="flex items-center gap-2 py-1"
+            >
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-1.5">
+                  <span className="truncate">{device.name}</span>
+                  {device.current && (
+                    <Badge variant="secondary">
+                      {t("settings.environmentDeviceThis")}
+                    </Badge>
+                  )}
+                </div>
+                <span className="text-metadata text-muted-foreground block">
+                  {t("settings.environmentDeviceLastSeen", {
+                    time: lastSeenText(
+                      device.lastSeen,
+                      t("settings.environmentDeviceNever")
+                    ),
+                  })}
+                </span>
+                {confirming === device.id && device.current && (
+                  <span className="text-metadata text-destructive block">
+                    {t("settings.environmentDeviceConfirmSelf")}
+                  </span>
+                )}
+              </div>
+              {confirming === device.id ? (
+                <>
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    disabled={revoking !== null}
+                    onClick={() => void revoke(device)}
+                  >
+                    {revoking === device.id ? (
+                      <Spinner />
+                    ) : (
+                      t("settings.environmentDeviceConfirm")
+                    )}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={revoking !== null}
+                    onClick={() => setConfirming(null)}
+                  >
+                    {t("settings.environmentDeviceCancel")}
+                  </Button>
+                </>
+              ) : (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  aria-label={`${t("settings.environmentDeviceRevoke")} ${device.name}`}
+                  onClick={() => setConfirming(device.id)}
+                >
+                  {t("settings.environmentDeviceRevoke")}
+                </Button>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
 
 function EnvironmentRow({ environment }: { environment: RemoteEnvironment }) {
   const t = useT();
   const { statuses } = useEnvironments();
   const status = statuses[environment.id];
   const [workspace, setWorkspace] = useState(environment.workspace ?? "");
+  const [showDevices, setShowDevices] = useState(false);
   const state = status?.state ?? "connecting";
   const label =
     state === "online"
@@ -68,6 +212,23 @@ function EnvironmentRow({ environment }: { environment: RemoteEnvironment }) {
           }
         />
       </Row>
+      <Row
+        compact
+        label={t("settings.environmentDevices")}
+        hint={showDevices ? undefined : t("settings.environmentDevicesHint")}
+      >
+        <Button
+          variant="outline"
+          size="sm"
+          aria-expanded={showDevices}
+          onClick={() => setShowDevices((open) => !open)}
+        >
+          {showDevices
+            ? t("settings.environmentDevicesHide")
+            : t("settings.environmentDevicesShow")}
+        </Button>
+      </Row>
+      {showDevices && <DeviceList environment={environment} />}
     </>
   );
 }

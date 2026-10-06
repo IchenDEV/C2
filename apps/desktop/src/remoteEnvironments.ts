@@ -45,6 +45,19 @@ export interface EnvironmentRegistryDependencies {
   reconnectDelayMs: number;
 }
 
+/** A device paired with a remote server, as that server reports it. */
+export interface RemoteServerDevice {
+  id: string;
+  name: string;
+  protocol: string;
+  /** Unix seconds. */
+  createdAt: number;
+  /** Unix seconds. */
+  lastSeen: number;
+  /** True for the credential this app is using. */
+  current: boolean;
+}
+
 /** Immutable view for UI subscriptions; a new object is produced after every change. */
 export interface EnvironmentsSnapshot {
   environments: RemoteEnvironment[];
@@ -64,6 +77,13 @@ export interface EnvironmentRegistry {
   update(id: string, patch: { name?: string; workspace?: string | null }): void;
   remove(id: string): void;
   transport(id: string): CoreTransport | null;
+  /** Devices paired with that server (any one paired device may review them). */
+  devices(id: string): Promise<RemoteServerDevice[]>;
+  /**
+   * Cut a device off on the server at once. Revoking the credential this app uses also forgets the
+   * environment here, since it could not connect again; the result says whether that happened.
+   */
+  revokeDevice(id: string, deviceId: string): Promise<{ wasCurrent: boolean }>;
   /** Per-device credential for `id`, for protocols that do not run through the Core transport. */
   bearer(id: string): string | null;
   status(id: string): EnvironmentStatus;
@@ -235,12 +255,46 @@ export function createEnvironmentRegistry(
     return created;
   };
 
+  /** Authenticated request to a server's own HTTP API (not the Core command channel). */
+  const serverRequest = async (
+    id: string,
+    path: string,
+    method: "GET" | "POST"
+  ): Promise<unknown> => {
+    const environment = get(id);
+    const bearer = environment ? storage.getItem(bearerKey(id)) : null;
+    if (!environment || bearer === null) {
+      throw new Error("Remote environment is no longer configured");
+    }
+    const response = await dependencies.fetch(`${environment.baseUrl}${path}`, {
+      method,
+      headers: { Authorization: `Bearer ${bearer}` },
+    });
+    const text = await response.text();
+    let payload: unknown = text;
+    try {
+      payload = text ? JSON.parse(text) : null;
+    } catch {
+      payload = text;
+    }
+    if (!response.ok) {
+      throw new Error(
+        response.status === 401
+          ? "This app's credential was rejected by the server. It may have been revoked; remove the environment and pair again."
+          : typeof payload === "string" && payload !== ""
+            ? payload
+            : `Request failed (${response.status})`
+      );
+    }
+    return payload;
+  };
+
   const activeId = (): string | null => {
     const id = storage.getItem(ACTIVE_KEY);
     return id !== null && get(id) ? id : null;
   };
 
-  return {
+  const registry: EnvironmentRegistry = {
     snapshot() {
       // Stable between changes, as useSyncExternalStore requires.
       snapshot ??= {
@@ -351,6 +405,36 @@ export function createEnvironmentRegistry(
       return get(id) ? storage.getItem(bearerKey(id)) : null;
     },
 
+    async devices(id) {
+      const payload = await serverRequest(id, "/api/devices", "GET");
+      if (!Array.isArray(payload)) return [];
+      return (payload as unknown[]).flatMap((item): RemoteServerDevice[] => {
+        if (!isRecord(item) || typeof item.id !== "string") return [];
+        return [
+          {
+            id: item.id,
+            name: typeof item.name === "string" ? item.name : item.id,
+            protocol: typeof item.protocol === "string" ? item.protocol : "",
+            createdAt:
+              typeof item.created_at === "number" ? item.created_at : 0,
+            lastSeen: typeof item.last_seen === "number" ? item.last_seen : 0,
+            current: item.current === true,
+          },
+        ];
+      });
+    },
+
+    async revokeDevice(id, deviceId) {
+      const payload = await serverRequest(
+        id,
+        `/api/devices/${encodeURIComponent(deviceId)}/revoke`,
+        "POST"
+      );
+      const wasCurrent = isRecord(payload) && payload.was_current === true;
+      if (wasCurrent) registry.remove(id);
+      return { wasCurrent };
+    },
+
     status: (id) => statuses.get(id) ?? { state: "connecting", error: null },
     reportStatus,
 
@@ -369,6 +453,7 @@ export function createEnvironmentRegistry(
       };
     },
   };
+  return registry;
 }
 
 // ---- federation -------------------------------------------------------------------------------

@@ -52,6 +52,8 @@ Three credential tiers, so no long-lived secret ever travels in a URL:
 | `POST /api/pair` | body `{"token":"…","device_name":"…"}` → `{"device_id":"…","bearer":"…"}`; 401 if invalid/expired/used |
 | `POST /api/web-ui/call` | `Authorization: Bearer …`, body `{"name","args","project_path"}` → `{"result":…}`; only the session/engine commands and the workspace file and Git commands the renderer's panels need are allowed; scripts, GitHub, LSP and terminal commands are not (`serve` and `webui` only) |
 | `POST /api/ws-ticket` | `Authorization: Bearer …` → `{"ticket":"…","expires_in":300}` |
+| `GET /api/devices` | `Authorization: Bearer …` → array of paired devices (`id`, `name`, `protocol`, `created_at`, `last_seen`, `current`); never includes credentials; team members get 403 |
+| `POST /api/devices/:id/revoke` | `Authorization: Bearer …` → `{"revoked":true,"was_current":bool}`; the device's bearer and live sockets stop at once; 404 for an unknown id |
 | `GET /ws?ticket=…` | the WebSocket control channel (single-use ticket) |
 
 All routes answer cross-origin preflights so another C2 (the desktop app) can call them; every

@@ -143,6 +143,142 @@ describe("Remote environments settings", () => {
   });
 });
 
+describe("Paired devices on a remote server", () => {
+  /** A server with a mutable device list; records every authenticated call. */
+  function stubServer() {
+    const devices = [
+      {
+        id: "me",
+        name: "C2 Desktop",
+        protocol: "legacy",
+        created_at: 1,
+        last_seen: 1_790_000_000,
+        current: true,
+      },
+      {
+        id: "phone",
+        name: "Pixel browser",
+        protocol: "legacy",
+        created_at: 2,
+        last_seen: 0,
+        current: false,
+      },
+    ];
+    const calls: string[] = [];
+    globalThis.fetch = async (url, init) => {
+      const { pathname } = new URL(String(url));
+      if (pathname === "/api/pair") {
+        return Response.json({ device_id: "me", bearer: "secret-bearer" });
+      }
+      calls.push(
+        `${init?.method} ${pathname} ${init?.headers?.Authorization ?? ""}`
+      );
+      if (pathname === "/api/devices") return Response.json(devices);
+      const revoked = pathname.match(/^\/api\/devices\/(.+)\/revoke$/)?.[1];
+      const index = devices.findIndex((device) => device.id === revoked);
+      if (index < 0) return new Response("no such device", { status: 404 });
+      const [removed] = devices.splice(index, 1);
+      return Response.json({ revoked: true, was_current: removed.current });
+    };
+    return { devices, calls };
+  }
+
+  async function open() {
+    const server = stubServer();
+    await environmentRegistry.add("http://gpu-box:4599/pair#token=abc", {
+      name: "GPU box",
+    });
+    const view = show(
+      <I18nProvider>
+        <RemoteEnvironmentsSettingsPage />
+      </I18nProvider>
+    );
+    await reactAct(async () =>
+      button(view.container, "Manage devices").click()
+    );
+    await waitFor(() =>
+      expect(view.container.textContent).toContain("Pixel browser")
+    );
+    return { server, view };
+  }
+
+  test("lists the server's devices, marks this app, and never shows credentials", async () => {
+    const { server, view } = await open();
+    const text = view.container.textContent;
+
+    expect(text).toContain("C2 Desktop");
+    expect(text).toContain("This app");
+    expect(text).toContain("Last seen never");
+    expect(text).not.toContain("secret-bearer");
+    expect(server.calls).toEqual(["GET /api/devices Bearer secret-bearer"]);
+  });
+
+  test("revoking another device needs a confirmation and refreshes the list", async () => {
+    const { server, view } = await open();
+
+    await reactAct(async () =>
+      button(view.container, "Revoke Pixel browser").click()
+    );
+    // Nothing is sent until the user confirms.
+    expect(server.calls).toHaveLength(1);
+    await reactAct(async () => button(view.container, "Cancel").click());
+    expect(server.calls).toHaveLength(1);
+
+    await reactAct(async () =>
+      button(view.container, "Revoke Pixel browser").click()
+    );
+    await reactAct(async () => button(view.container, "Revoke now").click());
+    await waitFor(() =>
+      expect(view.container.textContent).not.toContain("Pixel browser")
+    );
+
+    expect(server.calls).toContain(
+      "POST /api/devices/phone/revoke Bearer secret-bearer"
+    );
+    expect(view.container.textContent).toContain("C2 Desktop");
+    expect(environmentRegistry.list()).toHaveLength(1);
+  });
+
+  test("revoking this app's own credential warns first and forgets the environment", async () => {
+    const { view } = await open();
+
+    await reactAct(async () =>
+      button(view.container, "Revoke C2 Desktop").click()
+    );
+    expect(view.container.textContent).toContain(
+      "disconnects and removes this environment"
+    );
+    await reactAct(async () => button(view.container, "Revoke now").click());
+    await waitFor(() => expect(environmentRegistry.list()).toEqual([]));
+    await flush();
+
+    expect(view.container.textContent).toContain("No remote environments yet.");
+  });
+
+  test("a rejected credential explains how to recover", async () => {
+    stubServer();
+    await environmentRegistry.add("http://gpu-box:4599/pair#token=abc", {
+      name: "GPU box",
+    });
+    globalThis.fetch = async () =>
+      new Response("invalid bearer", { status: 401 });
+    const view = show(
+      <I18nProvider>
+        <RemoteEnvironmentsSettingsPage />
+      </I18nProvider>
+    );
+    await reactAct(async () =>
+      button(view.container, "Manage devices").click()
+    );
+    await waitFor(() =>
+      expect(view.container.querySelector('[role="alert"]')).not.toBeNull()
+    );
+    expect(
+      view.container.querySelector('[role="alert"]').textContent
+    ).toContain("pair again");
+  });
+});
+
 describe("Environment popover with remote environments", () => {
   async function openPopover(view: ReturnType<typeof mount>) {
     const trigger = view.container.querySelector(

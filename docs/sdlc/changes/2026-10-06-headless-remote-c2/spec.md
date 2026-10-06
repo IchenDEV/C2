@@ -8,7 +8,7 @@ created: 2026-10-06
 based_on: intent.md
 design_approved_by: user
 design_approved_at: 2026-10-06
-design_approval_source: "Current chat: user replied 批准 to the design summary (CORS boundary, per-environment bearer in renderer storage, pair via SIGUSR1 file, known limits); later replied 好同时批准三件事 to widening the server command allowlist and routing remote files, Git and terminals."
+design_approval_source: "Current chat: user replied 批准 to the design summary (CORS boundary, per-environment bearer in renderer storage, pair via SIGUSR1 file, known limits); later replied 好同时批准三件事 to widening the server command allowlist and routing remote files, Git and terminals; on 2026-10-07 asked for device revocation in the GUI and then merge (设备撤销最好能做 GUI ... 改完这一点之后就合并)."
 ---
 
 # Spec: Headless Remote C2
@@ -60,6 +60,15 @@ attaches with a server-safe id derived from the renderer id (`c2d-…`), replays
 on reattach, forwards output/title/exit under the renderer's id and realm, and on a dropped socket
 reattaches and repaints. Shells live on the server and survive this app.
 
+**Device revocation.** `GET /api/devices` and `POST /api/devices/:id/revoke` on the server, both
+authorised by any non-member paired bearer (the same trust as the rest of the owner surface, since
+pairing already grants file and shell access). The list never carries credentials and marks the
+caller's own device (`current`). Revoking uses the existing durable revocation, which also closes
+that device's live sockets and tickets; revoking the caller itself is allowed and reported as
+`was_current`, and the desktop then forgets the environment. Settings → Remote environments gets a
+**Manage devices** list per environment with a two-step Revoke and an explicit warning when the
+target is this app. A rejected credential is explained instead of retried.
+
 **Known limits.** Remote sessions cannot run project scripts, open pull requests, start language
 servers, use the browser dock, create worktrees or parallel tasks, or reveal folders in Finder; these
 error or stay empty. A paired device can now read, write and delete files and run a shell on the
@@ -81,3 +90,4 @@ frontmatter by the user, who is independent of the implementation owner.
 - [x] AC-7: Settings, popover and rail render correctly in light and dark themes.
 - [x] AC-8: An independent human design decision for the CORS/credential boundary is recorded.
 - [x] AC-9: Files, search, Git and terminals of a remote session run on its server: remote-folder commands reach only that environment, local paths and removed environments never fall through, denied commands stay denied, and a terminal attaches, streams, resizes, reattaches after a drop and is killed on the server.
+- [x] AC-10: A paired owner can list and revoke the server's devices from Settings: the list marks this app and carries no credentials, revoking another device needs confirmation and cuts it off at once, revoking this app's own credential warns and forgets the environment, and a rejected credential explains how to recover.

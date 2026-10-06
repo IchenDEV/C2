@@ -825,6 +825,8 @@ pub async fn bind_and_serve_with_web_ui(
         .route("/health", get(|| async { "ok" }))
         .route("/api/pair", post(pair))
         .route("/api/ws-ticket", post(ws_ticket))
+        .route("/api/devices", get(list_paired_devices))
+        .route("/api/devices/:id/revoke", post(revoke_paired_device))
         .route("/api/team/v1/workspace", get(team_workspace))
         .route("/api/team/v1/attention", get(team_attention))
         .route("/api/team/v1/tasks", get(team_tasks).post(team_create_task))
@@ -2045,6 +2047,52 @@ async fn ws_handler(
         return (StatusCode::UNAUTHORIZED, "invalid or expired ticket").into_response();
     };
     ws.on_upgrade(move |socket| handle_socket(socket, st, device_id))
+}
+
+#[derive(Serialize)]
+struct PairedDeviceEntry {
+    #[serde(flatten)]
+    info: auth::DeviceInfo,
+    /// The device that made this request, so a client can warn before it signs itself out.
+    current: bool,
+}
+
+/// The devices paired with this server, for a paired owner device to review and revoke.
+async fn list_paired_devices(State(st): State<Arc<ServerState>>, headers: HeaderMap) -> Response {
+    let me = match require_device(&st, &headers) {
+        Ok(device_id) => device_id,
+        Err(response) => return response,
+    };
+    let devices: Vec<PairedDeviceEntry> = st
+        .auth
+        .list_devices()
+        .into_iter()
+        .map(|info| PairedDeviceEntry {
+            current: info.id == me,
+            info,
+        })
+        .collect();
+    Json(devices).into_response()
+}
+
+/// Revoke a paired device; its bearer and live sockets stop working at once. Revoking the caller's
+/// own device is allowed and reported, which is how a client signs itself out.
+async fn revoke_paired_device(
+    State(st): State<Arc<ServerState>>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+) -> Response {
+    let me = match require_device(&st, &headers) {
+        Ok(device_id) => device_id,
+        Err(response) => return response,
+    };
+    match st.auth.try_revoke_device(&id) {
+        Ok(true) => {
+            Json(serde_json::json!({ "revoked": true, "was_current": id == me })).into_response()
+        }
+        Ok(false) => (StatusCode::NOT_FOUND, "no such device").into_response(),
+        Err(error) => (StatusCode::INTERNAL_SERVER_ERROR, error).into_response(),
+    }
 }
 
 /// List live terminals so a reconnecting browser can reattach instead of respawning.

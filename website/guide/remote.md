@@ -106,9 +106,11 @@ then behaves as part of this app:
   header button), optionally setting a *Workspace on the server* in Settings. Pick **Local** to go
   back.
 
-Pairing stores a per-device credential on this Mac. Remove the environment here to forget it; to
-cut the device off on the server, delete its entry from `<data-dir>/remote-devices.json` and
-restart the daemon. If the server is unreachable its sessions disappear from the list while
+Pairing stores a per-device credential on this Mac. **Remove** forgets it on this Mac only. To cut a
+device off on the server, press **Manage devices** under the environment: it lists every device
+paired with that server (this app is marked), and **Revoke → Revoke now** disconnects one at once,
+without restarting the daemon. Revoking this app's own entry also removes the environment here.
+Any paired device can revoke any other, so treat a pairing link like a login. If the server is unreachable its sessions disappear from the list while
 the rest keeps working, and they come back when it returns.
 
 A remote session's folder is shown as `c2env://<environment>/path` in this app. That prefix is what
@@ -158,8 +160,9 @@ event stream, so a turn you start remotely streams to both.
 
 - **Desktop**: the Remote control modal lists paired devices with pair date and last-seen time;
   **Revoke** cuts a device off immediately (including any unredeemed tickets).
-- **Standalone**: delete an entry from `~/.codetwo/remote-devices.json` (or the whole file) and
-  restart the server.
+- **From another C2 desktop**: Settings → Remote environments → **Manage devices** on that server.
+- **Standalone, no other desktop**: delete an entry from `~/.codetwo/remote-devices.json` (or the
+  whole file) and restart the server.
 - A fresh pairing link never invalidates existing devices; revoke explicitly.
 
 ## Security

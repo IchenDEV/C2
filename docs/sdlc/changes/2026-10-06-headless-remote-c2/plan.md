@@ -36,6 +36,10 @@ Temporary resources: temp data directories and the smoke `serve` process (stoppe
 and removed), a scratch Vite page and Playwright screenshots under `/tmp` (deleted), and
 `apps/desktop/node_modules` from `bun install` (git-ignored, retained for later checks).
 
+Device revocation reuses `AuthState::try_revoke_device`; the server adds two thin routes and the
+registry two methods behind one settings list, with a real Chromium screenshot in light and dark for
+the new list and its confirmation states.
+
 Rollback: revert the commit. Remote environments live only in renderer `localStorage`; the daemon
 adds `server.pid` and a transient `pairing.url` in its own data directory, both safe to delete when
 no daemon runs.

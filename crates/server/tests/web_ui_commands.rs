@@ -266,3 +266,119 @@ async fn another_c2_client_origin_may_preflight_and_call_with_a_bearer_header() 
     assert_eq!(denied.status(), 401);
     handle.abort();
 }
+
+#[tokio::test]
+async fn a_paired_owner_can_review_and_revoke_devices() {
+    let auth = Arc::new(AuthState::load(None));
+    let first = auth
+        .pair(&auth.issue_pairing_token(Duration::from_secs(60)), "Laptop")
+        .unwrap();
+    let second = auth
+        .pair(&auth.issue_pairing_token(Duration::from_secs(60)), "Phone")
+        .unwrap();
+    let member = auth
+        .pair(
+            &auth.issue_member_pairing_token("member-1", Duration::from_secs(60)),
+            "Team member",
+        )
+        .unwrap();
+    let (addr, handle) = server(auth.clone(), None).await;
+    let client = reqwest::Client::new();
+    let url = |path: &str| format!("http://{addr}{path}");
+
+    // No credential, and team members, cannot even list.
+    assert_eq!(
+        client
+            .get(url("/api/devices"))
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        401
+    );
+    assert_eq!(
+        client
+            .get(url("/api/devices"))
+            .bearer_auth(&member.bearer)
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        403
+    );
+
+    let listed: Value = client
+        .get(url("/api/devices"))
+        .bearer_auth(&first.bearer)
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let entries = listed.as_array().unwrap();
+    assert_eq!(entries.len(), 3);
+    let current: Vec<_> = entries.iter().filter(|e| e["current"] == true).collect();
+    assert_eq!(current.len(), 1);
+    assert_eq!(current[0]["id"], first.device_id);
+    assert!(entries.iter().all(|e| e.get("token_hash").is_none()));
+
+    // Revoking another device cuts it off immediately and says it was not the caller.
+    let revoked: Value = client
+        .post(url(&format!("/api/devices/{}/revoke", second.device_id)))
+        .bearer_auth(&first.bearer)
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(revoked, json!({ "revoked": true, "was_current": false }));
+    assert_eq!(
+        client
+            .get(url("/api/devices"))
+            .bearer_auth(&second.bearer)
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        401
+    );
+    assert!(auth.authorize_bearer(&second.bearer).is_none());
+    assert_eq!(
+        client
+            .post(url(&format!("/api/devices/{}/revoke", second.device_id)))
+            .bearer_auth(&first.bearer)
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        404
+    );
+
+    // A revoked device cannot revoke anyone.
+    assert_eq!(
+        client
+            .post(url(&format!("/api/devices/{}/revoke", first.device_id)))
+            .bearer_auth(&second.bearer)
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        401
+    );
+
+    // Signing itself out is allowed and reported.
+    let own: Value = client
+        .post(url(&format!("/api/devices/{}/revoke", first.device_id)))
+        .bearer_auth(&first.bearer)
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(own, json!({ "revoked": true, "was_current": true }));
+    assert!(auth.authorize_bearer(&first.bearer).is_none());
+    handle.abort();
+}

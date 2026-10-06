@@ -62,8 +62,8 @@ codetwo-server pair --data-dir /srv/c2     # fresh one-time link for another dev
 
 It owns `/srv/c2` exclusively (a second `serve` is refused and a stale `server.pid` from a crash is
 replaced), stops cleanly on `SIGTERM`, and is probed at `/health`. Use `--public-url` when clients
-reach it through a proxy. The desktop pairs from **Settings → Remote environments**; a revoked or
-removed device loses access immediately. Never stop another operator's daemon to reuse its data
+reach it through a proxy. The desktop pairs from **Settings → Remote environments**, where **Manage devices** lists and revokes the
+server's paired devices; a revoked device loses access immediately, no restart needed. Never stop another operator's daemon to reuse its data
 directory or port; pick a new `--data-dir`.
 
 Example `systemd` unit:

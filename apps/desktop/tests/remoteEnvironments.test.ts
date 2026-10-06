@@ -558,3 +558,128 @@ describe("remote terminals in the federated core", () => {
     expect(listeners.get("pty-output")?.size).toBe(0);
   });
 });
+
+describe("devices on a remote server", () => {
+  function setupServer() {
+    const requests: {
+      url: string;
+      method: string;
+      authorization: string | null;
+    }[] = [];
+    let reply: (url: string) => Response = () => Response.json([]);
+    const storage = new MemoryStorage();
+    let counter = 0;
+    const registry = createEnvironmentRegistry({
+      storage,
+      fetch: (input, init) => {
+        if (input.endsWith("/api/pair")) {
+          return Promise.resolve(
+            Response.json({ device_id: "me", bearer: "secret" })
+          );
+        }
+        requests.push({
+          url: input,
+          method: String(init?.method),
+          authorization: new Headers(init?.headers).get("Authorization"),
+        });
+        return Promise.resolve(reply(input));
+      },
+      createSocket: () => {
+        throw new Error("unused");
+      },
+      createTransport: () => ({}) as CoreTransport,
+      newId: () => `env-${++counter}`,
+      onError: () => undefined,
+      reconnectDelayMs: 1,
+    });
+    return {
+      registry,
+      requests,
+      setReply: (next: (url: string) => Response) => {
+        reply = next;
+      },
+    };
+  }
+
+  test("lists devices with the caller's bearer and tolerates odd rows", async () => {
+    const { registry, requests, setReply } = setupServer();
+    const { id } = await registry.add("http://gpu-box:4599/pair#token=good");
+    setReply(() =>
+      Response.json([
+        {
+          id: "a",
+          name: "Laptop",
+          protocol: "legacy",
+          created_at: 5,
+          last_seen: 9,
+          current: true,
+        },
+        { id: "b" },
+        { name: "no id" },
+        "junk",
+      ])
+    );
+
+    expect(await registry.devices(id)).toEqual([
+      {
+        id: "a",
+        name: "Laptop",
+        protocol: "legacy",
+        createdAt: 5,
+        lastSeen: 9,
+        current: true,
+      },
+      {
+        id: "b",
+        name: "b",
+        protocol: "",
+        createdAt: 0,
+        lastSeen: 0,
+        current: false,
+      },
+    ]);
+    expect(requests).toEqual([
+      {
+        url: "http://gpu-box:4599/api/devices",
+        method: "GET",
+        authorization: "Bearer secret",
+      },
+    ]);
+  });
+
+  test("revoking another device keeps the environment; revoking itself forgets it", async () => {
+    const { registry, requests, setReply } = setupServer();
+    const { id } = await registry.add("http://gpu-box:4599/pair#token=good");
+
+    setReply(() => Response.json({ revoked: true, was_current: false }));
+    expect(await registry.revokeDevice(id, "phone/1")).toEqual({
+      wasCurrent: false,
+    });
+    expect(requests.at(-1)?.url).toBe(
+      "http://gpu-box:4599/api/devices/phone%2F1/revoke"
+    );
+    expect(requests.at(-1)?.method).toBe("POST");
+    expect(registry.get(id)).not.toBeNull();
+
+    setReply(() => Response.json({ revoked: true, was_current: true }));
+    expect(await registry.revokeDevice(id, "me")).toEqual({ wasCurrent: true });
+    expect(registry.get(id)).toBeNull();
+    expect(registry.bearer(id)).toBeNull();
+  });
+
+  test("a rejected credential or unknown device surfaces the reason and changes nothing", async () => {
+    const { registry, setReply } = setupServer();
+    const { id } = await registry.add("http://gpu-box:4599/pair#token=good");
+
+    setReply(() => new Response("invalid bearer", { status: 401 }));
+    await expect(registry.devices(id)).rejects.toThrow("pair again");
+    setReply(() => new Response("no such device", { status: 404 }));
+    await expect(registry.revokeDevice(id, "gone")).rejects.toThrow(
+      "no such device"
+    );
+    expect(registry.get(id)).not.toBeNull();
+    await expect(registry.devices("missing")).rejects.toThrow(
+      "no longer configured"
+    );
+  });
+});
