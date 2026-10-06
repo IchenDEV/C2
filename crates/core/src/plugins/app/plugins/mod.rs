@@ -3,6 +3,7 @@
 //! These modules share the kernel's internal lifecycle. That does not make Core infrastructure a
 //! user-installable extension or make its commands part of the public Extension API.
 
+mod assistant;
 mod canvas;
 mod engine;
 mod extensions;
@@ -70,6 +71,7 @@ pub const BUILTIN: &[&str] = &[
     "scenes",
     "engine",
     "handoff",
+    "assistant",
     "git",
     "memory",
     "market",
@@ -103,6 +105,7 @@ pub fn builtin_registry() -> PluginRegistry {
     registry.register(|| ScenesPlugin);
     registry.register(EnginePlugin::new);
     registry.register(|| HandoffPlugin);
+    registry.register(|| assistant::AssistantPlugin);
     registry.register(|| GitPlugin);
     registry.register(|| MemoryPlugin);
     registry.register(|| MarketPlugin);
@@ -130,6 +133,7 @@ pub fn builtin_registry() -> PluginRegistry {
         ("providers", PluginCategory::Foundation),
         ("engine", PluginCategory::Foundation),
         ("handoff", PluginCategory::Integration),
+        ("assistant", PluginCategory::Automation),
         ("memory", PluginCategory::Foundation),
         ("kernel", PluginCategory::Foundation),
         ("workspace", PluginCategory::Workspace),

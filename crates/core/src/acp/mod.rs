@@ -14,7 +14,7 @@ mod handler;
 pub mod wire;
 
 pub use client::{AcpClient, AcpProcessDiagnostics};
-pub use connection::{AcpProtocolAnomaly, AcpProtocolDiagnostics, Connection};
+pub use connection::{AcpProtocolAnomaly, AcpProtocolDiagnostics, Connection, RequestFault};
 pub use handler::{ClientHandler, RecordingHandler};
 pub use wire::*;
 

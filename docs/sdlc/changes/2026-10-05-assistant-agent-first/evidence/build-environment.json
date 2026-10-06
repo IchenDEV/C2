@@ -1,0 +1,7 @@
+{
+  "kind": "owner isolated build",
+  "source_root": "/Users/chenli/.t3/worktrees/codeTwo/t3code-6738e658",
+  "copy": "/Users/chenli/.t3/worktrees/codeTwo/t3code-6738e658/.codex/run/assistant-agent-first/build-source",
+  "only_build_change": "copied core Cargo.toml direct existing libghostty-vt-sys dependency enables pkg-config; user manifest unchanged",
+  "native_commit": "a887df42c56f6de86c0fe6da9c4eeca37931e083"
+}

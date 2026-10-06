@@ -1,0 +1,74 @@
+bun test v1.4.2 (744846f84)
+
+tests/assistantNotification.test.ts:
+(pass) only durable assistant alerts reach the native notification adapter [0.10ms]
+(pass) desktop rejection preserves the durable alert and subsequent renderer delivery [0.09ms]
+
+tests/sessionRailRendered.test.tsx:
+(pass) SessionRail row layout > renders external resource Sections in the same flat scroll flow [44.08ms]
+(pass) SessionRail row layout > keeps pinned Tasks ahead of global recency without inventing a Highlight Section [17.08ms]
+(pass) SessionRail row layout > shows every Project as an ordered folder with its own Tasks [11.05ms]
+(pass) SessionRail row layout > wraps root Projects in one expanded default Project group [17.57ms]
+(pass) SessionRail row layout > keeps explicit Sections separate from the ordinary unsectioned feed [35.13ms]
+(pass) SessionRail row layout > keeps Project rows collapsible without a trailing disclosure icon [20.88ms]
+(pass) SessionRail row layout > aligns an empty Project placeholder beneath the Project label [4.50ms]
+(pass) SessionRail row layout > exposes dnd-kit keyboard guidance without native HTML5 drag attributes [13.28ms]
+(pass) SessionRail row layout > project menu removes registered projects and hides removal for synthesized ones [33.86ms]
+(pass) SessionRail row layout > keeps resize tracking native to the separator and releases it when the pointer is cancelled [7.21ms]
+(pass) SessionRail row layout > starts the task list without a duplicate window header [5.43ms]
+(pass) SessionRail row layout > keeps labeled global navigation and utilities outside the collapsed task list [5.88ms]
+(pass) SessionRail row layout > keeps device connections in the lower-left utility group with a phone icon [9.33ms]
+(pass) SessionRail row layout > removes the device-connections row when its plugin component is unavailable [5.04ms]
+(pass) SessionRail row layout > keeps one Quick Chat action beside the tracked Task action [4.38ms]
+(pass) SessionRail row layout > treats a user-created Highlight like every other editable Section [19.47ms]
+(pass) SessionRail row layout > shows a recent AI reply and metadata beneath the title when it is useful [6.98ms]
+(pass) SessionRail row layout > keeps provider identity accessible and shows its compact mark [3.93ms]
+(pass) SessionRail row layout > shows the latest AI reply, Provider mark, and relative age on the second line [4.22ms]
+(pass) SessionRail row layout > keeps grouped Task provenance on the summary rail instead of an empty third line [4.84ms]
+(pass) SessionRail row layout > uses the same two-line style for ordinary ungrouped Tasks [3.38ms]
+(pass) SessionRail row layout > shows regular checkout/worktree provenance and the linked PR outcome [11.14ms]
+(pass) SessionRail row layout > omits punctuation-only previews without dropping Provider and age metadata [4.20ms]
+(pass) SessionRail row layout > uses semantic activity orbs for running sessions and sidebar loading [5.71ms]
+(pass) SessionRail row layout > keeps awaiting-input and failed states visible without restoring routine status copy [5.21ms]
+(pass) SessionRail row layout > uses compact spacing and exposes real session actions on right click [28.27ms]
+(pass) SessionRail row layout > finishes the archive exit before moving a session [18.82ms]
+(pass) SessionRail row layout > supports keyboard selection, row navigation, and the keyboard context-menu gesture [18.93ms]
+(pass) SessionRail row layout > switches session tabs with an immediate row-local selection surface [5.18ms]
+(pass) SessionRail row layout > confirms clipboard actions instead of failing silently [20.97ms]
+(pass) SessionRail empty projects > offers adding a Project when none are registered [1.98ms]
+
+tests/missionControlRendered.test.tsx:
+(pass) MissionControlPage > the close button dismisses without selecting or reviewing a task [5.23ms]
+(pass) MissionControlPage > renders one row per session with title, scene pill, and context [7.63ms]
+(pass) MissionControlPage > review click calls onSelect and onReview for that session, then closes [8.09ms]
+(pass) MissionControlPage > the full row primary action is a semantic button [7.77ms]
+(pass) MissionControlPage > shows the empty line when there are no sessions [7.64ms]
+(pass) MissionControlPage > a session without a checkout diff renders an em dash [7.93ms]
+
+tests/missionControl.test.ts:
+(pass) missionState > mirrors the rail: activity first, then the frontend running set [0.08ms]
+(pass) missionState > the in-flight set marks a session running before the core projection lands [0.01ms]
+(pass) missionState > awaiting input and failed win over the running set
+(pass) missionRows > needsMe is exactly awaiting input or failed [0.04ms]
+(pass) missionRows > orders needsMe first, then running, then idle — stable within groups [0.03ms]
+(pass) missionRows > carries the remembered scene and the context percentage [0.02ms]
+(pass) needsMeCount > counts only sessions waiting on input or failed [0.03ms]
+
+tests/assistant.test.tsx:
+(pass) project status stays distinct from execution and takeover is explicit [14.29ms]
+(pass) global memory is inspectable and forgetting refreshes the notebook [27.01ms]
+(pass) a new goal follows the visible project filter and clears only after saving [16.36ms]
+(pass) a rejected goal save keeps the draft available for retry [14.30ms]
+(pass) inbox routes a blocking answer and a requirement decision to their exact records [34.47ms]
+(pass) messages, stop and rework are separate operations and failed sends retain drafts [29.90ms]
+(pass) unrelated worker activity does not reject a message composed against the same goal [14.49ms]
+(pass) a new requirement while composing retains the draft for an explicit retry [14.63ms]
+(pass) a polled replacement deliverable cannot reuse an earlier review draft [5018.64ms]
+(pass) forgetting a memory exposes affected assignments and sends a distinct correction [27.11ms]
+(pass) independent review sessions expose scoped progress and failure [7.83ms]
+(pass) unknown answer remains visible and cannot be blindly replayed [15.72ms]
+
+ 58 pass
+ 0 fail
+ 1225 expect() calls
+Ran 58 tests across 5 files. [5.80s]

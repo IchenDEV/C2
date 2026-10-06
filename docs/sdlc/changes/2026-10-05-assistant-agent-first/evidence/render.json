@@ -1,0 +1,68 @@
+{
+  "kind": "owner actual T3 preview with React Web and isolated production Core; offline ACP fixture",
+  "tabId": "tab_6",
+  "port": 14675,
+  "lightLayout": {
+    "colorScheme": "",
+    "input": {
+      "bottom": 748,
+      "height": 96,
+      "outsideScroll": true,
+      "width": 720,
+      "x": 280,
+      "y": 652
+    },
+    "latestProgress": 0,
+    "nativeDisclosure": 0,
+    "overflow": false,
+    "text": "和幕僚说\n\n先讨论两个项目怎么安排，暂时不要建任务。\n\n幕僚已处理 · 09:29 PM\n\n打开处理会话\n\n我会持续跟进这两个项目；讨论不会建立任务。\n\n幕僚 · 09:29 PM\n\n交办：请盯住 A 和 B 两个项目的报告。\n\n幕僚已处理 · 09:30 PM\n\n打开处理会话\n\n项目 A\n\nRequested report\n待决定\n\n要求 v1 · 执行者已确认 v1\n\nAccepted session or file changed; recheck the deliverable version.\n\n详情\n打开执行会话\n请求停止执行\n接管\n\n项目 B\n\nRequested report\n已验收\n\n要求 v1 · 执行者已确认 v1 · 已验收\n\n详情\n打开执行会话\n\n已记录你的交办或记忆建议，具体结果以原任务及回执为准。\n\n幕僚 · 09:30 PM\n\n记住：项目简报使用中文。\n\n幕僚已处理 · 09:31 PM\n\n打开处理会话\n要记住这条吗？\n\n项目 A · preference · #ce9f2f6b\n\n项目简报使用中文。\n\n已写入记忆\n\n已记录你的交办或记忆建议，具体结果以原任务及回执为准。\n\n幕僚 · 09:31 PM\n\n交办：问题示例，需要先问报告语言。\n\n幕僚已处理 · 09:32 PM\n\n打开处理会话\n\n项目 A\n\nChinese manual report\n推进中\n\n要求 v2 · 执行者已确认 v2 · 已提交 v2，待你验收\n\nFixture report inspected; ready to review.\n\n详情\n打开执行会话\n请求停止执行\n接管\n已提交，待你验收 · v2\n\nChinese manual report\n\nFixture report v1; input checked. This is a transport fixture, not a real software verification.\n\nreport.txt · SHA-256 f88521ba997d1454b33446c1b6208a250e79f9e8da3333aff48c600d137f7a42\n\n查看产物并验收\n\n已记录你的交办或记忆建议，具体结果以原任务及回执为准。\n\n幕僚 · 09:32 PM\n\n需要你，或刚有进展\nRequested report\n\nFixture report v1; input checked. This is a transport fixture, not a real software verification.\n\n查看目标\n打开执行会话\n标为已读\nRequested report\n\nAccepted files or execution changed; review again\n\n查看目标\n标为已读\nC",
+    "viewport": [
+      1280,
+      800
+    ]
+  },
+  "narrowLayout": {
+    "colorScheme": "dark",
+    "input": {
+      "background": "oklch(0.25924 0.00784683 none)",
+      "bottom": 588,
+      "color": "rgb(242, 244, 248)",
+      "height": 96,
+      "outsideScroll": true,
+      "width": 712,
+      "x": 24,
+      "y": 492
+    },
+    "nativeDisclosure": 0,
+    "notes": [
+      "Requested report",
+      "Requested report",
+      "记忆建议",
+      "Chinese manual report",
+      "Requested report",
+      "Requested report",
+      "Chinese manual report"
+    ],
+    "overflow": false,
+    "viewport": [
+      760,
+      640
+    ]
+  },
+  "interaction": [
+    "discussion reply persisted; no goals",
+    "one explicit message routed to A and B; each dispatched once, reports accepted",
+    "memory suggestion exact content and scope shown and user confirmed; canonical Memory Store id present",
+    "worker question answered Chinese; requirement change approved; worker confirmed v2 and submitted",
+    "read actual report.txt bytes and SHA-256; opened review detail and accepted v2 via UI",
+    "Core restarted on same isolated data; transcript, goal references and memory receipt retained"
+  ],
+  "imageScope": "question-and-change-light.png was captured earlier in this same task before the memory-status and historical-notification UI fixes; the question/change component is unchanged. All other images use the final Web build.",
+  "images": [
+    "conversation-light.png",
+    "conversation-dark.png",
+    "memory-dark-narrow.png",
+    "delivery-detail-light.png",
+    "question-and-change-light.png"
+  ]
+}

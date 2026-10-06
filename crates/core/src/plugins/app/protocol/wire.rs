@@ -23,6 +23,10 @@ pub struct HostInfo {
     /// Effective extension-public commands in this extension instance's command realm.
     #[serde(default)]
     pub commands: Vec<String>,
+    /// True only when the host will accept `observation/record` from this plugin (its manifest
+    /// declares a connector with the `observations` capability). Absent/false: do not send it.
+    #[serde(default)]
+    pub observations: bool,
 }
 
 /// `initialize` — host → plugin, always first.

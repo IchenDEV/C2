@@ -1,0 +1,32 @@
+{
+  "startedAt": "2026-10-06T02:11:55.161Z",
+  "budgetMs": 240000,
+  "brief": "工作目录 /Users/chenli/.t3/worktrees/codeTwo/t3code-6738e658。你是native-provider-connectors具体设计的独立review，不再委派；本轮总预算4分钟，请最多10次文件读取，给一次简短最终报告后立即结束。Sonnet5.5/300K/high/Full Access已实际设定，Plan只读，不更改模型/权限/付费/用户进程，不写任何文件（含/tmp下载）、不构建测试，不外发/push/PR/merge/deploy。多人工作，勿改其他文件。此次不是前一个Project层级review的重试。\n用户目标：四主流Claude/Codex/Cursor/OpenCode使用官方SDK/AppServer薄连接器；ACP保留第三方。原Engine/Store/Memory/唯一投递/单writer/审批/停止/unknown约束保留。用户授权设计实现和小队，但具体新协议高风险设计待人类确认。\n只读 docs/sdlc/changes/2026-10-06-native-provider-connectors/spec.md、plan.md、evidence/seam-result.json、evidence/official-sources.json。不要重新调研SDK/拉源码/扫Engine（已由r2查过）；不读Project整个bundle。SDK研究r1若已经有evidence/research-result.json可补看一次，否则明确没用该结果。\n审查限定：接口是否真neutral且唯一Engine facts；各native/ACP分工是否可并行且共享文件owner明确；Accepted/terminal、stop/AbortSignal、未知结果恢复有没有双写/假成功；approval/memory/MCP/role权限是否漏口；legacy session_import原生id混用/迁移/drain/fallback是否安全；是否把官方SDK存在当实测通过；auth、版本和不支持能力是否诚实。给最多5条具体阻塞反例及最小修订，无必要问题不凑数。只给design-ready或changes-required，不能给实现passed；无需人类批准。\n已知输入：seam r2只读completed、无runtime测试；引文“Engine并发被改”未有证据，主Agent重算此前271文件hash全未变，应当作已有dirty状态。r1官方原生接口研究尚在监督中，不能假设终态。原Project设计r4超时已interrupt，不属于你任务，也不绕过其人类确认。",
+  "response": {
+    "content": [
+      {
+        "type": "text",
+        "text": "{\"taskId\":\"node:delegated-task:command%3Amcp%3A4f2da1e5-1b4b-4bca-aecd-77f4da6d7835%3Adelegate-task%3Anative-provider-design-review-20261006-r3\",\"childThreadId\":\"thread:delegated-task:command%3Amcp%3A4f2da1e5-1b4b-4bca-aecd-77f4da6d7835%3Adelegate-task%3Anative-provider-design-review-20261006-r3\",\"childRunId\":\"run:thread:thread%3Adelegated-task%3Acommand%253Amcp%253A4f2da1e5-1b4b-4bca-aecd-77f4da6d7835%253Adelegate-task%253Anative-provider-design-review-20261006-r3:ordinal:1\",\"childNodeId\":\"node:delegated-task:command%3Amcp%3A4f2da1e5-1b4b-4bca-aecd-77f4da6d7835%3Adelegate-task%3Anative-provider-design-review-20261006-r3\",\"status\":\"running\",\"workState\":\"working\",\"hasPendingChildRuns\":false,\"latestTerminalRunId\":null,\"latestTerminalStatus\":null,\"latestTerminalSummary\":null,\"latestTerminalResultContextTransferId\":null,\"providerInstanceId\":\"cursor\",\"model\":\"claude-sonnet-5-5\",\"summary\":null,\"resultContextTransferId\":null,\"waitTimedOut\":true}"
+      }
+    ],
+    "structuredContent": {
+      "taskId": "node:delegated-task:command%3Amcp%3A4f2da1e5-1b4b-4bca-aecd-77f4da6d7835%3Adelegate-task%3Anative-provider-design-review-20261006-r3",
+      "childThreadId": "thread:delegated-task:command%3Amcp%3A4f2da1e5-1b4b-4bca-aecd-77f4da6d7835%3Adelegate-task%3Anative-provider-design-review-20261006-r3",
+      "childRunId": "run:thread:thread%3Adelegated-task%3Acommand%253Amcp%253A4f2da1e5-1b4b-4bca-aecd-77f4da6d7835%253Adelegate-task%253Anative-provider-design-review-20261006-r3:ordinal:1",
+      "childNodeId": "node:delegated-task:command%3Amcp%3A4f2da1e5-1b4b-4bca-aecd-77f4da6d7835%3Adelegate-task%3Anative-provider-design-review-20261006-r3",
+      "status": "running",
+      "workState": "working",
+      "hasPendingChildRuns": false,
+      "latestTerminalRunId": null,
+      "latestTerminalStatus": null,
+      "latestTerminalSummary": null,
+      "latestTerminalResultContextTransferId": null,
+      "providerInstanceId": "cursor",
+      "model": "claude-sonnet-5-5",
+      "summary": null,
+      "resultContextTransferId": null,
+      "waitTimedOut": true
+    },
+    "isError": false
+  }
+}

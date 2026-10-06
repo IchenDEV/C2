@@ -1,0 +1,134 @@
+{
+  "commit": "64275ae39653379e63f49f87be021c190fd20e81",
+  "method": "task-owned fetched raw files; SHA256 independently recomputed; selected lines inspected, not execution-tested",
+  "sources": [
+    {
+      "file": "ProviderAdapter.ts",
+      "sha256": "78079a5e4032ee46fa454be94dc153e8ff2987761863050b28261b4cfd82b325",
+      "selectedLines": [
+        {
+          "line": 529,
+          "text": "readonly resumeThread: (input: {"
+        },
+        {
+          "line": 547,
+          "text": "readonly steerTurn: ("
+        },
+        {
+          "line": 550,
+          "text": "readonly interruptTurn: ("
+        }
+      ]
+    },
+    {
+      "file": "CursorAgentSdk.ts",
+      "sha256": "c633d9d1769f15862e646938be67d7c9ff7fba2ba0ce013b38382353b06af957",
+      "selectedLines": [
+        {
+          "line": 8,
+          "text": "} from \"@cursor/sdk\";"
+        }
+      ]
+    },
+    {
+      "file": "CursorAdapterV2.ts",
+      "sha256": "79956fc6ca0230d674e9e17540f87bb3c47572ffc7d9c8cb44d08678f92c1fca",
+      "selectedLines": [
+        {
+          "line": 10,
+          "text": "} from \"@cursor/sdk\";"
+        },
+        {
+          "line": 127,
+          "text": "supportsCommandApproval: false,"
+        },
+        {
+          "line": 2407,
+          "text": "resumeThread: Effect.fn(\"CursorAdapterV2.resumeThread\")("
+        },
+        {
+          "line": 2444,
+          "text": "steerTurn: (turnInput) =>"
+        },
+        {
+          "line": 2451,
+          "text": "interruptTurn: Effect.fn(\"CursorAdapterV2.interruptTurn\")("
+        }
+      ]
+    },
+    {
+      "file": "ClaudeAdapterV2.ts",
+      "sha256": "e866cd7b3af2af42b91ff7c5c6c2acfe7920505640e33505f0aff50985d3f702",
+      "selectedLines": [
+        {
+          "line": 30,
+          "text": "} from \"@anthropic-ai/claude-agent-sdk\";"
+        },
+        {
+          "line": 34,
+          "text": "} from \"@anthropic-ai/claude-agent-sdk/sdk-tools\";"
+        },
+        {
+          "line": 223,
+          "text": "supportsCommandApproval: true,"
+        },
+        {
+          "line": 7420,
+          "text": "const interruptTurn = Effect.fn(\"ClaudeAdapterV2.interruptTurn\")("
+        },
+        {
+          "line": 7508,
+          "text": "const steerTurn = Effect.fn(\"ClaudeAdapterV2.steerTurn\")("
+        }
+      ]
+    },
+    {
+      "file": "CodexAdapterV2.ts",
+      "sha256": "e3a246abdf1d5fca3c67be388e7db0e74daef760931209ac4f75d955e9e46c82",
+      "selectedLines": [
+        {
+          "line": 282,
+          "text": "supportsCommandApproval: true,"
+        },
+        {
+          "line": 6054,
+          "text": "resumeThread: (threadInput) =>"
+        },
+        {
+          "line": 6201,
+          "text": "steerTurn: (turnInput) =>"
+        },
+        {
+          "line": 6255,
+          "text": "interruptTurn: (requestedInput) =>"
+        }
+      ]
+    },
+    {
+      "file": "OpenCode2AdapterV2.ts",
+      "sha256": "b23e26e7b6ccdbded7b2fb1705c759e74a5a47ebc88540742468b88cd6147afd",
+      "selectedLines": [
+        {
+          "line": 36,
+          "text": "} from \"@opencode/client/effect\";"
+        },
+        {
+          "line": 147,
+          "text": "supportsCommandApproval: true,"
+        },
+        {
+          "line": 3566,
+          "text": "return yield* runtime.resumeThread({"
+        },
+        {
+          "line": 3632,
+          "text": "resumeThread: (threadInput) =>"
+        },
+        {
+          "line": 3848,
+          "text": "steerTurn: (steerInput) =>"
+        }
+      ]
+    }
+  ]
+}

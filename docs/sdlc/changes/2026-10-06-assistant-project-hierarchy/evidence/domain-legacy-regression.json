@@ -1,0 +1,17 @@
+{
+  "date": "2026-10-06",
+  "mode": "owner",
+  "verifier": "codex-main",
+  "command": "cargo test --offline -p codetwo-core --lib --test assistant --test prompt_delivery",
+  "exitCode": 0,
+  "results": {
+    "coreLib": 603,
+    "assistant": 27,
+    "promptDelivery": 6
+  },
+  "failed": 0,
+  "snapshotRef": "domain-root-repair.json",
+  "sourceSetSha256": "53f354f522c3c107b678b304030a0a28b30765bc56b07a01c009ea82b9b819ee",
+  "logSha256": "4764e8d7b7f5efc0978b93b2e6e2f6a19de06781cc83fbd9fd82afaa12fd42aa",
+  "limits": "Current frozen candidate uses r7 native facade and repaired M1. Does not prove r12 changes, new native backend, mapped Project Runtime, UI, account compatibility or independent acceptance."
+}

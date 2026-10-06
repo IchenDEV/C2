@@ -1,0 +1,261 @@
+{
+  "testedAt": "2026-10-05",
+  "transport": "T3 collaborative preview with isolated authenticated Web Core",
+  "beforeRestart": {
+    "memories": [
+      {
+        "access_count": 0,
+        "accessed_at": null,
+        "active": true,
+        "category": "fact",
+        "confidence": 1,
+        "conflict_reason": null,
+        "conflict_with_id": null,
+        "content": "用简短中文汇报；区分测试通过、发布完成和线上验收。",
+        "created_at": 1791152227335,
+        "editable": true,
+        "forgotten_at": null,
+        "id": "b05c1576-14d8-4fdb-bd8d-1439633696eb",
+        "layer": "L1",
+        "origin": "manual",
+        "pinned": true,
+        "project_path": "codetwo://chief-of-staff",
+        "relevance": null,
+        "session_id": null,
+        "sources": [],
+        "supersedes_id": null,
+        "updated_at": 1791152227335
+      },
+      {
+        "access_count": 0,
+        "accessed_at": null,
+        "active": false,
+        "category": "fact",
+        "confidence": 1,
+        "conflict_reason": null,
+        "conflict_with_id": null,
+        "content": "这条临时测试记忆需要遗忘。",
+        "created_at": 1791152229346,
+        "editable": true,
+        "forgotten_at": 1791152230367,
+        "id": "58bc91a8-4e89-4c8e-aa95-97d122a122bd",
+        "layer": "L1",
+        "origin": "manual",
+        "pinned": true,
+        "project_path": "codetwo://chief-of-staff",
+        "relevance": null,
+        "session_id": null,
+        "sources": [],
+        "supersedes_id": null,
+        "updated_at": 1791152230367
+      },
+      {
+        "access_count": 0,
+        "accessed_at": null,
+        "active": true,
+        "category": "fact",
+        "confidence": 1,
+        "conflict_reason": null,
+        "conflict_with_id": null,
+        "content": "项目 B：发布前必须核对产物 SHA-256，并保存测试报告。",
+        "created_at": 1791152196292,
+        "editable": true,
+        "forgotten_at": null,
+        "id": "c1cf9f4d-3f15-45e7-a6f9-1dc028dc117d",
+        "layer": "L1",
+        "origin": "manual",
+        "pinned": true,
+        "project_path": "/Users/chenli/.t3/worktrees/codeTwo/t3code-6738e658/.codex/run/assistant-experience/project-b",
+        "relevance": null,
+        "session_id": null,
+        "sources": [],
+        "supersedes_id": null,
+        "updated_at": 1791152222357
+      }
+    ],
+    "state": {
+      "attention": null,
+      "dispatches": 0,
+      "goals": [
+        {
+          "acceptance": "报告包含版本号、全部测试结果，以及产物 SHA-256。",
+          "assignments": [],
+          "blocker": "",
+          "id": "8248e20f-2553-441a-b45c-9a77c573eff6",
+          "next_step": "",
+          "priority": 0,
+          "project_path": "/Users/chenli/.t3/worktrees/codeTwo/t3code-6738e658/.codex/run/assistant-experience/project-b",
+          "status": "active",
+          "title": "完成项目 B 的发布验收",
+          "verdict": null
+        }
+      ],
+      "observed": "",
+      "revision": 5,
+      "run": null,
+      "settings": {
+        "concurrency": 1,
+        "dispatch_limit": 5,
+        "enabled": false,
+        "model": null,
+        "projects": [
+          "/Users/chenli/.t3/worktrees/codeTwo/t3code-6738e658/.codex/run/assistant-experience/project-a",
+          "/Users/chenli/.t3/worktrees/codeTwo/t3code-6738e658/.codex/run/assistant-experience/project-b"
+        ],
+        "provider": "codex",
+        "reasoning_effort": null,
+        "turn_limit": 10
+      },
+      "summary": "",
+      "turns": 0
+    }
+  },
+  "afterRestart": {
+    "memories": [
+      {
+        "access_count": 0,
+        "accessed_at": null,
+        "active": true,
+        "category": "fact",
+        "confidence": 1,
+        "conflict_reason": null,
+        "conflict_with_id": null,
+        "content": "用简短中文汇报；区分测试通过、发布完成和线上验收。",
+        "created_at": 1791152227335,
+        "editable": true,
+        "forgotten_at": null,
+        "id": "b05c1576-14d8-4fdb-bd8d-1439633696eb",
+        "layer": "L1",
+        "origin": "manual",
+        "pinned": true,
+        "project_path": "codetwo://chief-of-staff",
+        "relevance": null,
+        "session_id": null,
+        "sources": [],
+        "supersedes_id": null,
+        "updated_at": 1791152227335
+      },
+      {
+        "access_count": 0,
+        "accessed_at": null,
+        "active": false,
+        "category": "fact",
+        "confidence": 1,
+        "conflict_reason": null,
+        "conflict_with_id": null,
+        "content": "这条临时测试记忆需要遗忘。",
+        "created_at": 1791152229346,
+        "editable": true,
+        "forgotten_at": 1791152230367,
+        "id": "58bc91a8-4e89-4c8e-aa95-97d122a122bd",
+        "layer": "L1",
+        "origin": "manual",
+        "pinned": true,
+        "project_path": "codetwo://chief-of-staff",
+        "relevance": null,
+        "session_id": null,
+        "sources": [],
+        "supersedes_id": null,
+        "updated_at": 1791152230367
+      },
+      {
+        "access_count": 0,
+        "accessed_at": null,
+        "active": true,
+        "category": "fact",
+        "confidence": 1,
+        "conflict_reason": null,
+        "conflict_with_id": null,
+        "content": "项目 B：发布前必须核对产物 SHA-256，并保存测试报告。",
+        "created_at": 1791152196292,
+        "editable": true,
+        "forgotten_at": null,
+        "id": "c1cf9f4d-3f15-45e7-a6f9-1dc028dc117d",
+        "layer": "L1",
+        "origin": "manual",
+        "pinned": true,
+        "project_path": "/Users/chenli/.t3/worktrees/codeTwo/t3code-6738e658/.codex/run/assistant-experience/project-b",
+        "relevance": null,
+        "session_id": null,
+        "sources": [],
+        "supersedes_id": null,
+        "updated_at": 1791152222357
+      }
+    ],
+    "state": {
+      "attention": null,
+      "dispatches": 0,
+      "goals": [
+        {
+          "acceptance": "报告包含版本号、全部测试结果，以及产物 SHA-256。",
+          "assignments": [],
+          "blocker": "",
+          "id": "8248e20f-2553-441a-b45c-9a77c573eff6",
+          "next_step": "",
+          "priority": 0,
+          "project_path": "/Users/chenli/.t3/worktrees/codeTwo/t3code-6738e658/.codex/run/assistant-experience/project-b",
+          "status": "active",
+          "title": "完成项目 B 的发布验收",
+          "verdict": null
+        }
+      ],
+      "observed": "",
+      "revision": 5,
+      "run": null,
+      "settings": {
+        "concurrency": 1,
+        "dispatch_limit": 5,
+        "enabled": false,
+        "model": null,
+        "projects": [
+          "/Users/chenli/.t3/worktrees/codeTwo/t3code-6738e658/.codex/run/assistant-experience/project-a",
+          "/Users/chenli/.t3/worktrees/codeTwo/t3code-6738e658/.codex/run/assistant-experience/project-b"
+        ],
+        "provider": "codex",
+        "reasoning_effort": null,
+        "turn_limit": 10
+      },
+      "summary": "",
+      "turns": 0
+    }
+  },
+  "restartPreserved": true,
+  "narrowMemory": {
+    "articles": [
+      {
+        "rect": {
+          "bottom": 749.5,
+          "height": 128.5,
+          "left": 24,
+          "right": 366,
+          "top": 621,
+          "width": 342,
+          "x": 24,
+          "y": 621
+        },
+        "text": "用简短中文汇报；区分测试通过、发布完成和线上验收。\n\nfact · manual · 10/5/2026, 6:17:07 AM\n\n纠正\n遗忘"
+      }
+    ],
+    "rect": {
+      "bottom": 844,
+      "height": 844,
+      "left": 0,
+      "right": 390,
+      "top": 0,
+      "width": 390,
+      "x": 0,
+      "y": 0
+    },
+    "scrollWidth": 390,
+    "text": "幕僚\n\n项目、关键决定与长期记忆。\n\n跟进已暂停\n设置\n关闭\n项目\n记忆\n执行\n项目\n全部项目\n项目 B\n项目 A\n\n复查 0 · 派工 0\n\n全局记忆\n\n记录背景、约束、偏好和关键决定。遗忘后不再用于新的复查；已发送给模型的历史内容仍保留在原会话。\n\n类型\n背景 / 事实\n关键决定\n偏好\n约束\n需要记住什么\n记住\n\n用简短中文汇报；区分测试通过、发布完成和线上验收。\n\nfact · manual · 10/5/2026, 6:17:07 AM\n\n纠正\n遗忘",
+    "width": 390
+  },
+  "narrowProjects": {
+    "goal": "项目 B · P0\n\n完成项目 B 的发布验收\n推进中\n\n报告包含版本号、全部测试结果，以及产物 SHA-256。\n\n暂停\n修改目标",
+    "scrollWidth": 390,
+    "text": "幕僚\n\n项目、关键决定与长期记忆。\n\n跟进已暂停\n设置\n关闭\n项目\n记忆\n执行\n项目\n全部项目\n项目 B\n项目 A\n\n复查 0 · 派工 0\n\n项目简报\n复查进展\n\n写下目标和验收条件。幕僚会结合项目记忆，安排下一步。\n\n新建目标\n\n项目 B · P0\n\n完成项目 B 的发布验收\n推进中\n\n报告包含版本号、全部测试结果，以及产物 SHA-256。\n\n暂停\n修改目标",
+    "width": 390
+  },
+  "screenshotCapture": "Failed repeatedly with PreviewAutomationExecutionError in both reused and fresh tabs. No new screenshot claimed.",
+  "followupEnabled": false
+}

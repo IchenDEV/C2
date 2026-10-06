@@ -105,6 +105,13 @@ pub enum Op {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "event", rename_all = "snake_case")]
 pub enum Event {
+    AssistantAlert {
+        session: Option<SessionId>,
+        id: String,
+        goal_id: String,
+        title: String,
+        body: String,
+    },
     /// A member-visible collaboration snapshot changed. Clients refetch by Task id; the event does
     /// not duplicate comments or Suggestions into the execution stream.
     TaskSnapshotChanged {

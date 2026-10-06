@@ -1,0 +1,28 @@
+{
+  "result": "discussion and memory candidate worked; nested git-directory worker fixture creation had unknown result; not replayed",
+  "fixture_correction": "Nested directories inside a parent Git repository failed creation; outcome unknown was retained and never replayed. The final UI run used a new disposable database and independent /tmp projects, not retrying those attempts.",
+  "goals": [
+    {
+      "id": "116c592f-c871-47cc-9b86-3fe83c39e529",
+      "status": "needs_attention",
+      "blocker": "Attempt create:3fbaefb7-f5c5-44fc-aac6-c4e7e36747fe has no Engine receipt; outcome unknown, no automatic resend. Session creation has no durable receipt; inspect the engine error before retrying",
+      "assignments": [
+        {
+          "id": "3fbaefb7-f5c5-44fc-aac6-c4e7e36747fe",
+          "session_id": null
+        }
+      ]
+    },
+    {
+      "id": "f462fb34-69f5-49c3-a8b7-979bfcd6d1fc",
+      "status": "needs_attention",
+      "blocker": "Attempt create:f9e7533a-95a3-491b-a157-70d2a9dfb9e2 has no Engine receipt; outcome unknown, no automatic resend. Session creation has no durable receipt; inspect the engine error before retrying",
+      "assignments": [
+        {
+          "id": "f9e7533a-95a3-491b-a157-70d2a9dfb9e2",
+          "session_id": null
+        }
+      ]
+    }
+  ]
+}

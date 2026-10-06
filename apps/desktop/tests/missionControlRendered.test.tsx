@@ -12,7 +12,7 @@ import {
 } from "./domTestHarness";
 
 activateDom();
-const { MissionControlDialog } = await import("../src/sidebar/MissionControl");
+const { MissionControlPage } = await import("../src/sidebar/MissionControl");
 const { I18nProvider } = await import("../src/i18n");
 
 afterEach(() => {
@@ -68,13 +68,14 @@ function renderDialog(overrides = {}) {
   };
   const rendered = mount(
     <I18nProvider>
-      <MissionControlDialog {...props} />
+      <MissionControlPage {...props} />
     </I18nProvider>
   );
+  click(button(dom.document.body, "Execution"));
   return { rendered, calls };
 }
 
-describe("MissionControlDialog", () => {
+describe("MissionControlPage", () => {
   test("the close button dismisses without selecting or reviewing a task", async () => {
     activateDom();
     const { calls } = renderDialog();

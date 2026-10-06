@@ -1,0 +1,32 @@
+{
+  "start": "2026-10-05 14:30:01 UTC",
+  "taskId": "node:delegated-task:command%3Amcp%3A393ae2ab-d738-4275-96fb-025e354cfc96%3Adelegate-task%3Aassistant-shared-conversation-ui-20261005-r1",
+  "childThreadId": "thread:delegated-task:command%3Amcp%3A393ae2ab-d738-4275-96fb-025e354cfc96%3Adelegate-task%3Aassistant-shared-conversation-ui-20261005-r1",
+  "childRunId": "run:thread:thread%3Adelegated-task%3Acommand%253Amcp%253A393ae2ab-d738-4275-96fb-025e354cfc96%253Adelegate-task%253Aassistant-shared-conversation-ui-20261005-r1:ordinal:1",
+  "childNodeId": "node:delegated-task:command%3Amcp%3A393ae2ab-d738-4275-96fb-025e354cfc96%3Adelegate-task%3Aassistant-shared-conversation-ui-20261005-r1",
+  "status": "running",
+  "workState": "working",
+  "hasPendingChildRuns": false,
+  "latestTerminalRunId": null,
+  "latestTerminalStatus": null,
+  "latestTerminalSummary": null,
+  "latestTerminalResultContextTransferId": null,
+  "providerInstanceId": "cursor",
+  "model": "claude-sonnet-5-5",
+  "summary": null,
+  "resultContextTransferId": null,
+  "waitTimedOut": true,
+  "runtimeMode": "approval-required",
+  "interactionMode": "default",
+  "options": [
+    {
+      "id": "contextWindow",
+      "value": "300k"
+    },
+    {
+      "id": "reasoning_effort",
+      "value": "high"
+    }
+  ],
+  "wallBudgetMinutes": 10
+}

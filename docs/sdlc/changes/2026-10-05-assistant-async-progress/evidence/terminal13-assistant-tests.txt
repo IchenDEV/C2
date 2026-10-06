@@ -1,0 +1,19 @@
+Excerpt from terminal13-core-tests.txt
+     Running tests/assistant.rs (.codex/run/assistant-capacity/target/debug/deps/assistant-5399d3c0cd670a13)
+
+running 13 tests
+test artifact_verification_rejects_fifo_and_workspace_escape ... ok
+test entire_proposal_is_rejected_without_partial_dispatch ... ok
+test one_free_slot_cannot_admit_two_independent_waiters ... ok
+test scope_concurrency_and_interrupted_receipts_fail_closed ... ok
+test takeover_of_uncreated_intent_releases_slot_and_resume_can_dispatch ... ok
+test native_question_retry_clears_the_rejected_attempt_and_permissions_remain_specific ... ok
+test worker_identity_idempotency_questions_and_final_review_are_versioned ... ok
+test idle_is_not_acceptance_and_verdicts_bind_the_current_revision ... ok
+test forgetting_and_global_switch_control_actual_project_recall ... ok
+test dependency_files_and_submitted_input_versions_cannot_be_laundered_by_confirmation ... ok
+test durable_goals_reject_stale_decisions_and_preserve_user_takeover ... ok
+test a_recorded_native_answer_is_revoked_atomically_before_changed_control_can_deliver_it ... ok
+test unknown_delivery_and_claimed_native_answers_block_submission_and_acceptance ... ok
+
+test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.20s

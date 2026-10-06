@@ -34,11 +34,14 @@ function prefersReducedMotion(): boolean {
  */
 export function useTranscriptScroll(
   sessionId: string | null,
-  turns: readonly Turn[]
+  turns: readonly Turn[],
+  /** False while the pane is display:none; its offset is saved and restored on return. */
+  active = true
 ): TranscriptScrollController {
   const viewportRef = useRef<HTMLElement | null>(null);
   const followingRef = useRef(true);
   const pendingPrependRef = useRef<TranscriptScrollAnchor | null>(null);
+  const savedTopRef = useRef(0);
   const [showJumpToLatest, setShowJumpToLatest] = useState(false);
 
   const syncJumpVisibility = (element: HTMLElement | null) => {
@@ -53,6 +56,15 @@ export function useTranscriptScroll(
   }, [sessionId]);
 
   useLayoutEffect(() => {
+    // A hidden pane loses its offset; put a reader who scrolled up back where they were.
+    const element = viewportRef.current;
+    if (!active || !element) return;
+    if (followingRef.current) element.scrollTop = element.scrollHeight;
+    else element.scrollTop = savedTopRef.current;
+  }, [active]);
+
+  useLayoutEffect(() => {
+    if (!active) return;
     const anchor = pendingPrependRef.current;
     if (anchor) {
       pendingPrependRef.current = null;
@@ -77,9 +89,11 @@ export function useTranscriptScroll(
     } else {
       syncJumpVisibility(element);
     }
-  }, [syncJumpVisibility, turns]);
+  }, [syncJumpVisibility, turns, active]);
 
   const onScroll: UIEventHandler<HTMLElement> = (event) => {
+    if (!active) return;
+    savedTopRef.current = event.currentTarget.scrollTop;
     const following = isTranscriptNearEnd(event.currentTarget);
     followingRef.current = following;
     setShowJumpToLatest((current) =>

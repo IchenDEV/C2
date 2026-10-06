@@ -7,6 +7,7 @@
 //! Module map:
 //! - [`kernel`] — Cordis-style reactive plugin runtime: contexts, services, injections, commands.
 //! - [`acp`] — Agent Client Protocol client (JSON-RPC over stdio) used to drive provider CLIs.
+//! - [`provider_runtime`] / [`connectors`] — provider-neutral runtime boundary and its ACP backend.
 //! - [`provider`] — registry of provider launch specs (Claude Code / Codex / Grok).
 //! - [`models`] — model catalogues discovered from installed provider runtimes.
 //! - [`session`] — session / message / part model.
@@ -18,8 +19,11 @@
 #[cfg(unix)]
 mod unix_process_group;
 
-pub mod kernel;
-pub mod plugins;
+pub mod assistant;
+pub mod assistant_bridge;
+pub mod assistant_observation;
+pub mod prompt_delivery;
+
 pub mod acp;
 pub mod activity;
 pub mod agent_skill_v2;
@@ -31,6 +35,7 @@ pub mod browser;
 pub mod canvas;
 pub mod capability_v2;
 pub mod codex_runtime;
+pub mod connectors;
 pub mod context;
 pub mod cost;
 pub mod device_sync;
@@ -45,15 +50,18 @@ pub mod harness;
 pub mod host_tools;
 pub mod issue_delivery;
 pub mod issues;
+pub mod kernel;
 pub mod keymap;
 pub mod market;
 pub mod memory;
 pub mod models;
 pub mod orchestrator;
 pub mod permission;
+pub mod plugins;
 pub mod project;
 pub mod provider;
 pub mod provider_lifecycle;
+pub mod provider_runtime;
 pub mod pty;
 pub mod risk_v2;
 pub mod rules;
@@ -136,6 +144,16 @@ pub use project::{ProjectConfig, ProjectScript};
 pub use provider::{
     default_registry, registry_with_codex_runtime, CapabilityState, LaunchSpec, Provider,
     ProviderCapability, ProviderCapabilityId, ProviderId, ProviderToolset,
+};
+pub use provider_runtime::{
+    ProviderRuntime, ResumeSupport, RuntimeBackendKind, RuntimeCallbacks, RuntimeCapabilities,
+    RuntimeContent, RuntimeDiagnostics, RuntimeError, RuntimeEvent, RuntimeHandle, RuntimeIdentity,
+    RuntimeInit, RuntimeModels, RuntimePermissionOption, RuntimePermissionOutcome,
+    RuntimePermissionRequest, RuntimeProcessDiagnostics, RuntimeProtocolAnomaly,
+    RuntimeProtocolDiagnostics, RuntimeQuestionOutcome, RuntimeQuestionRequest,
+    RuntimeSessionRestore, RuntimeSessionStart, RuntimeSessionState, RuntimeToolCall,
+    SteerOutcome, SteerSupport, StopSupport, Support, TurnOutcome, TurnTerminal,
+    RUNTIME_CONTRACT_VERSION,
 };
 pub use pty::PtySession;
 pub use risk_v2::{effect_requires_risk_gate, RiskGateDecision, RiskGateReceipt, UserRiskDecision};

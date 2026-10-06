@@ -857,7 +857,7 @@ fn canvas_compiler_requires_gate_and_keeps_provider_image_policy_explicit() {
     )
     .unwrap();
     assert_eq!(lowered.len(), 2);
-    assert!(matches!(lowered[1], codetwo_core::acp::wire::ContentBlock::Image { .. }));
+    assert!(matches!(lowered[1], codetwo_core::RuntimeContent::Image { .. }));
 }
 
 #[tokio::test]

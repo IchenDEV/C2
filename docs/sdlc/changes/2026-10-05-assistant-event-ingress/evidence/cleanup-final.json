@@ -1,0 +1,42 @@
+{
+  "at": "2026-10-05T19:31:14.854045+00:00",
+  "status": "complete",
+  "phase1": "cleanup-phase1.json",
+  "final_removed": {
+    "path": "/Users/chenli/.t3/worktrees/codeTwo/t3code-6738e658/.codex/run/assistant-event-memory",
+    "files": 49,
+    "logical_bytes": 994785,
+    "exists_after": false
+  },
+  "total_logical_bytes_removed": 2899426067,
+  "owned_process_scan": [],
+  "port14677": "free",
+  "preview_tabs_closed": [
+    "tab_1",
+    "tab_2",
+    "tab_3"
+  ],
+  "final_frozen_source_files": 358,
+  "final_source_mismatches": [],
+  "worker_terminals": {
+    "r3": "interrupted, pending false",
+    "r6": "failed, pending false",
+    "r7": "interrupted, pending false",
+    "r8": "completed, pending false, changes-required",
+    "r9": "completed, pending false, pass limited",
+    "r10": "completed, pending false, pass limited"
+  },
+  "retained": {
+    "paths": [
+      "docs/sdlc/changes/2026-10-05-assistant-event-ingress/evidence",
+      "docs/sdlc/changes/2026-10-05-assistant-long-term-memory/evidence"
+    ],
+    "current_event_evidence_files": 89,
+    "current_event_evidence_bytes": 2166507,
+    "purpose": "Versioned source identity, original failures, separate owner/independent logs, delegation supervision, actual rendered synthetic UI screenshots and compact reproduction source.",
+    "owner": "codex",
+    "cleanup_trigger": "Permanent lifecycle evidence retained with this change; no runtime scratch retained."
+  },
+  "preserved": "User data and attachment, pre-existing worktree changes, T3/Cursor/user processes, shared toolchains. Native screenshot originals are T3-managed history.",
+  "no_external_release_or_accounts": true
+}

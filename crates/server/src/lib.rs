@@ -42,6 +42,7 @@ use tokio::sync::{broadcast, mpsc};
 use tower_http::services::{ServeDir, ServeFile};
 
 use codetwo_core::device_sync::DeviceSyncDocument;
+use codetwo_core::plugins::PluginManager;
 use codetwo_core::worktree::WorktreeBaseline;
 use codetwo_core::{
     CanvasDraft, CanvasDraftUpdate, CanvasError, CanvasFeatureGate, CanvasFreezeInput,
@@ -51,7 +52,6 @@ use codetwo_core::{
     TaskBudget, TaskHandoffManager, TaskId, TaskStatus, TranscriptCursor, TranscriptEntry,
     DEFAULT_TRANSCRIPT_TURNS,
 };
-use codetwo_core::plugins::PluginManager;
 
 const MAX_HANDOFF_BODY_BYTES: usize = 384 * 1024 * 1024;
 const MAX_DEVICE_SYNC_BODY_BYTES: usize = 64 * 1024 * 1024;
@@ -105,6 +105,11 @@ fn web_ui_command_allowed(name: &str) -> bool {
         name,
         "providers.list"
             | "projects.list"
+            | "assistant.snapshot"
+            | "assistant.edit"
+            | "memory.add"
+            | "memory.update"
+            | "memory.set_active"
             | "workspace.default_cwd"
             | "sessions.list"
             | "sessions.archived"
@@ -1331,7 +1336,11 @@ async fn artifact_download(
         return response;
     }
     let Some(artifacts) = codetwo_core::ArtifactStore::from_store(st.store.clone()) else {
-        return (StatusCode::SERVICE_UNAVAILABLE, "artifact storage is unavailable").into_response();
+        return (
+            StatusCode::SERVICE_UNAVAILABLE,
+            "artifact storage is unavailable",
+        )
+            .into_response();
     };
     let reference = match artifacts.metadata(&id) {
         Ok(reference) => reference,
@@ -2809,6 +2818,16 @@ mod tests {
     #[test]
     fn browser_renderer_has_one_bounded_core_capability_set() {
         assert!(web_ui_command_allowed("sessions.list"));
+        for command in [
+            "assistant.snapshot",
+            "assistant.edit",
+            "memory.add",
+            "memory.update",
+            "memory.set_active",
+        ] {
+            assert!(web_ui_command_allowed(command));
+        }
+        assert!(!web_ui_command_allowed("memory.delete"));
         assert!(web_ui_command_allowed("engine.prompt"));
         assert!(web_ui_command_allowed("workspace.default_cwd"));
         assert!(!web_ui_command_allowed("plugins.set_trusted"));

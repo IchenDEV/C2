@@ -47,12 +47,12 @@ pub use wire::{
     InvokeParams, LogParams, PROTOCOL_VERSION,
 };
 
-use crate::plugins::app::events::ConnectorEvent;
-use crate::plugins::bundle::{PluginRuntimeCommand, PluginRuntimeSpec};
 use crate::kernel::{
     async_trait, CommandRealm, Context, Event, Injection, Plugin, PluginError, PluginResult,
     WeakContext,
 };
+use crate::plugins::app::events::ConnectorEvent;
+use crate::plugins::bundle::{PluginRuntimeCommand, PluginRuntimeSpec};
 use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
@@ -103,7 +103,8 @@ impl ProcessObserver {
             let weak = ctx.weak();
             ctx.spawn(async move {
                 if let Some(ctx) = weak.upgrade() {
-                    ctx.emit(crate::plugins::app::events::PluginRuntimeChanged).await;
+                    ctx.emit(crate::plugins::app::events::PluginRuntimeChanged)
+                        .await;
                 }
             });
         }
@@ -184,8 +185,8 @@ fn is_executable_bundle_command(path: &Path) -> bool {
 #[async_trait]
 impl Transport for ProcessTransport {
     async fn start(&self) -> Result<Channel, PluginError> {
-        let executable = crate::provider::which(&self.command)
-            .unwrap_or_else(|| self.command.clone().into());
+        let executable =
+            crate::provider::which(&self.command).unwrap_or_else(|| self.command.clone().into());
         let mut command = tokio::process::Command::new(executable);
         command
             .args(&self.args)
@@ -294,6 +295,8 @@ pub struct ProtocolPlugin {
     /// `None` is the 1.0 compatibility path where initialize contributes commands dynamically.
     /// `Some` is the 1.1 static contract: handlers exist before the process and activate it once.
     declared_commands: Option<Vec<PluginRuntimeCommand>>,
+    /// Manifest connector ids that declare the `observations` capability.
+    observation_connectors: Vec<String>,
 }
 
 /// How long to wait for `initialize` before giving up on a plugin.
@@ -319,6 +322,7 @@ impl ProtocolPlugin {
             handshake_timeout: DEFAULT_HANDSHAKE_TIMEOUT,
             command_timeout: DEFAULT_COMMAND_TIMEOUT,
             declared_commands: None,
+            observation_connectors: Vec::new(),
         }
     }
 
@@ -350,6 +354,7 @@ impl ProtocolPlugin {
                 .map(std::time::Duration::from_millis)
                 .unwrap_or(DEFAULT_COMMAND_TIMEOUT),
             declared_commands: None,
+            observation_connectors: Vec::new(),
         }
     }
 
@@ -360,6 +365,12 @@ impl ProtocolPlugin {
 
     pub fn with_inject(mut self, inject: Injection) -> ProtocolPlugin {
         self.inject = inject;
+        self
+    }
+
+    /// Connector ids (from the bundle manifest) allowed to send `observation/record`.
+    pub fn with_observation_connectors(mut self, ids: Vec<String>) -> ProtocolPlugin {
+        self.observation_connectors = ids;
         self
     }
 
@@ -429,6 +440,7 @@ struct ProtocolSession {
     data_dir: Option<PathBuf>,
     handshake_timeout: std::time::Duration,
     command_timeout: std::time::Duration,
+    observation_connectors: Vec<String>,
 }
 
 impl ProtocolSession {
@@ -456,6 +468,12 @@ impl ProtocolSession {
         let host = Arc::new(KernelHost {
             ctx: ctx.weak(),
             plugin: self.plugin.clone(),
+            realm: match &command_realm {
+                CommandRealm::Global => "global".to_string(),
+                CommandRealm::Project(path) => format!("project:{path}"),
+            },
+            observation_connectors: self.observation_connectors.clone(),
+            inflight: Default::default(),
         });
         let shutdown = guard.shutdown.clone();
         let observer = self.observer.clone();
@@ -484,6 +502,7 @@ impl ProtocolSession {
                     .into_iter()
                     .map(|command| command.name)
                     .collect(),
+                observations: !self.observation_connectors.is_empty(),
             },
             config,
             data_dir: self
@@ -676,6 +695,7 @@ impl Plugin for ProtocolPlugin {
             data_dir: self.data_dir.clone(),
             handshake_timeout: self.handshake_timeout,
             command_timeout: self.command_timeout,
+            observation_connectors: self.observation_connectors.clone(),
         });
 
         let Some(declared) = &self.declared_commands else {
@@ -751,8 +771,27 @@ impl Plugin for ProtocolPlugin {
 /// The host side of the protocol: what an extension process is allowed to ask for.
 struct KernelHost {
     ctx: WeakContext,
+    /// Raw plugin name as loaded (keeps `bundle:`); part of the host-verified principal.
     plugin: String,
+    realm: String,
+    observation_connectors: Vec<String>,
+    /// (in-flight `connector/stream` keys, total in flight) — one per stream, four per plugin.
+    inflight: Arc<std::sync::Mutex<(std::collections::HashSet<String>, usize)>>,
 }
+
+struct ObservationPermit {
+    inflight: Arc<std::sync::Mutex<(std::collections::HashSet<String>, usize)>>,
+    key: String,
+}
+impl Drop for ObservationPermit {
+    fn drop(&mut self) {
+        let mut state = self.inflight.lock().unwrap();
+        state.0.remove(&self.key);
+        state.1 -= 1;
+    }
+}
+
+const MAX_OBSERVATIONS_IN_FLIGHT: usize = 4;
 
 fn connector_owner_id(plugin: &str) -> String {
     plugin.strip_prefix("bundle:").unwrap_or(plugin).to_string()
@@ -781,6 +820,74 @@ impl HostHandler for KernelHost {
                 ctx.emit_json(name, payload).await;
             }
         }
+    }
+
+    async fn observe(&self, params: Value) -> Result<Value, String> {
+        use crate::assistant_observation::{
+            Principal, RecordRequest, RecordResponse, RecordStatus,
+        };
+        let request: RecordRequest = serde_json::from_value(params)
+            .map_err(|error| format!("malformed observation/record: {error}"))?;
+        // Principal comes from the host: raw plugin name, command realm and a manifest-declared
+        // connector. Nothing in the payload can name another plugin, realm or owner.
+        if !self.observation_connectors.contains(&request.connector_id) {
+            return Err("connector does not declare the observations capability".into());
+        }
+        let Some(ctx) = self.ctx.upgrade() else {
+            return Err("the host is shutting down".into());
+        };
+        let Some(store) = ctx.get::<crate::plugins::app::service::StoreService>() else {
+            return Err("the host has no store".into());
+        };
+        let store = store.0.clone();
+        let principal = Principal {
+            plugin: self.plugin.clone(),
+            realm: self.realm.clone(),
+            connector_id: request.connector_id.clone(),
+        };
+        let key = serde_json::json!([
+            request.connector_id,
+            request.account_scope,
+            request.stream_id
+        ])
+        .to_string();
+        {
+            let mut inflight = self.inflight.lock().unwrap();
+            if inflight.1 >= MAX_OBSERVATIONS_IN_FLIGHT || inflight.0.contains(&key) {
+                let mut busy = RecordResponse {
+                    status: RecordStatus::Backpressure,
+                    batch_id: request.batch_id.clone(),
+                    current_checkpoint: None,
+                    event_receipts: vec![],
+                    retry_after_ms: Some(crate::assistant_observation::RETRY_AFTER_MS),
+                    reason: Some("in_flight".into()),
+                };
+                busy.retry_after_ms = busy.retry_after_ms.map(|ms| ms / 5);
+                return serde_json::to_value(busy).map_err(|e| e.to_string());
+            }
+            inflight.0.insert(key.clone());
+            inflight.1 += 1;
+        }
+        let permit = ObservationPermit {
+            inflight: self.inflight.clone(),
+            key,
+        };
+        let result = tokio::task::spawn_blocking(move || {
+            let _permit = permit;
+            if !ctx.is_current() {
+                return Err(crate::store::StoreError::InvalidAssistant(
+                    "plugin was disabled before record".into(),
+                ));
+            }
+            store.observation_record(&principal, request)
+        })
+        .await;
+        // A store error is not a commit acknowledgement: the adapter sees an error and recovers
+        // through the original batch id.
+        let response = result
+            .map_err(|error| error.to_string())?
+            .map_err(|error| error.to_string())?;
+        serde_json::to_value(response).map_err(|error| error.to_string())
     }
 
     fn log(&self, level: &str, message: &str) {
@@ -830,5 +937,149 @@ mod tests {
         let local_transport =
             ProcessTransport::from_spec(&spec, bundle.path().to_path_buf(), "fixture".into());
         assert_eq!(local_transport.command, local.to_string_lossy());
+    }
+    #[tokio::test]
+    async fn observation_record_uses_real_process_protocol_and_host_principal_for_all_source_kinds()
+    {
+        use crate::assistant::{AssistantEdit, AssistantSettings};
+        use crate::assistant_observation::{Principal, SourceBindingInput};
+        use crate::kernel::App;
+        use crate::plugins::app::service::StoreService;
+        let temp = tempfile::tempdir().unwrap();
+        let store = Arc::new(crate::Store::open_in_memory().unwrap());
+        store
+            .add_project("/fixture-project", Some("Fixture"), 0)
+            .unwrap();
+        let mut state = store
+            .edit_assistant(
+                0,
+                AssistantEdit::Settings {
+                    settings: AssistantSettings {
+                        enabled: true,
+                        projects: vec!["/fixture-project".into()],
+                        provider: crate::provider::ProviderId::Grok,
+                        model: None,
+                        reasoning_effort: None,
+                        concurrency: 2,
+                        turn_limit: 8,
+                        dispatch_limit: 8,
+                    },
+                },
+            )
+            .unwrap();
+        for provider in ["mail", "feishu", "webhook", "mcp"] {
+            state = store
+                .edit_assistant(
+                    state.revision,
+                    AssistantEdit::Source {
+                        binding: SourceBindingInput {
+                            source_id: None,
+                            expected_version: 0,
+                            principal: Principal {
+                                plugin: "bundle:source-fixture".into(),
+                                realm: "global".into(),
+                                connector_id: "events".into(),
+                            },
+                            provider: provider.into(),
+                            account_scope: provider.into(),
+                            resource_filter: vec![],
+                            actor_filter: vec![],
+                            project_paths: vec!["/fixture-project".into()],
+                            goal_ids: vec![],
+                            streams: vec!["main".into()],
+                            enabled: true,
+                        },
+                    },
+                )
+                .unwrap();
+        }
+        let before = state.revision;
+        let script = temp.path().join("fixture.py");
+        std::fs::write(&script, r#"
+import json,sys
+cap=False
+for line in sys.stdin:
+    m=json.loads(line); method=m.get('method'); mid=m.get('id')
+    if method=='initialize':
+        cap=m['params']['host'].get('observations',False)
+        result={'protocolVersion':'1.0.0','commands':[{'name':'fixture.observations'}]}
+    elif method=='command/invoke':
+        req=m['params']['args']
+        if req.get('capability'): result={'capability':cap}
+        else:
+            print(json.dumps({'jsonrpc':'2.0','id':100,'method':'observation/record','params':req}),flush=True)
+            while True:
+                reply=json.loads(sys.stdin.readline())
+                if reply.get('id')==100: break
+            result=reply
+    else: continue
+    print(json.dumps({'jsonrpc':'2.0','id':mid,'result':result}),flush=True)
+"#).unwrap();
+        let app = App::new();
+        app.ctx()
+            .provide(Arc::new(StoreService(store.clone())))
+            .unwrap();
+        let transport = Arc::new(ProcessTransport {
+            command: "python3".into(),
+            args: vec![script.to_string_lossy().into_owned()],
+            env: vec![],
+            cwd: None,
+            label: "observation protocol fixture".into(),
+        });
+        let fork = app.ctx().plugin(
+            ProtocolPlugin::new("bundle:source-fixture", transport)
+                .with_observation_connectors(vec!["events".into()]),
+            Value::Null,
+        );
+        app.flush().await;
+        assert_eq!(
+            fork.status(),
+            crate::kernel::Status::Active,
+            "{:?}",
+            app.runtime().scopes()
+        );
+        let ctx = app.ctx();
+        assert_eq!(
+            ctx.call(
+                "fixture.observations",
+                serde_json::json!({"capability":true})
+            )
+            .await
+            .unwrap()["capability"],
+            true
+        );
+        for provider in ["mail", "feishu", "webhook", "mcp"] {
+            let request = serde_json::json!({"connector_id":"events","account_scope":provider,"stream_id":"main","batch_id":"one","recovery":"resumable","checkpoint_before":null,"checkpoint_after":"cursor-1","events":[{"event_id":"e1","kind":"message.created","occurred_at":"2026-10-06T00:00:00Z","actor_id":"sender","resource_id":"room","object_id":"object","content":"fixture untrusted feedback"}]});
+            let result = ctx
+                .call("fixture.observations", request.clone())
+                .await
+                .unwrap();
+            assert_eq!(result["result"]["status"], "recorded", "{result}");
+            assert_eq!(
+                ctx.call("fixture.observations", request.clone())
+                    .await
+                    .unwrap(),
+                result
+            );
+            let mut forged = request;
+            forged["batch_id"] = serde_json::json!("forged");
+            forged["plugin_id"] = serde_json::json!("bundle:someone-else");
+            assert!(ctx
+                .call("fixture.observations", forged)
+                .await
+                .unwrap()
+                .get("error")
+                .is_some());
+        }
+        assert_eq!(store.assistant_state().unwrap().revision, before);
+        assert_eq!(store.observation_inspection(10).unwrap().len(), 4);
+        assert!(ctx
+            .call_extension_public("assistant.edit", Value::Null)
+            .await
+            .is_err());
+        fork.dispose();
+        app.flush().await;
+        assert!(ctx.call("fixture.observations", Value::Null).await.is_err());
+        app.stop().await;
     }
 }

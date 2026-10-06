@@ -1,0 +1,37 @@
+{
+  "checked_at": "2026-10-06T02:22:42.336Z",
+  "workdir": "/Users/chenli/.t3/worktrees/codeTwo/t3code-6738e658",
+  "scope": "Design-only documentation and worktree handoff",
+  "status": "passed",
+  "checks": [
+    {
+      "command": "bun script/verify/docs.ts",
+      "chunk_id": "cc6b65",
+      "wall_time_seconds": 0.000005708,
+      "exit_code": 0,
+      "original_token_count": 13,
+      "output": "[docs] catalog, links, schemas, and assets valid\n"
+    },
+    {
+      "command": "bun script/verify/sdlc.ts --worktree",
+      "chunk_id": "f2414d",
+      "wall_time_seconds": 0.000005458,
+      "exit_code": 0,
+      "original_token_count": 6,
+      "output": "[sdlc] contract valid\n"
+    },
+    {
+      "command": "git diff --check",
+      "chunk_id": "ab5c74",
+      "wall_time_seconds": 0.000005125,
+      "exit_code": 0,
+      "original_token_count": 0,
+      "output": ""
+    }
+  ],
+  "skipped": [
+    "Production Core/desktop tests and UI rendering: no product code or UI changed in this turn",
+    "Paid-model/provider business runs, remote CI, external integrations, packaging and release: not performed"
+  ],
+  "lifecycle_eval": "Not applicable: lifecycle tooling, policy and templates unchanged"
+}

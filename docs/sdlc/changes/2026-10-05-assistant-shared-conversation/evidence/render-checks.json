@@ -1,0 +1,220 @@
+{
+  "verified_at": "2026-10-05 15:09:43 UTC",
+  "environment": "macOS T3 collaborative browser + Vite web mode; production React components with offline fixture API; no Core/Provider started",
+  "navigation": [
+    {
+      "navigation": "记忆",
+      "calls": [],
+      "draft": "固定版本草稿：记忆、任务和设置切换后应保留。",
+      "errors": [],
+      "mark": "frozen-1791212588454",
+      "scroll": 180
+    },
+    {
+      "navigation": "持续任务",
+      "calls": [],
+      "draft": "固定版本草稿：记忆、任务和设置切换后应保留。",
+      "errors": [],
+      "mark": "frozen-1791212588454",
+      "scroll": 180
+    },
+    {
+      "navigation": "设置",
+      "calls": [],
+      "draft": "固定版本草稿：记忆、任务和设置切换后应保留。",
+      "errors": [],
+      "mark": "frozen-1791212588454",
+      "scroll": 180
+    }
+  ],
+  "polling": {
+    "calls": [],
+    "draft": "固定版本草稿：记忆、任务和设置切换后应保留。",
+    "errors": [],
+    "mark": "frozen-1791212588454",
+    "scroll": 180
+  },
+  "send": {
+    "calls": [
+      {
+        "action": {
+          "goal_id": "2788c1df-ec9a-4e0d-8794-46a66bfcdc0d",
+          "kind": "control",
+          "operation": "stop"
+        },
+        "revision": 210
+      },
+      {
+        "action": {
+          "content": "固定版本草稿：记忆、任务和设置切换后应保留。",
+          "kind": "say",
+          "turn_id": "06c9ada3-97e8-4ce1-acdf-b71555496f58"
+        },
+        "revision": 211
+      }
+    ],
+    "draft": "",
+    "errors": [],
+    "leaked": 1,
+    "statuses": [
+      {
+        "content": "固定版本草稿：记忆、任务和设置切换后应保留。",
+        "id": "06c9ada3-97e8-4ce1-acdf-b71555496f58",
+        "status": "recorded"
+      }
+    ],
+    "window_keydown_baseline": 1,
+    "window_keydown_delta": 0,
+    "explanation": "Initial unfocused key was outside composer; focused Mod+Enter generated say exactly once without incrementing window listener"
+  },
+  "control": {
+    "calls": [
+      {
+        "action": {
+          "goal_id": "2788c1df-ec9a-4e0d-8794-46a66bfcdc0d",
+          "kind": "control",
+          "operation": "stop"
+        },
+        "revision": 210
+      }
+    ],
+    "errors": [],
+    "stop": true
+  },
+  "memory": {
+    "calls": [
+      {
+        "action": {
+          "goal_id": "2788c1df-ec9a-4e0d-8794-46a66bfcdc0d",
+          "kind": "control",
+          "operation": "stop"
+        },
+        "revision": 210
+      },
+      {
+        "action": {
+          "content": "固定版本草稿：记忆、任务和设置切换后应保留。",
+          "kind": "say",
+          "turn_id": "06c9ada3-97e8-4ce1-acdf-b71555496f58"
+        },
+        "revision": 211
+      },
+      {
+        "action": {
+          "content_hash": "ce9f2f6bf4b00823463dd0f2c35a2b4e2df31d258a837e8c10b6987cb80cc2f1",
+          "kind": "confirm_memory",
+          "proposal_id": "fc8217ca-450e-4b19-853f-ccbf1fbf79b9:ce9f2f6bf4b0"
+        },
+        "revision": 212
+      }
+    ],
+    "errors": [],
+    "memory": [
+      {
+        "content_hash": "ce9f2f6bf4b00823463dd0f2c35a2b4e2df31d258a837e8c10b6987cb80cc2f1",
+        "id": "fc8217ca-450e-4b19-853f-ccbf1fbf79b9:ce9f2f6bf4b0",
+        "memory_id": "fixture-saved-memory",
+        "state": "confirmed"
+      }
+    ]
+  },
+  "narrow": {
+    "buttons": [
+      {
+        "label": "记忆",
+        "right": 260,
+        "width": 32
+      },
+      {
+        "label": "持续任务",
+        "right": 296,
+        "width": 32
+      },
+      {
+        "label": "设置",
+        "right": 332,
+        "width": 32
+      },
+      {
+        "label": "更多工具",
+        "right": 368,
+        "width": 32
+      },
+      {
+        "label": "关闭",
+        "right": 404,
+        "width": 32
+      }
+    ],
+    "errors": [],
+    "native": 0,
+    "overflow": false,
+    "viewport": [
+      420,
+      800
+    ]
+  },
+  "tasks_narrow": {
+    "controls": [
+      "返回对话",
+      "记忆",
+      "持续任务",
+      "设置",
+      "更多工具",
+      "关闭",
+      "项目",
+      "详情",
+      "打开执行会话",
+      "请求停止执行",
+      "接管",
+      "详情",
+      "打开执行会话",
+      "详情",
+      "打开执行会话"
+    ],
+    "errors": [],
+    "native": 0,
+    "overflow": false,
+    "viewport": [
+      420,
+      800
+    ]
+  },
+  "main_expanded": {
+    "buttons": [
+      "模式: 每次询问",
+      "显示会话设置",
+      "向文档添加内容",
+      "收起文档",
+      "运行这篇文档"
+    ],
+    "draft": "主会话切换展开模式后保留草稿。",
+    "errors": [],
+    "mode": "document",
+    "overflow": false
+  },
+  "main_narrow": {
+    "cardWidth": 372,
+    "draft": "主会话切换展开模式后保留草稿。",
+    "errors": [],
+    "mode": "compact",
+    "overflow": false,
+    "viewport": [
+      420,
+      800
+    ]
+  },
+  "screenshots": [
+    "conversation-light.png",
+    "conversation-dark.png",
+    "conversation-narrow.png",
+    "tasks-light.png",
+    "memory-light.png",
+    "main-dark.png",
+    "main-narrow.png"
+  ],
+  "limitations": [
+    "API calls, receipt display and control binding are offline fixtures, not actual Core delivery or Provider adoption",
+    "No full packaged desktop, notifications, paid model business scenario, remote CI or email/Feishu integration"
+  ]
+}

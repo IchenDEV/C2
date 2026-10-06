@@ -1,0 +1,30 @@
+{
+  "checked_at": "2026-10-06T02:47:24.991454+00:00",
+  "head": "14c20fce841384dbeaa16c48c7a7264d6e4a9f81",
+  "checked_preexisting_nonbundle_files": 271,
+  "changed_preexisting_files": [],
+  "unexpected_new_paths_outside_bundles": [],
+  "removed": {
+    "path": "/Users/chenli/.t3/worktrees/codeTwo/t3code-6738e658/.codex/run/native-provider-connectors/validation",
+    "logical_bytes": 406797185,
+    "file_count": 1728,
+    "absent_after": true
+  },
+  "task_processes_matching_owned_build_path": [],
+  "retained": [
+    {
+      "path": "/Users/chenli/.t3/worktrees/codeTwo/t3code-6738e658/docs/sdlc/changes/2026-10-06-native-provider-connectors/evidence/partial-implementation-r5.json",
+      "purpose": "Exact interrupted Cursor candidate patch content, withdrawn from active source",
+      "owner": "codex-main",
+      "next_checkpoint": "Next authorized supervised implementation round after a round-budget decision"
+    },
+    {
+      "path": "/Users/chenli/.t3/worktrees/codeTwo/t3code-6738e658/docs/sdlc/changes/2026-10-06-native-provider-connectors/evidence/partial-checks-r5.json",
+      "purpose": "Compact real compiler diagnostics before/after withdrawal",
+      "owner": "codex-main",
+      "next_checkpoint": "Next implementation/acceptance round"
+    }
+  ],
+  "shared_resources": "Shared platform caches and all user processes preserved; no Core/UI/SDK/server launched",
+  "method": "SHA-256 over exact bytes of all pre-existing nonbundle dirty files plus Git status; explicit exact scratch boundary and owned process inventory"
+}

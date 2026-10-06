@@ -1,0 +1,32 @@
+{
+  "startedAt": "2026-10-06T02:02:41.097Z",
+  "budgetMs": 600000,
+  "brief": "工作目录 /Users/chenli/.t3/worktrees/codeTwo/t3code-6738e658。受监督Cursor只读架构任务，不再委派，单轮10分钟累计，完成一次报告后结束。用户指定Sonnet5.5/300K/high/Full Access，实际已设，不切模型、不改账户付费/持久权限。Plan，不写任何文件、不测试/构建、不启动用户或Core/Provider进程、不读凭据，不外发消息/发布/push/PR/merge。你不是唯一工作者，保留所有状态。\n用户新增任务：Claude Code、Codex、Cursor、OpenCode 使用官方SDK/App Server的自有连接器，ACP保留第三方扩展。当前主 Agent并行整理Project大/小管家；连接器必须让层级设计使用稳定Engine接口，不增加事实源或重做幕僚异步。本轮只是调研/拆解设计，具体新增高风险协议尚待人类确认。\n你拥有现有CodeTwo seam核对责任，官方SDK调研另有人做。看 crates/core/src/provider.rs、acp/client.rs/handler.rs/connection.rs、engine.rs、provider_lifecycle.rs、session.rs、prompt_delivery.rs 及 crates/napi/server 消费边界，重点ACP类型泄漏/生命周期/approval/MCP/跨providerhandoff/stream events/steering/取消/版本和unique receipt。可窄查Desktop/BunToolBroker的边界，不扫无关UI。新SDK路由建议Codex native stdioAppServer；Claude官方AgentSDK由薄受监督JSsidecar；Cursor官方@cursor/sdk或officialsdkbridge；OpenCode官方HTTP/server+events并保持OpenCode2不同版本身份。\n返回 <=2000中文字：1.精确源码路径/行号与ACP耦合点；2.最小Provider-neutral trait/event types/能力矩阵落点，Engine与Store不搬家，避免把各SDK重新硬压成ACP；3.共享接口先冻结后四连接器并行的文件 ownership和依赖顺序、可直接复用路径/要删旧路径；4.旧sessions恢复/协议标识/不能自动跨协议resume/unknown/唯一投递/控制权与权限保持；5.按Provider的fixture/真实CLI/渲染/独立验收细项，paid/account限制分开；6.未查范围与文件/进程/权限变化。只读，不声称已实现或已通过运行测试。",
+  "response": {
+    "content": [
+      {
+        "type": "text",
+        "text": "{\"taskId\":\"node:delegated-task:command%3Amcp%3A4f2da1e5-1b4b-4bca-aecd-77f4da6d7835%3Adelegate-task%3Anative-provider-engine-seam-20261006-r2\",\"childThreadId\":\"thread:delegated-task:command%3Amcp%3A4f2da1e5-1b4b-4bca-aecd-77f4da6d7835%3Adelegate-task%3Anative-provider-engine-seam-20261006-r2\",\"childRunId\":\"run:thread:thread%3Adelegated-task%3Acommand%253Amcp%253A4f2da1e5-1b4b-4bca-aecd-77f4da6d7835%253Adelegate-task%253Anative-provider-engine-seam-20261006-r2:ordinal:1\",\"childNodeId\":\"node:delegated-task:command%3Amcp%3A4f2da1e5-1b4b-4bca-aecd-77f4da6d7835%3Adelegate-task%3Anative-provider-engine-seam-20261006-r2\",\"status\":\"running\",\"workState\":\"working\",\"hasPendingChildRuns\":false,\"latestTerminalRunId\":null,\"latestTerminalStatus\":null,\"latestTerminalSummary\":null,\"latestTerminalResultContextTransferId\":null,\"providerInstanceId\":\"cursor\",\"model\":\"claude-sonnet-5-5\",\"summary\":null,\"resultContextTransferId\":null,\"waitTimedOut\":true}"
+      }
+    ],
+    "structuredContent": {
+      "taskId": "node:delegated-task:command%3Amcp%3A4f2da1e5-1b4b-4bca-aecd-77f4da6d7835%3Adelegate-task%3Anative-provider-engine-seam-20261006-r2",
+      "childThreadId": "thread:delegated-task:command%3Amcp%3A4f2da1e5-1b4b-4bca-aecd-77f4da6d7835%3Adelegate-task%3Anative-provider-engine-seam-20261006-r2",
+      "childRunId": "run:thread:thread%3Adelegated-task%3Acommand%253Amcp%253A4f2da1e5-1b4b-4bca-aecd-77f4da6d7835%253Adelegate-task%253Anative-provider-engine-seam-20261006-r2:ordinal:1",
+      "childNodeId": "node:delegated-task:command%3Amcp%3A4f2da1e5-1b4b-4bca-aecd-77f4da6d7835%3Adelegate-task%3Anative-provider-engine-seam-20261006-r2",
+      "status": "running",
+      "workState": "working",
+      "hasPendingChildRuns": false,
+      "latestTerminalRunId": null,
+      "latestTerminalStatus": null,
+      "latestTerminalSummary": null,
+      "latestTerminalResultContextTransferId": null,
+      "providerInstanceId": "cursor",
+      "model": "claude-sonnet-5-5",
+      "summary": null,
+      "resultContextTransferId": null,
+      "waitTimedOut": true
+    },
+    "isError": false
+  }
+}

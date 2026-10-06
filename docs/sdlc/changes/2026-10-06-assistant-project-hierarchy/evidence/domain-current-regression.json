@@ -1,0 +1,14 @@
+{
+  "mode": "owner",
+  "command": "cargo test --offline -p codetwo-core -- --nocapture",
+  "wholeCommandExitCode": 0,
+  "suite": "assistant_project_hierarchy",
+  "passed": 19,
+  "failed": 0,
+  "sourceSetSha256": "fad903affa9afe3e2a05b8f36116ca0592e0d6451bb10e1ad70b38ac1822b7ab",
+  "sourceSnapshot": "../../2026-10-06-native-provider-connectors/evidence/engine-routing-source-snapshot.json",
+  "wholeCoreResult": "../../2026-10-06-native-provider-connectors/evidence/engine-routing-core-confirmed.json",
+  "suiteLog": "domain-current-regression.log",
+  "suiteLogSha256": "07945cc9129dcb8d138f334ae32c82d3d302b57e45cfbb6e48c4b169e1063efd",
+  "limits": "Pending creation intent cannot be erased after takeover or forged cancelled/failed. Production Project Runtime/tool restrictions, writer release, UI and independent acceptance remain pending."
+}

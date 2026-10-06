@@ -1,0 +1,9 @@
+{
+  "test_environment": "same-source isolated copy; existing native Ghostty pkg-config; original resource probe appended only to isolated copy",
+  "cwd": "/Users/chenli/.t3/worktrees/codeTwo/t3code-6738e658/.codex/run/assistant-agent-first/build-source",
+  "executables": {
+    "/Users/chenli/.t3/worktrees/codeTwo/t3code-6738e658/.codex/run/assistant-agent-first/core/target/debug/deps/codetwo_core-a5036cd5ed20ab85": "7ea68a98c2c68ae7e227239b604f4b058a299b50952fb3b09af8491cf9da725d",
+    "/Users/chenli/.t3/worktrees/codeTwo/t3code-6738e658/.codex/run/assistant-agent-first/core/target/debug/deps/assistant-279ef2bab6f71d2a": "abe72fee6018e5b71bae713744cd77d55df7539731eaec24c1c4a34beafefba8",
+    "/Users/chenli/.t3/worktrees/codeTwo/t3code-6738e658/.codex/run/assistant-agent-first/core/target/debug/deps/prompt_delivery-762ecbef267a5614": "a1249c2a1b35d3524ad7320ddb5e4c652522d7d9714fc3f3ae9f4d9278574022"
+  }
+}

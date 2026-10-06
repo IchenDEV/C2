@@ -1,0 +1,171 @@
+{
+  "date": "2026-10-06",
+  "verification_mode": "owner",
+  "environment": "macOS arm64; Bun 1.4.2; existing checkout/dependencies; production React via T3 preview with offline API fixture, no Core or Provider connection",
+  "source_snapshot": "source-sha256.json",
+  "before_snapshot": "followup-20261006-before-sha256.json",
+  "scope": {
+    "baseline_files": 635,
+    "changed": [
+      "apps/desktop/src/assistant/ChiefThread.tsx"
+    ],
+    "unchanged_files": 634,
+    "chief_sha256": "133cf0170e4c2d3dac55a6ccb441e67dca1f1990d23a2abf66c2eed7c2df0705",
+    "core_and_main_conversation_source_unchanged": true
+  },
+  "checks": [
+    {
+      "command": "cd apps/desktop && bun test tests/assistantThread.test.tsx tests/assistantSharedConversation.test.tsx",
+      "passed": 29,
+      "failed": 0,
+      "exit_code": 0,
+      "log": "followup-20261006-tests.log"
+    },
+    {
+      "command": "cd apps/desktop && bunx tsc --noEmit -p .",
+      "exit_code": 0,
+      "log": "followup-20261006-types.log"
+    },
+    {
+      "command": "cd apps/desktop && bun run lint",
+      "exit_code": 0,
+      "log": "followup-20261006-lint.log"
+    },
+    {
+      "command": "cd apps/desktop && bunx vite build --mode web --outDir /Users/chenli/.t3/worktrees/codeTwo/t3code-6738e658/.codex/run/assistant-paused-indicator-20261006/web",
+      "exit_code": 0,
+      "log": "followup-20261006-web-build.log",
+      "original_log_sha256": "1cd4b0e91e97cd9bd9550e151c7433326f3633f9bf011370813eb02c20aed72c",
+      "warning": "Existing build includes chunks larger than 500 kB; build succeeded."
+    },
+    {
+      "command": "cd apps/desktop && bunx vite build --outDir /Users/chenli/.t3/worktrees/codeTwo/t3code-6738e658/.codex/run/assistant-paused-indicator-20261006/renderer",
+      "exit_code": 0,
+      "log": "followup-20261006-renderer-build.log",
+      "original_log_sha256": "215c5f4df0879c29563d94bd8758b302e22f5b0ca47473abd506559e0ca6a649",
+      "warning": "Existing build includes chunks larger than 500 kB; build succeeded."
+    }
+  ],
+  "render": {
+    "default_light": {
+      "viewport": [
+        1280,
+        800
+      ],
+      "enabled": false,
+      "visible_pause_text": false,
+      "pause_icon": true,
+      "overflow": false,
+      "errors": [],
+      "api_calls": []
+    },
+    "keyboard_focus": {
+      "method": "Native T3 preview Tab from project-scope button",
+      "tooltip": "跟进已暂停，消息会先记录。",
+      "enabled": false,
+      "errors": [],
+      "api_calls": []
+    },
+    "pointer_hover": {
+      "method": "Native T3 preview pointer click at icon, then activeElement.blur; after delay verify :hover=true with no keyboard focus",
+      "hover": true,
+      "tooltip": "跟进已暂停，消息会先记录。",
+      "enabled": false,
+      "errors": [],
+      "api_calls": []
+    },
+    "dark_narrow": {
+      "viewport": [
+        420,
+        800
+      ],
+      "enabled": false,
+      "visible_pause_text": false,
+      "overflow": false,
+      "errors": [],
+      "api_calls": []
+    },
+    "enabled_fixture": {
+      "method": "Offline fixture state changed only; wait for production snapshot polling",
+      "enabled": true,
+      "pause_icon": false,
+      "errors": [],
+      "api_calls": []
+    },
+    "indicator": {
+      "read_only": true,
+      "disabled": false,
+      "aria_disabled": "true",
+      "tab_index": 0,
+      "setting_or_control_mutations": 0
+    }
+  },
+  "images": [
+    {
+      "original": "/Users/chenli/.t3/userdata/browser-artifacts/browser-screenshot-127-0-0-1-muvhpkjy-b97bc126.png",
+      "retained": "followup-20261006-paused-light.png",
+      "sha256": "210bdd37823daf1f5d209983c9b177a7b762246a96ac812602abcae57447afcd",
+      "bytes": 84230
+    },
+    {
+      "original": "/Users/chenli/.t3/userdata/browser-artifacts/browser-screenshot-127-0-0-1-muvho6i6-785bbcd3.png",
+      "retained": "followup-20261006-paused-tooltip.png",
+      "sha256": "207adae31692f024898bc0990832ce079fd460fe417e376976052c87da2ebf37",
+      "bytes": 90117
+    },
+    {
+      "original": "/Users/chenli/.t3/userdata/browser-artifacts/browser-screenshot-127-0-0-1-muvhpljp-7742f8ac.png",
+      "retained": "followup-20261006-paused-narrow.png",
+      "sha256": "09cb644a1f4fbb495cacaf894efa1533b3c339d85648c2633268ab628614cf12",
+      "bytes": 102908
+    }
+  ],
+  "reuse": "Prior owner 105 tests and original shared-main/Core evidence retained; not counted as newly rerun or relabeled independent. Follow-up reran 29 directly affected tests.",
+  "limitations": [
+    "No live paid-model business run",
+    "No native package notification verification",
+    "No remote CI",
+    "No email/Feishu integration",
+    "No PR, publication or deployment"
+  ],
+  "handoff_checks": [
+    {
+      "command": "bun script/verify/docs.ts",
+      "exit_code": 0,
+      "log": "followup-20261006-handoff.log"
+    },
+    {
+      "command": "bun script/verify/sdlc.ts --worktree",
+      "exit_code": 0,
+      "log": "followup-20261006-handoff.log"
+    },
+    {
+      "command": "git diff --check",
+      "exit_code": 0,
+      "log": "followup-20261006-handoff.log"
+    }
+  ],
+  "cleanup": {
+    "status": "complete",
+    "removed_scratch": "/Users/chenli/.t3/worktrees/codeTwo/t3code-6738e658/.codex/run/assistant-paused-indicator-20261006",
+    "removed_scratch_bytes": 237961413,
+    "removed_scratch_files": 4226,
+    "removed_screenshot_originals": [
+      "/Users/chenli/.t3/userdata/browser-artifacts/browser-screenshot-127-0-0-1-muvhpkjy-b97bc126.png",
+      "/Users/chenli/.t3/userdata/browser-artifacts/browser-screenshot-127-0-0-1-muvho6i6-785bbcd3.png",
+      "/Users/chenli/.t3/userdata/browser-artifacts/browser-screenshot-127-0-0-1-muvhpljp-7742f8ac.png"
+    ],
+    "source_screenshot_copies_sha256_checked": true,
+    "pid": 55283,
+    "process_identity": "bun .codex/run/assistant-paused-indicator-20261006/serve.ts",
+    "signal": "SIGINT",
+    "ps_exit_code": 1,
+    "port": 14676,
+    "port_check_exit_code": 1,
+    "closed_preview_tab": "tab_3",
+    "retained_owner": "codex",
+    "retention": "Compact evidence, screenshot copies and before/final hashes retained in existing lifecycle bundle; all preexisting work and user data preserved. No Core or user process started/stopped."
+  },
+  "earlier_handoff_attempts": "The SDLC checker rejected appended prose in the Verdict label twice; fixed to its exact verified value. Both failed outputs retained in handoff log. Product/source unchanged.",
+  "final_source_snapshot_rechecked_files": 635
+}

@@ -1,0 +1,44 @@
+{
+  "task": {
+    "taskId": "node:delegated-task:command%3Amcp%3A56262fd4-bb0b-44d8-8964-b0985862bcd1%3Adelegate-task%3Acodetwo-native-engine-routing-r13-20261006",
+    "childThreadId": "thread:delegated-task:command%3Amcp%3A56262fd4-bb0b-44d8-8964-b0985862bcd1%3Adelegate-task%3Acodetwo-native-engine-routing-r13-20261006",
+    "childRunId": "run:thread:thread%3Adelegated-task%3Acommand%253Amcp%253A56262fd4-bb0b-44d8-8964-b0985862bcd1%253Adelegate-task%253Acodetwo-native-engine-routing-r13-20261006:ordinal:1",
+    "childNodeId": "node:delegated-task:command%3Amcp%3A56262fd4-bb0b-44d8-8964-b0985862bcd1%3Adelegate-task%3Acodetwo-native-engine-routing-r13-20261006",
+    "status": "running",
+    "workState": "working",
+    "hasPendingChildRuns": false,
+    "latestTerminalRunId": null,
+    "latestTerminalStatus": null,
+    "latestTerminalSummary": null,
+    "latestTerminalResultContextTransferId": null,
+    "providerInstanceId": "cursor",
+    "model": "claude-sonnet-5-5",
+    "summary": null,
+    "resultContextTransferId": null,
+    "waitTimedOut": true
+  },
+  "configuration": {
+    "threadId": "thread:delegated-task:command%3Amcp%3A56262fd4-bb0b-44d8-8964-b0985862bcd1%3Adelegate-task%3Acodetwo-native-engine-routing-r13-20261006",
+    "modelSelection": {
+      "instanceId": "cursor",
+      "model": "claude-sonnet-5-5",
+      "options": [
+        {
+          "id": "contextWindow",
+          "value": "300k"
+        },
+        {
+          "id": "reasoning_effort",
+          "value": "high"
+        }
+      ]
+    },
+    "runtimeMode": "full-access",
+    "interactionMode": "default"
+  },
+  "startedAt": "2026-10-06T04:22:27Z",
+  "deadline": "2026-10-06T04:52:27Z",
+  "budgetMs": 1800000,
+  "brief": "You are a Cursor implementation worker in /Users/chenli/.t3/worktrees/codeTwo/t3code-6738e658, branch t3code/6738e658. You are NOT alone; preserve all other/user changes. Never reset/checkout/stash or revert others. Do not delegate or create threads/worktrees. Read AGENTS.md and codetwo-develop, use Ponytail full. Human approved both concrete designs in docs/sdlc/changes/2026-10-06-native-provider-connectors/spec.md and 2026-10-06-assistant-project-hierarchy/spec.md and local implementation. User explicitly clarified fork access MEANS Full Access. Fixed provider cursor / claude-sonnet-5-5 / contextWindow300k / reasoning_efforthigh / full-access / default. Never switch model/context/permissions/auth/billing or publish/push/PR/merge/deploy/external messages. No paid-model business canary, cloud automation or user process stops. This is one supervised child of the existing task, not a new team. Single round MAX30min including startup; parent records original start/deadline. Converge by25min, coherent code then concise final report and NATURALLY END once. No repeated reports. Parent owns Cargo/fixtures environment/lifecycle/final acceptance.\nORIGINAL GOAL: Replace builtin ACP with four official native interfaces through one neutral Engine runtime while retaining third-party ACP and existing Engine/Store/Memory/delivery facts, permissions, Stop/version/unknown/single-writer. First shared I0 must genuinely replace Engine client operations, not add an unused facade. Official leaves/identity migration/callback ToolBroker/UI later; do not activate them now.\nPRIOR RESULTS: r7 completed facade but actual EngineSessionRuntime.client remained Arc<AcpClient>; only helper relocation used. Owner checks 6/7 new tests and original2/2 negative probes failed. r12 tried full completion but provider run failed (server restart canceledordinal1 and continuationordinal2 failed); all terminal/no pending. Exact docs evidence native-foundation-result-r7.json, native-tests-r7-owner.json, native-fault-probe-r7.rs/.json, native-engine-complete-r12.json; ask no new authorization.\nCURRENT FIXES BY PARENT (DO NOT UNDO): ACP reader OR writer close atomically drains pending as local unresolved (no synthetic RPC), watch shuts both sides, claim/queue fenced with close under short mutex; generic RPC faults send/steer remainUnknown; subsequent sends NotSent. Production files connection.rs/acp.rs/newtests updated; native tests10/10 passed, full Core current check ongoing. RuntimeDiagnostics now owns neutral process/protocol/anomaly types; explicit ACP conversion inadapter. Root M1 hierarchy repairs18/18 include strictEnable{}, nopublicReleaseWriter/secondreleased_sessions, stop/takeoverintent preserved without releasingunknownwriter, memorydeny/currentgrants/owner epoch and legacy noactivemigration. Hierarchy not production activated; do not touch assistant/memory/store.\nTHIS ROUND EXCLUSIVE OWNERSHIP: crates/core/src/engine.rs and crates/core/tests/native_provider_runtime.rs. Read frozen provider_runtime.rs/connectors/acp.rs contract. Parent owns every otherfile. Only if unavoidable, report exact required runtime contract change first in your FINAL; prefer implement with currenttyped APIs, don't write outsideownership. No Cargo/build/output directories, no parallel Cargo, parent serializes real defaultfeature checks in existing isolated .codex/run/native-provider-connectors/validation with same-version existing Ghostty pkg-config; --no-default-features is INVALID baseline. You may rustfmt ownedfiles skip_children=true.\nREQUIRED COHERENT SLICE:\n1. Replace actual Engine SessionRuntime.client, starting_clients, assistant_creations/revivals/candidates and tracking signatures with RuntimeHandle. Launch ACP through AcpRuntime launch (current SessionHandler callback seam explicitly remains ACP as deferredI7). Route all initialize/start/restore/prompt/steer/model/mode/config/cancel/terminate/diagnostics through ProviderRuntime typedoperations; NO .connection() or rawclient prompt/new/load/resume in Engine. Remove replaced concrete operation paths. ACP wiretypes stillused insideSessionHandler and old public protocol diagnostics may stay as explicit compatibility projections, not transport dependency fornativeoperations.\n2. Preserve old public Submit errors/JSON/event/model config/readOnly/permission behavior, creation receipts, replay suppression, static MCP routing, recovery and single delivery. Use neutral start/restore mcpServers (no pre-encoding wireinEngine). Mapping neutral diagnostics to old public ACP DTO is anexplicit compatibility edge; don't reintroduce ACP diagnostictypes into runtime contract.\n3. TurnOutcome NotSent/Rejected/Unknown retainhonest distinctions at decision/delivery edges; genericRpcError is not proof ofpreexecution rejection. request_stop is onlyrequest; NEVER clearwriter orassumeStopped. SteerOutcome Delivered means transportpositive receipt, NOTmodeladoption. Unsupported/notSent versus unknown meaningful; no automaticfollowup forunknown. ACP noearlyAccepted signal remains documented, don'tinventAccepted. Native backends remaininactive.\n4. Add meaningful productionEngine loopback tests in ownedintegrationfile using existing realACP fixtures/launch wrapper as applicable: actual Session/new/send/stop usesadapter, slowA doesn'tblockB, stopnotbehindA; unknownwriterfailure settles, originalnegative tests retained. If subprocess fixture reuse requires parentfilechange report exactneed; don't fakeproduction bytestingonlyadapter.\nFinal one report: exactfiles, actual changes/invariants, testsACTUALLYran/unrun (no claimparentCargo asyours), unresolvednative/callback/I7/SDK/account/UIlimits, cleanup (you created noscratch). Parent accepts source/checks, completed isnotacceptance. Leave coherent slice before30min, no new permission prompts for authorized reversiblelocalwork.",
+  "humanClarification": "fork access means Full Access; explicit current user message"
+}

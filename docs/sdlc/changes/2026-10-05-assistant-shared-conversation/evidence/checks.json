@@ -1,0 +1,90 @@
+{
+  "environment": "macOS arm64; existing checkout/dependencies; offline React render; no new Core or model business run",
+  "baseline": "14c20fce841384dbeaa16c48c7a7264d6e4a9f81 + preexisting dirty state (before-sha256.json)",
+  "checks": [
+    {
+      "command": "cd apps/desktop && bun test tests/assistant.test.tsx tests/assistantThread.test.tsx tests/assistantSharedConversation.test.tsx",
+      "passed": 41,
+      "failed": 0,
+      "exit_code": 0,
+      "log": "assistant-tests-confirmed.log"
+    },
+    {
+      "command": "cd apps/desktop && bun test tests/composerDrafts.test.ts tests/composerGeometryContract.test.ts tests/composerLayoutRendered.test.tsx tests/transcript.test.ts tests/transcriptScroll.test.tsx tests/turnActionsRendered.test.tsx tests/turnCardRendered.test.tsx tests/sceneEditorRendered.test.tsx",
+      "passed": 53,
+      "failed": 0,
+      "exit_code": 0,
+      "log": "main-regression-final.log",
+      "note": "Bun ran 7 existing files; transcriptScroll is .ts and the mistaken .tsx filter matched none. Its 3 intended checks ran separately below."
+    },
+    {
+      "command": "cd apps/desktop && bun test ./tests/transcriptScroll.test.ts",
+      "passed": 3,
+      "failed": 0,
+      "exit_code": 0,
+      "log": "transcript-scroll-final.log"
+    },
+    {
+      "command": "cd apps/desktop && bun test tests/editorCanvasRendered.test.tsx",
+      "passed": 8,
+      "failed": 0,
+      "exit_code": 0,
+      "log": "editor-regression-final.log"
+    },
+    {
+      "command": "cd apps/desktop && bunx tsc --noEmit -p .",
+      "exit_code": 0,
+      "log": "types.log"
+    },
+    {
+      "command": "cd apps/desktop && bun run lint",
+      "exit_code": 0,
+      "log": "lint-final.log"
+    },
+    {
+      "command": "cd apps/desktop && bunx vite build --outDir <owned scratch>/web --mode web",
+      "exit_code": 0,
+      "log": "web-build.log"
+    },
+    {
+      "command": "cd apps/desktop && bunx vite build --outDir <owned scratch>/renderer",
+      "exit_code": 0,
+      "log": "renderer-build.log"
+    },
+    {
+      "command": "git diff --check",
+      "exit_code": 0
+    }
+  ],
+  "review": "Cursor r3 terminal completed/pending false; no P1; 40/41 on earlier test harness, source hashes match final; Range + valid Markdown whitespace fixed by owner and final 41/41 owner rerun, not relabeled independent",
+  "earlier_attempts": [
+    "r1 source implementation partial, root integrated actual main ComposerCard and record order",
+    "r2 38/40 identified failed-status reset and format loss; both fixed",
+    "new nested export test initially lacked Range, then expected a single bullet-space; corrected platform binding and whitespace matcher; final assertion retains nested list, link and table refusal",
+    "combined main+editor suites initially hit shared Canvas stub missing setTransform; run in isolated Bun processes without changing production code"
+  ],
+  "handoff_checks": [
+    {
+      "command": "bun script/verify/docs.ts",
+      "exit_code": 0
+    },
+    {
+      "command": "bun script/verify/sdlc.ts --worktree",
+      "exit_code": 0
+    },
+    {
+      "command": "git diff --check",
+      "exit_code": 0
+    }
+  ],
+  "prior_handoff_checks": [
+    {
+      "command": "bun script/verify/docs.ts",
+      "exit_code": 0
+    },
+    {
+      "command": "bun script/verify/sdlc.ts --worktree",
+      "exit_code": 1
+    }
+  ]
+}

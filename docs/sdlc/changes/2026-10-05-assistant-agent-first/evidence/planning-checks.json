@@ -1,0 +1,38 @@
+{
+  "checked_source_files": [
+    {
+      "path": "apps/desktop/src/assistant/AssistantWorkspace.tsx",
+      "sha256": "f46b07c1254481644fc6808044e93316d41bb286e5e5e90ee169cb11e501b14d",
+      "matches_prior_evidence": true
+    },
+    {
+      "path": "apps/desktop/src/assistant/CoordinationPanel.tsx",
+      "sha256": "eae31e57cde452371381bf919f5236e7ce99c55b02ebf1d14d8461def5768323",
+      "matches_prior_evidence": true
+    },
+    {
+      "path": "apps/desktop/src/assistant/AssistantSelect.tsx",
+      "sha256": "244cf2a80c994bd14de989c1d20fdef4e21ff1f73150f23d228a1bee4765c0a3",
+      "matches_prior_evidence": true
+    },
+    {
+      "path": "apps/desktop/tests/assistant.test.tsx",
+      "sha256": "ce84d6c73a5504b9875e8ebdd6bf2141fd6c0fc37cdec964c93f2a900234fea9",
+      "matches_prior_evidence": true
+    },
+    {
+      "path": "crates/core/src/assistant.rs",
+      "sha256": "1a7ce98bfa1612d991e0875a5553a67a7cabe79d501afb956f643fc60062dc49",
+      "matches_prior_evidence": true
+    },
+    {
+      "path": "crates/core/src/plugins/app/plugins/assistant.rs",
+      "sha256": "56451c60e7e5affcd4ee629b8ce69cda249256f16e43bace506102b7a9d562ee",
+      "matches_prior_evidence": true
+    }
+  ],
+  "all_match": true,
+  "scratch_root_exists": false,
+  "scope": "six relevant prior source files; not a claim that the entire worktree was byte-compared",
+  "created_builds_or_services": false
+}

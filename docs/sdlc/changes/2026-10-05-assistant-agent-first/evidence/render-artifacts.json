@@ -1,0 +1,29 @@
+[
+  {
+    "goal_id": "2788c1df-ec9a-4e0d-8794-46a66bfcdc0d",
+    "contract_revision": 1,
+    "result_state": "accepted",
+    "path": "/private/tmp/codetwo-assistant-agent-first-hnfo1964/a/report.txt",
+    "bytes": "fixture report v2",
+    "claimed_sha256": "f6537fc19c724a127f3d2a29fbcf452fe40c7b7657fa2b2868dade5120d1c8d3",
+    "actual_sha256": "f88521ba997d1454b33446c1b6208a250e79f9e8da3333aff48c600d137f7a42"
+  },
+  {
+    "goal_id": "3c015a3b-348d-409c-a9e3-14f3ce4b04c1",
+    "contract_revision": 1,
+    "result_state": "accepted",
+    "path": "/private/tmp/codetwo-assistant-agent-first-hnfo1964/b/report.txt",
+    "bytes": "fixture report v1",
+    "claimed_sha256": "f6537fc19c724a127f3d2a29fbcf452fe40c7b7657fa2b2868dade5120d1c8d3",
+    "actual_sha256": "f6537fc19c724a127f3d2a29fbcf452fe40c7b7657fa2b2868dade5120d1c8d3"
+  },
+  {
+    "goal_id": "1191783e-644c-4c2b-8aba-b592b7084e03",
+    "contract_revision": 2,
+    "result_state": "accepted",
+    "path": "/private/tmp/codetwo-assistant-agent-first-hnfo1964/a/report.txt",
+    "bytes": "fixture report v2",
+    "claimed_sha256": "f88521ba997d1454b33446c1b6208a250e79f9e8da3333aff48c600d137f7a42",
+    "actual_sha256": "f88521ba997d1454b33446c1b6208a250e79f9e8da3333aff48c600d137f7a42"
+  }
+]

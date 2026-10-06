@@ -1,0 +1,9 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.09s
+     Running unittests src/lib.rs (.codex/run/assistant-capacity/target/debug/deps/codetwo_core-26b14952dd983b08)
+
+running 1 test
+supervisor: initial C failed with full resources; turns=1
+supervisor: after resource release C assignments=1, turns=2, reviews=[("a5214814-5809-46cf-b4fb-4d2ffc23675a", "failed", Some("invalid assistant: concurrency limit reached")), ("a5214814-5809-46cf-b4fb-4d2ffc23675a", "completed", None)]
+test plugins::app::plugins::assistant::tests::supervisor_resource_release_retries_waiting_independent_scope ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 575 filtered out; finished in 0.20s

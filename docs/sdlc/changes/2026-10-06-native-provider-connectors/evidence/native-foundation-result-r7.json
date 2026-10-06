@@ -1,0 +1,43 @@
+{
+  "task": {
+    "taskId": "node:delegated-task:command%3Amcp%3A4f2da1e5-1b4b-4bca-aecd-77f4da6d7835%3Adelegate-task%3Acodetwo-native-foundation-r7-20261006",
+    "childThreadId": "thread:delegated-task:command%3Amcp%3A4f2da1e5-1b4b-4bca-aecd-77f4da6d7835%3Adelegate-task%3Acodetwo-native-foundation-r7-20261006",
+    "startedAt": "2026-10-06T03:16:28.897Z",
+    "budgetMs": 1800000
+  },
+  "result": {
+    "taskId": "node:delegated-task:command%3Amcp%3A4f2da1e5-1b4b-4bca-aecd-77f4da6d7835%3Adelegate-task%3Acodetwo-native-foundation-r7-20261006",
+    "childThreadId": "thread:delegated-task:command%3Amcp%3A4f2da1e5-1b4b-4bca-aecd-77f4da6d7835%3Adelegate-task%3Acodetwo-native-foundation-r7-20261006",
+    "childRunId": "run:thread:thread%3Adelegated-task%3Acommand%253Amcp%253A4f2da1e5-1b4b-4bca-aecd-77f4da6d7835%253Adelegate-task%253Acodetwo-native-foundation-r7-20261006:ordinal:1",
+    "childNodeId": "node:delegated-task:command%3Amcp%3A4f2da1e5-1b4b-4bca-aecd-77f4da6d7835%3Adelegate-task%3Acodetwo-native-foundation-r7-20261006",
+    "status": "completed",
+    "workState": "result_available",
+    "hasPendingChildRuns": false,
+    "latestTerminalRunId": "run:thread:thread%3Adelegated-task%3Acommand%253Amcp%253A4f2da1e5-1b4b-4bca-aecd-77f4da6d7835%253Adelegate-task%253Acodetwo-native-foundation-r7-20261006:ordinal:1",
+    "latestTerminalStatus": "completed",
+    "latestTerminalSummary": "**这一轮没有完成 Engine 的实际路由,只交付了中立接口、ACP 适配器和测试。** 我没有运行任何 cargo,所以所有 Rust 代码都没编译过,需要父级的默认 feature 编译来验证。\n\nEngine 的 `session/new`、`resume`/`load`、`prompt`、`steer`、`cancel` 仍然走原来的 `AcpClient`。原因是给 `SessionRuntime` 换类型要同时改 spawn、starting_clients、revival、assistant_creation、provider switch、cancel、steer 和 prompt 等多处,时间不够安全完成。因此新边界在生产路径上还没被调用。AC-1 和 AC-6/7 的 Engine 部分未满足,也不能声称官方后端迁移完成。\n\n## 改动文件\n- `crates/core/src/provider_runtime.rs`(新增):`ProviderRuntime` 接口、`RuntimeIdentity` 和 `RuntimeCapabilities`、`TurnOutcome` 和 `SteerOutcome`、`RuntimeError`(可与 `AcpError` 互转,保持现有 `submit` 对外接口兼容)。\n- `crates/core/src/connectors/mod.rs`、`connectors/acp.rs`(新增):`AcpRuntime` 适配器和 `launch()`。\n  - 把 `config_option_infos`、`reasoning_option_from_models`、`encode_mcp_servers`、`client_capabilities` 从 Engine 搬进来。\n  - 这几个函数现在是 `pub(crate)`,Engine 通过 `use` 引用。\n- `crates/core/src/acp/connection.rs`、`acp/mod.rs`:新增 `Connection::request_phased` 和 `RequestFault`。`request` 现在是它的薄封装,行为不变。\n- `crates/core/src/engine.rs`:只做上面几个函数的搬移和 `use` 调整,没有路由改动。\n- `crates/core/src/lib.rs`:注册新模块并重导出新类型。\n- `crates/core/tests/native_provider_runtime.rs`(新增)。\n\n## 关键设计\n- **发送结果分四种**:`NotSent`、`Rejected`、`Terminal`、`Unknown`。\n  - 请求从未入队写入通道,算 `NotSent`。\n  - 已入队但连接关闭,算 `Unknown`,适配器自己不重发。\n  - 收到 JSON-RPC 错误,算 `Rejected`。\n- **`send_turn`**:等到提供方的终态才返回,没有提前的 Accepted 事件。ACP 没有单独的接受信号,所以规格里的 accepted/terminal 拆分只做了一半。\n- **steer**:结果叫 `Delivered`,按你的反馈只代表传输层送达回执,不代表 worker 采纳。采纳仍由现有 coordination-confirm 负责。\n- **stop**:能力标为 `StopSupport::RequestOnly`,`request_stop` 是同步的,不等任何提供方。\n- **能力**:图片输入和 model options 是三态,不确定就标 `Unverified`。\n\n## 测试\n- 新增 6 个回环测试(假 ACP agent):\n  - 能力和身份(`initialize` 后);\n  - 会话创建和恢复的中立状态,以及恢复时 replay 标志被释放;\n  - 正常终态;\n  - 提供方报错对应 `Rejected`;\n  - 挂断对应 `Unknown`,且只发出一次 prompt;\n  - Stop 请求后该轮自己报出 `Cancelled`;\n  - steer 在能力未声明时 `NotSent`,声明后返回 `Delivered`。\n- 我跑过 `rustfmt --check`(`skip_children`),全部通过。\n- 我没有写 Engine 级测试,因为 Engine 还不能注入假 runtime。\n- 我删掉了一个\"传输已断后发送应为 `NotSent`\"的测试。担心现有 `Connection` 在写入失败后会让已入队请求一直挂起,所以没留。这是一个待确认的风险。\n\n## 遗留问题\n- 回调接缝仍是 ACP 形状:`launch` 接收 `ClientHandler`。\n- `RuntimeDiagnostics` 仍包含 `AcpProcessDiagnostics` 和 `AcpProtocolDiagnostics`,因为 `ProviderProtocolCompatibility` 已经公开暴露它们,中立诊断类型推迟。\n- `validate_mcp` 和 `launch` 目前没有被调用方使用。\n- `provider.rs`、`session.rs` 未改,后端类型和合约版本还没有持久化。\n\n## 清理\n没有启动进程,没有写入 `/tmp`,没有 Cargo 构建。\n\n下一步需要的是把 `SessionRuntime.client` 换成 `RuntimeHandle`,并把上面几个调用点依次改走 `ProviderRuntime`。",
+    "latestTerminalResultContextTransferId": "context-transfer:type:subagent_result:source-thread:thread%3Adelegated-task%3Acommand%253Amcp%253A4f2da1e5-1b4b-4bca-aecd-77f4da6d7835%253Adelegate-task%253Acodetwo-native-foundation-r7-20261006:target-thread:91d5d393-cf9a-4530-add8-406180f05ce9:d04b99a4-71da-445a-9827-fdf342c46968",
+    "providerInstanceId": "cursor",
+    "model": "claude-sonnet-5-5",
+    "summary": "**这一轮没有完成 Engine 的实际路由,只交付了中立接口、ACP 适配器和测试。** 我没有运行任何 cargo,所以所有 Rust 代码都没编译过,需要父级的默认 feature 编译来验证。\n\nEngine 的 `session/new`、`resume`/`load`、`prompt`、`steer`、`cancel` 仍然走原来的 `AcpClient`。原因是给 `SessionRuntime` 换类型要同时改 spawn、starting_clients、revival、assistant_creation、provider switch、cancel、steer 和 prompt 等多处,时间不够安全完成。因此新边界在生产路径上还没被调用。AC-1 和 AC-6/7 的 Engine 部分未满足,也不能声称官方后端迁移完成。\n\n## 改动文件\n- `crates/core/src/provider_runtime.rs`(新增):`ProviderRuntime` 接口、`RuntimeIdentity` 和 `RuntimeCapabilities`、`TurnOutcome` 和 `SteerOutcome`、`RuntimeError`(可与 `AcpError` 互转,保持现有 `submit` 对外接口兼容)。\n- `crates/core/src/connectors/mod.rs`、`connectors/acp.rs`(新增):`AcpRuntime` 适配器和 `launch()`。\n  - 把 `config_option_infos`、`reasoning_option_from_models`、`encode_mcp_servers`、`client_capabilities` 从 Engine 搬进来。\n  - 这几个函数现在是 `pub(crate)`,Engine 通过 `use` 引用。\n- `crates/core/src/acp/connection.rs`、`acp/mod.rs`:新增 `Connection::request_phased` 和 `RequestFault`。`request` 现在是它的薄封装,行为不变。\n- `crates/core/src/engine.rs`:只做上面几个函数的搬移和 `use` 调整,没有路由改动。\n- `crates/core/src/lib.rs`:注册新模块并重导出新类型。\n- `crates/core/tests/native_provider_runtime.rs`(新增)。\n\n## 关键设计\n- **发送结果分四种**:`NotSent`、`Rejected`、`Terminal`、`Unknown`。\n  - 请求从未入队写入通道,算 `NotSent`。\n  - 已入队但连接关闭,算 `Unknown`,适配器自己不重发。\n  - 收到 JSON-RPC 错误,算 `Rejected`。\n- **`send_turn`**:等到提供方的终态才返回,没有提前的 Accepted 事件。ACP 没有单独的接受信号,所以规格里的 accepted/terminal 拆分只做了一半。\n- **steer**:结果叫 `Delivered`,按你的反馈只代表传输层送达回执,不代表 worker 采纳。采纳仍由现有 coordination-confirm 负责。\n- **stop**:能力标为 `StopSupport::RequestOnly`,`request_stop` 是同步的,不等任何提供方。\n- **能力**:图片输入和 model options 是三态,不确定就标 `Unverified`。\n\n## 测试\n- 新增 6 个回环测试(假 ACP agent):\n  - 能力和身份(`initialize` 后);\n  - 会话创建和恢复的中立状态,以及恢复时 replay 标志被释放;\n  - 正常终态;\n  - 提供方报错对应 `Rejected`;\n  - 挂断对应 `Unknown`,且只发出一次 prompt;\n  - Stop 请求后该轮自己报出 `Cancelled`;\n  - steer 在能力未声明时 `NotSent`,声明后返回 `Delivered`。\n- 我跑过 `rustfmt --check`(`skip_children`),全部通过。\n- 我没有写 Engine 级测试,因为 Engine 还不能注入假 runtime。\n- 我删掉了一个\"传输已断后发送应为 `NotSent`\"的测试。担心现有 `Connection` 在写入失败后会让已入队请求一直挂起,所以没留。这是一个待确认的风险。\n\n## 遗留问题\n- 回调接缝仍是 ACP 形状:`launch` 接收 `ClientHandler`。\n- `RuntimeDiagnostics` 仍包含 `AcpProcessDiagnostics` 和 `AcpProtocolDiagnostics`,因为 `ProviderProtocolCompatibility` 已经公开暴露它们,中立诊断类型推迟。\n- `validate_mcp` 和 `launch` 目前没有被调用方使用。\n- `provider.rs`、`session.rs` 未改,后端类型和合约版本还没有持久化。\n\n## 清理\n没有启动进程,没有写入 `/tmp`,没有 Cargo 构建。\n\n下一步需要的是把 `SessionRuntime.client` 换成 `RuntimeHandle`,并把上面几个调用点依次改走 `ProviderRuntime`。",
+    "resultContextTransferId": "context-transfer:type:subagent_result:source-thread:thread%3Adelegated-task%3Acommand%253Amcp%253A4f2da1e5-1b4b-4bca-aecd-77f4da6d7835%253Adelegate-task%253Acodetwo-native-foundation-r7-20261006:target-thread:91d5d393-cf9a-4530-add8-406180f05ce9:d04b99a4-71da-445a-9827-fdf342c46968",
+    "waitTimedOut": false
+  },
+  "acceptance": "Partial candidate only; real Engine routing absent, diagnostics and callbacks still ACP-shaped; not accepted as I0/AC1 complete.",
+  "feedback": {
+    "budget": {
+      "threadId": "thread:delegated-task:command%3Amcp%3A4f2da1e5-1b4b-4bca-aecd-77f4da6d7835%3Adelegate-task%3Acodetwo-native-foundation-r7-20261006",
+      "messageId": "message:mcp:4f2da1e5-1b4b-4bca-aecd-77f4da6d7835:thread-send:codetwo-native-foundation-r7-budget-reminder-20261006",
+      "runId": "run:thread:thread%3Adelegated-task%3Acommand%253Amcp%253A4f2da1e5-1b4b-4bca-aecd-77f4da6d7835%253Adelegate-task%253Acodetwo-native-foundation-r7-20261006:ordinal:1",
+      "status": "starting",
+      "delivery": "steered"
+    },
+    "boundary": {
+      "threadId": "thread:delegated-task:command%3Amcp%3A4f2da1e5-1b4b-4bca-aecd-77f4da6d7835%3Adelegate-task%3Acodetwo-native-foundation-r7-20261006",
+      "messageId": "message:mcp:4f2da1e5-1b4b-4bca-aecd-77f4da6d7835:thread-send:codetwo-native-foundation-r7-boundary-feedback-20261006",
+      "runId": "run:thread:thread%3Adelegated-task%3Acommand%253Amcp%253A4f2da1e5-1b4b-4bca-aecd-77f4da6d7835%253Adelegate-task%253Acodetwo-native-foundation-r7-20261006:ordinal:1",
+      "status": "starting",
+      "delivery": "steered"
+    }
+  }
+}

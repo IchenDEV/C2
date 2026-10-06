@@ -1,0 +1,30 @@
+{
+  "removed": [
+    "/Users/chenli/.t3/worktrees/codeTwo/t3code-6738e658/.codex/run/assistant-async",
+    "/Users/chenli/.t3/worktrees/codeTwo/t3code-6738e658/apps/desktop/dist",
+    "/Users/chenli/.t3/userdata/browser-artifacts/browser-screenshot-localhost-muurglma-0301c87f.png",
+    "/Users/chenli/.t3/userdata/browser-artifacts/browser-screenshot-localhost-muurguri-163f607c.png",
+    "/Users/chenli/.t3/userdata/browser-artifacts/browser-screenshot-localhost-muuri0et-b3d7919e.png",
+    "/Users/chenli/.t3/userdata/browser-artifacts/browser-screenshot-localhost-muurifge-99c9a069.png",
+    "/Users/chenli/.t3/userdata/browser-artifacts/browser-screenshot-localhost-muurixyu-cbde0b87.png",
+    "/Users/chenli/.t3/userdata/browser-artifacts/browser-screenshot-localhost-muuroqpz-635c7d7b.png",
+    "/Users/chenli/.t3/userdata/browser-artifacts/browser-screenshot-localhost-muurpkgj-b4f70c0f.png",
+    "/Users/chenli/.t3/userdata/browser-artifacts/browser-screenshot-localhost-muurhqu1-894ad6e5.png"
+  ],
+  "owned_core_pids_exited": [
+    30681,
+    38210,
+    41882,
+    25246
+  ],
+  "owned_preview_tab": "tab_3 closed through t3_preview_close",
+  "port_14673_listener": false,
+  "scratch_exists": false,
+  "renderer_dist_exists": false,
+  "retained_temporary_resources": [],
+  "retained_deliverables": "/Users/chenli/.t3/worktrees/codeTwo/t3code-6738e658/docs/sdlc/changes/2026-10-05-assistant-async-progress/evidence",
+  "preserved": "User/other-work source edits, external supervision inputs, other worktrees, shared dependency/toolchain caches and data directories",
+  "inspection": "du, lsof, ps, git worktree list; exact path assertions before deletion",
+  "fixture_processes_remaining": [],
+  "implementation_hashes_still_match": true
+}

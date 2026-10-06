@@ -1,0 +1,78 @@
+{
+  "source": "Actual React web build, actual isolated Core and SQLite; offline persisted fixture, no external model invocation",
+  "viewport_checks": [
+    {
+      "theme": "light",
+      "width": 1280,
+      "height": 800
+    },
+    {
+      "theme": "dark",
+      "width": 640,
+      "height": 900,
+      "section_scroll_width": 640
+    },
+    {
+      "theme": "light",
+      "width": 640,
+      "height": 900,
+      "note": "final inbox stable-frame screenshot"
+    }
+  ],
+  "unknown_answer_reopen_disabled": true,
+  "notification_read": true,
+  "message": {
+    "created_at": "2026-10-05T04:40:42.390165+00:00",
+    "id": "b6878015-7553-455d-a4f0-474ca24ae808",
+    "goal_id": "goal-a",
+    "assignment_id": "assign-a",
+    "contract_revision": 1,
+    "author": "user",
+    "content": "UI acceptance: retain this clarification while follow-up is paused.",
+    "mode": "auto",
+    "state": "cancelled",
+    "outcome": "",
+    "reply_to": null,
+    "delivery_id": null,
+    "confirmed": false,
+    "expected_turn": null
+  },
+  "goals": [
+    {
+      "id": "goal-a",
+      "status": "paused",
+      "stop_requested": false
+    },
+    {
+      "id": "goal-b",
+      "status": "active",
+      "stop_requested": null
+    }
+  ],
+  "notifications": [
+    {
+      "kind": "failure",
+      "goal": "goal-b",
+      "read": true
+    },
+    {
+      "kind": "stopped",
+      "goal": "goal-a",
+      "read": false
+    }
+  ],
+  "message_state_before_stop": "recorded",
+  "unknown_question_preserved": true,
+  "navigation_check": {
+    "Projects": {
+      "aria_current": null,
+      "settled_background": "transparent"
+    },
+    "Inbox": {
+      "aria_current": "page",
+      "settled_background": "fill"
+    },
+    "transition_seconds": 0.12,
+    "note": "Initial screenshots captured the old highlight during transition. Rechecked actual computed styles and replaced Inbox screenshots after settling."
+  }
+}

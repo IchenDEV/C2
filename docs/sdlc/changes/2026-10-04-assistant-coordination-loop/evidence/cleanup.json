@@ -1,0 +1,617 @@
+{
+  "stopped_roots": [
+    25439,
+    83211
+  ],
+  "tracked_descendants": [
+    {
+      "pid": 25439,
+      "ppid": 18896,
+      "executable": ".codex/run/assistant-coordination/target/debug/codetwo-server",
+      "start": "Mon Oct  5 08:13:35 2026"
+    },
+    {
+      "pid": 25471,
+      "ppid": 25439,
+      "executable": "npm exec @agentclientprotocol/codex-acp@1.7.0",
+      "start": "Mon Oct  5 08:13:39 2026"
+    },
+    {
+      "pid": 25513,
+      "ppid": 25471,
+      "executable": "node",
+      "start": "Mon Oct  5 08:13:40 2026"
+    },
+    {
+      "pid": 25514,
+      "ppid": 25513,
+      "executable": "/Users/chenli/.local/bin/codex",
+      "start": "Mon Oct  5 08:13:40 2026"
+    },
+    {
+      "pid": 25999,
+      "ppid": 25514,
+      "executable": "/Users/chenli/.local/share/uv/tools/blender-mcp/bin/python3",
+      "start": "Mon Oct  5 08:13:41 2026"
+    },
+    {
+      "pid": 26001,
+      "ppid": 25514,
+      "executable": "/Applications/ChatGPT.app/Contents/Resources/cua_node/bin/node_repl",
+      "start": "Mon Oct  5 08:13:41 2026"
+    },
+    {
+      "pid": 26002,
+      "ppid": 25514,
+      "executable": "/Users/chenli/.codex/computer-use/Codex Computer Use.app/Contents/SharedSupport/SkyComputerUseClient.app/Contents/MacOS/SkyComputerUseClient",
+      "start": "Mon Oct  5 08:13:41 2026"
+    },
+    {
+      "pid": 26005,
+      "ppid": 25514,
+      "executable": "/Applications/ChatGPT.app/Contents/Resources/cua_node/bin/node",
+      "start": "Mon Oct  5 08:13:41 2026"
+    },
+    {
+      "pid": 26007,
+      "ppid": 25514,
+      "executable": "/Applications/Pen.app/Contents/Resources/app.asar.unpacked/out/mcp-server-darwin-arm64",
+      "start": "Mon Oct  5 08:13:41 2026"
+    },
+    {
+      "pid": 26018,
+      "ppid": 26005,
+      "executable": "/Applications/ChatGPT.app/Contents/Resources/cua_node/bin/node_repl",
+      "start": "Mon Oct  5 08:13:41 2026"
+    },
+    {
+      "pid": 27173,
+      "ppid": 25439,
+      "executable": "npm exec @agentclientprotocol/codex-acp@1.7.0",
+      "start": "Mon Oct  5 08:14:18 2026"
+    },
+    {
+      "pid": 27217,
+      "ppid": 27173,
+      "executable": "node",
+      "start": "Mon Oct  5 08:14:19 2026"
+    },
+    {
+      "pid": 27218,
+      "ppid": 27217,
+      "executable": "/Users/chenli/.local/bin/codex",
+      "start": "Mon Oct  5 08:14:19 2026"
+    },
+    {
+      "pid": 28266,
+      "ppid": 27218,
+      "executable": "/Users/chenli/.local/share/uv/tools/blender-mcp/bin/python3",
+      "start": "Mon Oct  5 08:14:20 2026"
+    },
+    {
+      "pid": 28267,
+      "ppid": 27218,
+      "executable": "/Applications/ChatGPT.app/Contents/Resources/cua_node/bin/node",
+      "start": "Mon Oct  5 08:14:20 2026"
+    },
+    {
+      "pid": 28268,
+      "ppid": 27218,
+      "executable": "/Applications/Pen.app/Contents/Resources/app.asar.unpacked/out/mcp-server-darwin-arm64",
+      "start": "Mon Oct  5 08:14:20 2026"
+    },
+    {
+      "pid": 28269,
+      "ppid": 27218,
+      "executable": "/Applications/ChatGPT.app/Contents/Resources/cua_node/bin/node_repl",
+      "start": "Mon Oct  5 08:14:20 2026"
+    },
+    {
+      "pid": 28270,
+      "ppid": 27218,
+      "executable": "/Users/chenli/.codex/computer-use/Codex Computer Use.app/Contents/SharedSupport/SkyComputerUseClient.app/Contents/MacOS/SkyComputerUseClient",
+      "start": "Mon Oct  5 08:14:20 2026"
+    },
+    {
+      "pid": 28271,
+      "ppid": 27218,
+      "executable": "/Users/chenli/.t3/worktrees/codeTwo/t3code-6738e658/.codex/run/assistant-coordination/target/debug/codetwo-server",
+      "start": "Mon Oct  5 08:14:20 2026"
+    },
+    {
+      "pid": 28285,
+      "ppid": 25439,
+      "executable": "npm exec @agentclientprotocol/codex-acp@1.7.0",
+      "start": "Mon Oct  5 08:14:20 2026"
+    },
+    {
+      "pid": 28287,
+      "ppid": 28267,
+      "executable": "/Applications/ChatGPT.app/Contents/Resources/cua_node/bin/node_repl",
+      "start": "Mon Oct  5 08:14:20 2026"
+    },
+    {
+      "pid": 28770,
+      "ppid": 28285,
+      "executable": "node",
+      "start": "Mon Oct  5 08:14:21 2026"
+    },
+    {
+      "pid": 28771,
+      "ppid": 28770,
+      "executable": "/Users/chenli/.local/bin/codex",
+      "start": "Mon Oct  5 08:14:21 2026"
+    },
+    {
+      "pid": 29310,
+      "ppid": 28771,
+      "executable": "/Users/chenli/.codex/computer-use/Codex Computer Use.app/Contents/SharedSupport/SkyComputerUseClient.app/Contents/MacOS/SkyComputerUseClient",
+      "start": "Mon Oct  5 08:14:22 2026"
+    },
+    {
+      "pid": 29312,
+      "ppid": 28771,
+      "executable": "/Users/chenli/.local/share/uv/tools/blender-mcp/bin/python3",
+      "start": "Mon Oct  5 08:14:22 2026"
+    },
+    {
+      "pid": 29313,
+      "ppid": 28771,
+      "executable": "/Applications/ChatGPT.app/Contents/Resources/cua_node/bin/node",
+      "start": "Mon Oct  5 08:14:22 2026"
+    },
+    {
+      "pid": 29316,
+      "ppid": 28771,
+      "executable": "/Applications/Pen.app/Contents/Resources/app.asar.unpacked/out/mcp-server-darwin-arm64",
+      "start": "Mon Oct  5 08:14:22 2026"
+    },
+    {
+      "pid": 29318,
+      "ppid": 28771,
+      "executable": "/Applications/ChatGPT.app/Contents/Resources/cua_node/bin/node_repl",
+      "start": "Mon Oct  5 08:14:22 2026"
+    },
+    {
+      "pid": 29329,
+      "ppid": 29313,
+      "executable": "/Applications/ChatGPT.app/Contents/Resources/cua_node/bin/node_repl",
+      "start": "Mon Oct  5 08:14:22 2026"
+    },
+    {
+      "pid": 30322,
+      "ppid": 27218,
+      "executable": "/Users/chenli/.codex/packages/standalone/releases/0.160.0-aarch64-apple-darwin/bin/codex-code-mode-host",
+      "start": "Mon Oct  5 08:14:28 2026"
+    },
+    {
+      "pid": 30696,
+      "ppid": 25439,
+      "executable": "npm exec @agentclientprotocol/codex-acp@1.7.0",
+      "start": "Mon Oct  5 08:14:45 2026"
+    },
+    {
+      "pid": 30738,
+      "ppid": 30696,
+      "executable": "node",
+      "start": "Mon Oct  5 08:14:46 2026"
+    },
+    {
+      "pid": 30739,
+      "ppid": 30738,
+      "executable": "/Users/chenli/.local/bin/codex",
+      "start": "Mon Oct  5 08:14:46 2026"
+    },
+    {
+      "pid": 31211,
+      "ppid": 30739,
+      "executable": "/Users/chenli/.local/share/uv/tools/blender-mcp/bin/python3",
+      "start": "Mon Oct  5 08:14:47 2026"
+    },
+    {
+      "pid": 31212,
+      "ppid": 30739,
+      "executable": "/Users/chenli/.codex/computer-use/Codex Computer Use.app/Contents/SharedSupport/SkyComputerUseClient.app/Contents/MacOS/SkyComputerUseClient",
+      "start": "Mon Oct  5 08:14:47 2026"
+    },
+    {
+      "pid": 31214,
+      "ppid": 30739,
+      "executable": "/Applications/ChatGPT.app/Contents/Resources/cua_node/bin/node_repl",
+      "start": "Mon Oct  5 08:14:47 2026"
+    },
+    {
+      "pid": 31216,
+      "ppid": 30739,
+      "executable": "/Applications/Pen.app/Contents/Resources/app.asar.unpacked/out/mcp-server-darwin-arm64",
+      "start": "Mon Oct  5 08:14:47 2026"
+    },
+    {
+      "pid": 31217,
+      "ppid": 30739,
+      "executable": "/Applications/ChatGPT.app/Contents/Resources/cua_node/bin/node",
+      "start": "Mon Oct  5 08:14:47 2026"
+    },
+    {
+      "pid": 31230,
+      "ppid": 31217,
+      "executable": "/Applications/ChatGPT.app/Contents/Resources/cua_node/bin/node_repl",
+      "start": "Mon Oct  5 08:14:47 2026"
+    },
+    {
+      "pid": 31794,
+      "ppid": 25439,
+      "executable": "npm exec @agentclientprotocol/codex-acp@1.7.0",
+      "start": "Mon Oct  5 08:15:11 2026"
+    },
+    {
+      "pid": 31835,
+      "ppid": 31794,
+      "executable": "node",
+      "start": "Mon Oct  5 08:15:12 2026"
+    },
+    {
+      "pid": 31836,
+      "ppid": 31835,
+      "executable": "/Users/chenli/.local/bin/codex",
+      "start": "Mon Oct  5 08:15:12 2026"
+    },
+    {
+      "pid": 32324,
+      "ppid": 31836,
+      "executable": "/Users/chenli/.codex/computer-use/Codex Computer Use.app/Contents/SharedSupport/SkyComputerUseClient.app/Contents/MacOS/SkyComputerUseClient",
+      "start": "Mon Oct  5 08:15:13 2026"
+    },
+    {
+      "pid": 32326,
+      "ppid": 31836,
+      "executable": "/Applications/ChatGPT.app/Contents/Resources/cua_node/bin/node_repl",
+      "start": "Mon Oct  5 08:15:13 2026"
+    },
+    {
+      "pid": 32327,
+      "ppid": 31836,
+      "executable": "/Applications/ChatGPT.app/Contents/Resources/cua_node/bin/node",
+      "start": "Mon Oct  5 08:15:13 2026"
+    },
+    {
+      "pid": 32328,
+      "ppid": 31836,
+      "executable": "/Applications/Pen.app/Contents/Resources/app.asar.unpacked/out/mcp-server-darwin-arm64",
+      "start": "Mon Oct  5 08:15:13 2026"
+    },
+    {
+      "pid": 32329,
+      "ppid": 31836,
+      "executable": "/Users/chenli/.local/share/uv/tools/blender-mcp/bin/python3",
+      "start": "Mon Oct  5 08:15:13 2026"
+    },
+    {
+      "pid": 32343,
+      "ppid": 32327,
+      "executable": "/Applications/ChatGPT.app/Contents/Resources/cua_node/bin/node_repl",
+      "start": "Mon Oct  5 08:15:13 2026"
+    },
+    {
+      "pid": 33918,
+      "ppid": 25439,
+      "executable": "npm exec @agentclientprotocol/codex-acp@1.7.0",
+      "start": "Mon Oct  5 08:15:37 2026"
+    },
+    {
+      "pid": 33960,
+      "ppid": 33918,
+      "executable": "node",
+      "start": "Mon Oct  5 08:15:38 2026"
+    },
+    {
+      "pid": 33962,
+      "ppid": 33960,
+      "executable": "/Users/chenli/.local/bin/codex",
+      "start": "Mon Oct  5 08:15:38 2026"
+    },
+    {
+      "pid": 34523,
+      "ppid": 33962,
+      "executable": "/Applications/ChatGPT.app/Contents/Resources/cua_node/bin/node",
+      "start": "Mon Oct  5 08:15:43 2026"
+    },
+    {
+      "pid": 34526,
+      "ppid": 33962,
+      "executable": "/Applications/Pen.app/Contents/Resources/app.asar.unpacked/out/mcp-server-darwin-arm64",
+      "start": "Mon Oct  5 08:15:43 2026"
+    },
+    {
+      "pid": 34528,
+      "ppid": 33962,
+      "executable": "/Users/chenli/.codex/computer-use/Codex Computer Use.app/Contents/SharedSupport/SkyComputerUseClient.app/Contents/MacOS/SkyComputerUseClient",
+      "start": "Mon Oct  5 08:15:43 2026"
+    },
+    {
+      "pid": 34530,
+      "ppid": 33962,
+      "executable": "/Users/chenli/.local/share/uv/tools/blender-mcp/bin/python3",
+      "start": "Mon Oct  5 08:15:43 2026"
+    },
+    {
+      "pid": 34531,
+      "ppid": 33962,
+      "executable": "/Applications/ChatGPT.app/Contents/Resources/cua_node/bin/node_repl",
+      "start": "Mon Oct  5 08:15:43 2026"
+    },
+    {
+      "pid": 34636,
+      "ppid": 34523,
+      "executable": "/Applications/ChatGPT.app/Contents/Resources/cua_node/bin/node_repl",
+      "start": "Mon Oct  5 08:15:43 2026"
+    },
+    {
+      "pid": 35115,
+      "ppid": 25439,
+      "executable": "npm exec @agentclientprotocol/codex-acp@1.7.0",
+      "start": "Mon Oct  5 08:16:13 2026"
+    },
+    {
+      "pid": 35156,
+      "ppid": 35115,
+      "executable": "node",
+      "start": "Mon Oct  5 08:16:14 2026"
+    },
+    {
+      "pid": 35157,
+      "ppid": 35156,
+      "executable": "/Users/chenli/.local/bin/codex",
+      "start": "Mon Oct  5 08:16:14 2026"
+    },
+    {
+      "pid": 35651,
+      "ppid": 35157,
+      "executable": "/Users/chenli/.codex/computer-use/Codex Computer Use.app/Contents/SharedSupport/SkyComputerUseClient.app/Contents/MacOS/SkyComputerUseClient",
+      "start": "Mon Oct  5 08:16:15 2026"
+    },
+    {
+      "pid": 35652,
+      "ppid": 35157,
+      "executable": "/Applications/Pen.app/Contents/Resources/app.asar.unpacked/out/mcp-server-darwin-arm64",
+      "start": "Mon Oct  5 08:16:15 2026"
+    },
+    {
+      "pid": 35653,
+      "ppid": 35157,
+      "executable": "/Applications/ChatGPT.app/Contents/Resources/cua_node/bin/node",
+      "start": "Mon Oct  5 08:16:15 2026"
+    },
+    {
+      "pid": 35656,
+      "ppid": 35157,
+      "executable": "/Applications/ChatGPT.app/Contents/Resources/cua_node/bin/node_repl",
+      "start": "Mon Oct  5 08:16:15 2026"
+    },
+    {
+      "pid": 35660,
+      "ppid": 35157,
+      "executable": "/Users/chenli/.local/share/uv/tools/blender-mcp/bin/python3",
+      "start": "Mon Oct  5 08:16:15 2026"
+    },
+    {
+      "pid": 35670,
+      "ppid": 35653,
+      "executable": "/Applications/ChatGPT.app/Contents/Resources/cua_node/bin/node_repl",
+      "start": "Mon Oct  5 08:16:15 2026"
+    },
+    {
+      "pid": 69080,
+      "ppid": 25439,
+      "executable": "npm exec @agentclientprotocol/codex-acp@1.7.0",
+      "start": "Mon Oct  5 08:17:15 2026"
+    },
+    {
+      "pid": 69122,
+      "ppid": 69080,
+      "executable": "node",
+      "start": "Mon Oct  5 08:17:16 2026"
+    },
+    {
+      "pid": 69123,
+      "ppid": 69122,
+      "executable": "/Users/chenli/.local/bin/codex",
+      "start": "Mon Oct  5 08:17:16 2026"
+    },
+    {
+      "pid": 69615,
+      "ppid": 69123,
+      "executable": "/Applications/Pen.app/Contents/Resources/app.asar.unpacked/out/mcp-server-darwin-arm64",
+      "start": "Mon Oct  5 08:17:17 2026"
+    },
+    {
+      "pid": 69616,
+      "ppid": 69123,
+      "executable": "/Users/chenli/.codex/computer-use/Codex Computer Use.app/Contents/SharedSupport/SkyComputerUseClient.app/Contents/MacOS/SkyComputerUseClient",
+      "start": "Mon Oct  5 08:17:17 2026"
+    },
+    {
+      "pid": 69618,
+      "ppid": 69123,
+      "executable": "/Applications/ChatGPT.app/Contents/Resources/cua_node/bin/node",
+      "start": "Mon Oct  5 08:17:17 2026"
+    },
+    {
+      "pid": 69620,
+      "ppid": 69123,
+      "executable": "/Users/chenli/.local/share/uv/tools/blender-mcp/bin/python3",
+      "start": "Mon Oct  5 08:17:17 2026"
+    },
+    {
+      "pid": 69623,
+      "ppid": 69123,
+      "executable": "/Applications/ChatGPT.app/Contents/Resources/cua_node/bin/node_repl",
+      "start": "Mon Oct  5 08:17:17 2026"
+    },
+    {
+      "pid": 69637,
+      "ppid": 69618,
+      "executable": "/Applications/ChatGPT.app/Contents/Resources/cua_node/bin/node_repl",
+      "start": "Mon Oct  5 08:17:17 2026"
+    },
+    {
+      "pid": 70649,
+      "ppid": 25439,
+      "executable": "npm exec @agentclientprotocol/codex-acp@1.7.0",
+      "start": "Mon Oct  5 08:17:41 2026"
+    },
+    {
+      "pid": 70690,
+      "ppid": 70649,
+      "executable": "node",
+      "start": "Mon Oct  5 08:17:42 2026"
+    },
+    {
+      "pid": 70691,
+      "ppid": 70690,
+      "executable": "/Users/chenli/.local/bin/codex",
+      "start": "Mon Oct  5 08:17:42 2026"
+    },
+    {
+      "pid": 71170,
+      "ppid": 70691,
+      "executable": "/Users/chenli/.codex/computer-use/Codex Computer Use.app/Contents/SharedSupport/SkyComputerUseClient.app/Contents/MacOS/SkyComputerUseClient",
+      "start": "Mon Oct  5 08:17:43 2026"
+    },
+    {
+      "pid": 71171,
+      "ppid": 70691,
+      "executable": "/Applications/Pen.app/Contents/Resources/app.asar.unpacked/out/mcp-server-darwin-arm64",
+      "start": "Mon Oct  5 08:17:43 2026"
+    },
+    {
+      "pid": 71172,
+      "ppid": 70691,
+      "executable": "/Applications/ChatGPT.app/Contents/Resources/cua_node/bin/node",
+      "start": "Mon Oct  5 08:17:43 2026"
+    },
+    {
+      "pid": 71173,
+      "ppid": 70691,
+      "executable": "/Users/chenli/.local/share/uv/tools/blender-mcp/bin/python3",
+      "start": "Mon Oct  5 08:17:43 2026"
+    },
+    {
+      "pid": 71174,
+      "ppid": 70691,
+      "executable": "/Applications/ChatGPT.app/Contents/Resources/cua_node/bin/node_repl",
+      "start": "Mon Oct  5 08:17:43 2026"
+    },
+    {
+      "pid": 71189,
+      "ppid": 71172,
+      "executable": "/Applications/ChatGPT.app/Contents/Resources/cua_node/bin/node_repl",
+      "start": "Mon Oct  5 08:17:43 2026"
+    },
+    {
+      "pid": 73148,
+      "ppid": 25439,
+      "executable": "npm exec @agentclientprotocol/codex-acp@1.7.0",
+      "start": "Mon Oct  5 08:18:25 2026"
+    },
+    {
+      "pid": 73289,
+      "ppid": 73148,
+      "executable": "node",
+      "start": "Mon Oct  5 08:18:26 2026"
+    },
+    {
+      "pid": 73290,
+      "ppid": 73289,
+      "executable": "/Users/chenli/.local/bin/codex",
+      "start": "Mon Oct  5 08:18:26 2026"
+    },
+    {
+      "pid": 73786,
+      "ppid": 73290,
+      "executable": "/Applications/ChatGPT.app/Contents/Resources/cua_node/bin/node_repl",
+      "start": "Mon Oct  5 08:18:27 2026"
+    },
+    {
+      "pid": 73787,
+      "ppid": 73290,
+      "executable": "/Applications/Pen.app/Contents/Resources/app.asar.unpacked/out/mcp-server-darwin-arm64",
+      "start": "Mon Oct  5 08:18:27 2026"
+    },
+    {
+      "pid": 73788,
+      "ppid": 73290,
+      "executable": "/Users/chenli/.local/share/uv/tools/blender-mcp/bin/python3",
+      "start": "Mon Oct  5 08:18:27 2026"
+    },
+    {
+      "pid": 73789,
+      "ppid": 73290,
+      "executable": "/Users/chenli/.codex/computer-use/Codex Computer Use.app/Contents/SharedSupport/SkyComputerUseClient.app/Contents/MacOS/SkyComputerUseClient",
+      "start": "Mon Oct  5 08:18:27 2026"
+    },
+    {
+      "pid": 73790,
+      "ppid": 73290,
+      "executable": "/Applications/ChatGPT.app/Contents/Resources/cua_node/bin/node",
+      "start": "Mon Oct  5 08:18:27 2026"
+    },
+    {
+      "pid": 73805,
+      "ppid": 73790,
+      "executable": "/Applications/ChatGPT.app/Contents/Resources/cua_node/bin/node_repl",
+      "start": "Mon Oct  5 08:18:27 2026"
+    },
+    {
+      "pid": 83211,
+      "ppid": 18896,
+      "executable": "node",
+      "start": "Mon Oct  5 07:31:34 2026"
+    },
+    {
+      "pid": 83220,
+      "ppid": 83211,
+      "executable": "/Users/chenli/.t3/worktrees/codeTwo/t3code-6738e658/apps/desktop/node_modules/@esbuild/darwin-arm64/bin/esbuild",
+      "start": "Mon Oct  5 07:31:34 2026"
+    }
+  ],
+  "remaining_after_root_shutdown": [],
+  "terminated_owned_descendants": [],
+  "identity_mismatch_preserved": [],
+  "preserved_other_worktrees": [
+    "93228204-729e-4458-991e-2b9d3ba5487c",
+    "dbe8c46a-8e69-42b4-a747-88bc5543dd79"
+  ],
+  "disposed_paths": [
+    "/Users/chenli/.t3/worktrees/codeTwo/t3code-6738e658/.codex/run/assistant-coordination",
+    "/Users/chenli/.t3/worktrees/codeTwo/t3code-6738e658/apps/desktop/dist"
+  ],
+  "measured_before": {
+    "scratch": "3.9 GB",
+    "renderer_dist": "48 MB",
+    "safe_evidence": "185 KB before restart evidence"
+  },
+  "disposed_worktrees": [
+    {
+      "path": "/Users/chenli/.t3/worktrees/codeTwo/t3code-6738e658/.codex/run/assistant-coordination/.codetwo-worktrees/32ac25fa-1538-4fb7-a9bd-de232fe8d92c/project-a",
+      "session_id": "32ac25fa-1538-4fb7-a9bd-de232fe8d92c",
+      "changes_preserved": [
+        " M report.txt"
+      ]
+    },
+    {
+      "path": "/Users/chenli/.t3/worktrees/codeTwo/t3code-6738e658/.codex/run/assistant-coordination/.codetwo-worktrees/a7cbfe62-1b0f-4a3c-8018-8fac37a88076/project-a",
+      "session_id": "a7cbfe62-1b0f-4a3c-8018-8fac37a88076",
+      "changes_preserved": [
+        "?? canary.txt"
+      ]
+    },
+    {
+      "path": "/Users/chenli/.t3/worktrees/codeTwo/t3code-6738e658/.codex/run/assistant-coordination/.codetwo-worktrees/0451c6b5-19ca-4154-b558-e7c0f4d289cf/project-b",
+      "session_id": "0451c6b5-19ca-4154-b558-e7c0f4d289cf",
+      "changes_preserved": []
+    }
+  ],
+  "final_process_check": "All 95 root/descendant identities absent after Core/Vite shutdown. No additional signal needed.",
+  "external_worktree_disposition": "Two candidate external worktrees lack ownership evidence; preserved. Their creation times are 07:33:09 and 07:33:31; no matching UUID in owned database/text logs. No user worktree was removed."
+}

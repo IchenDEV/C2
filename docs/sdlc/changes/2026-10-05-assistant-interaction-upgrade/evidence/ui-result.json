@@ -1,0 +1,42 @@
+{
+  "environment": "Actual Web React build + one isolated Core, loopback 14674; automatic follow-up disabled",
+  "browser": "Playwright cached Chromium headless shell (T3 host explicitly unavailable; separate disposable context)",
+  "checks": {
+    "overview": {
+      "nativeDisclosure": 0,
+      "nativeSelect": 0,
+      "visibleTextareas": 0,
+      "width": 1280,
+      "scrollWidth": 1280
+    },
+    "requestRecorded": true,
+    "sectionDraftAndStop": true,
+    "messageRecorded": true,
+    "unknownNoReplay": true,
+    "narrow": {
+      "width": 640,
+      "scrollWidth": 640,
+      "rootWidth": 640,
+      "rootScrollWidth": 640
+    },
+    "advancedOnDemand": true,
+    "memoryOnDemand": true,
+    "stopRecorded": true,
+    "terminalStopRendered": true
+  },
+  "errors": [],
+  "initial_transient_wait": "TimeoutError: waitFor: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByRole('region', { name: '幕僚' }).getByText(/\\u7B49\\u5F85\\u505C\\u6B62\\u56DE\\u6267/) to be visible\u001b[22m\n",
+  "initial_transient_wait_explanation": "The idle fixture worker settled immediately. Waiting for an intermediate stop-receipt label timed out; verification uses final persisted receipt and paused UI instead.",
+  "durable_check": {
+    "goal_a_status": "paused",
+    "goal_b_status": "active",
+    "stop_receipt": "stopped:assign-a:1",
+    "request_count": 1,
+    "message_count": 6,
+    "message_recorded_before_stop": true,
+    "message_state_after_stop": "cancelled",
+    "follow_up_enabled": false,
+    "external_provider_turns_started": false
+  },
+  "completed": true
+}

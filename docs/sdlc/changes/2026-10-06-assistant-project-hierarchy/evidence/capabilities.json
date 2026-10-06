@@ -1,0 +1,68 @@
+{
+  "checkedAt": "2026-10-06T01:52:37.007Z",
+  "features": {
+    "appOwnedSubagents": true,
+    "asyncPolling": true,
+    "cancellation": true,
+    "batchThreadCreation": true,
+    "threadManagement": true,
+    "incrementalThreadRead": true,
+    "scheduledTasks": true,
+    "maxBatchThreads": 20
+  },
+  "parentThreadId": "91d5d393-cf9a-4530-add8-406180f05ce9",
+  "cursor": {
+    "id": "claude-sonnet-5-5",
+    "label": "Claude Sonnet 5.5",
+    "options": [
+      {
+        "id": "contextWindow",
+        "label": "Context",
+        "type": "select",
+        "options": [
+          {
+            "id": "300k",
+            "label": "300K"
+          },
+          {
+            "id": "1m",
+            "label": "1M",
+            "isDefault": true
+          }
+        ],
+        "currentValue": "1m"
+      },
+      {
+        "id": "reasoning_effort",
+        "label": "Effort",
+        "type": "select",
+        "options": [
+          {
+            "id": "low",
+            "label": "Low"
+          },
+          {
+            "id": "medium",
+            "label": "Medium"
+          },
+          {
+            "id": "high",
+            "label": "High",
+            "isDefault": true
+          },
+          {
+            "id": "xhigh",
+            "label": "Extra High"
+          },
+          {
+            "id": "max",
+            "label": "Max"
+          }
+        ],
+        "currentValue": "high"
+      }
+    ]
+  },
+  "taskStatusAvailable": true,
+  "taskCancelAvailable": true
+}

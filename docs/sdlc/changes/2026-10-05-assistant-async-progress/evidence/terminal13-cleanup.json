@@ -1,0 +1,31 @@
+{
+  "feedback_id": "codetwo-r1-resource-release-20261005-terminal13",
+  "removed": "/Users/chenli/.t3/worktrees/codeTwo/t3code-6738e658/.codex/run/assistant-capacity",
+  "removed_size_before_cleanup": "2.3 GB",
+  "previewed_entries": [
+    "assistant-tests.log",
+    "core-tests.log",
+    "docs-check.log",
+    "domain-before.rs",
+    "final-core.log",
+    "final-format.log",
+    "final-probe.log",
+    "final-runtime.log",
+    "final-workspace.log",
+    "format.log",
+    "probe-final.log",
+    "probe.log",
+    "runtime-before.rs",
+    "runtime-tests.log",
+    "sdlc-check.log",
+    "store-before.rs",
+    "target",
+    "workspace-check.log"
+  ],
+  "scratch_exists": false,
+  "owned_processes_remaining": [],
+  "app_or_browser_started": false,
+  "temporary_resources_retained": [],
+  "retained": "Repository source, tests, lifecycle records and compact evidence; external supervision inputs, user state and other work remain untouched",
+  "source_hashes_verified": true
+}

@@ -1,8 +1,11 @@
 use super::{normalize_project_path, protocol::ProtocolPlugin};
-use crate::plugins::bundle::{InstalledPlugin, PluginRuntimeCommand, PluginRuntimeSpec};
 use crate::kernel::{
     async_trait, CommandRealm, Context, Injection, Plugin, PluginCategory, PluginEntry,
     PluginError, PluginMetadata, PluginOrigin, PluginRegistry, PluginResult, PluginRole, Service,
+};
+use crate::plugins::bundle::{
+    observation_connector_ids, InstalledPlugin, PluginConnectorContribution, PluginRuntimeCommand,
+    PluginRuntimeSpec,
 };
 use serde::Serialize;
 use serde_json::Value;
@@ -64,6 +67,7 @@ pub(crate) fn bundle_runtime_descriptor(
         trusted: installed.trusted,
         runtime,
         runtime_commands: installed.runtime_commands.clone(),
+        observation_connectors: observation_connector_ids(&installed.connector_contributions),
         bundle_dir,
         data_root,
     };
@@ -93,6 +97,7 @@ struct FingerprintMaterial<'a> {
     trusted: bool,
     runtime: &'a PluginRuntimeSpec,
     runtime_commands: &'a [PluginRuntimeCommand],
+    connector_contributions: &'a [PluginConnectorContribution],
     plugins_root: String,
 }
 
@@ -110,6 +115,7 @@ fn bundle_fingerprint(
         trusted: installed.trusted,
         runtime,
         runtime_commands: &installed.runtime_commands,
+        connector_contributions: &installed.connector_contributions,
         // Normalize the existing inventory root once. Canonicalizing the child data directory
         // would make the fingerprint change merely because the first run created that directory
         // (notably `/var` becoming `/private/var` on macOS).
@@ -128,6 +134,7 @@ struct BundleRuntimePlugin {
     trusted: bool,
     runtime: PluginRuntimeSpec,
     runtime_commands: Vec<PluginRuntimeCommand>,
+    observation_connectors: Vec<String>,
     bundle_dir: PathBuf,
     data_root: PathBuf,
 }
@@ -161,6 +168,9 @@ impl Plugin for BundleRuntimePlugin {
 
     fn inject(&self) -> Injection {
         let mut required = vec![ExtensionRuntimeHost::NAME.to_string()];
+        if !self.observation_connectors.is_empty() {
+            required.push("store".into());
+        }
         required.extend(
             self.runtime
                 .inject
@@ -189,7 +199,9 @@ impl Plugin for BundleRuntimePlugin {
         let (ctx, data_dir) = self.context_and_data_dir(ctx);
         let mut protocol =
             ProtocolPlugin::from_spec(&self.name, &self.runtime, self.bundle_dir.clone(), data_dir);
-        protocol = protocol.with_declared_commands(self.runtime_commands.clone());
+        protocol = protocol
+            .with_declared_commands(self.runtime_commands.clone())
+            .with_observation_connectors(self.observation_connectors.clone());
         if !self.description.is_empty() {
             protocol = protocol.with_description(self.description.clone());
         }

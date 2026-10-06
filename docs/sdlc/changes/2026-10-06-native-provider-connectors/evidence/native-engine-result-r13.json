@@ -1,0 +1,18 @@
+{
+  "taskId": "node:delegated-task:command%3Amcp%3A56262fd4-bb0b-44d8-8964-b0985862bcd1%3Adelegate-task%3Acodetwo-native-engine-routing-r13-20261006",
+  "childThreadId": "thread:delegated-task:command%3Amcp%3A56262fd4-bb0b-44d8-8964-b0985862bcd1%3Adelegate-task%3Acodetwo-native-engine-routing-r13-20261006",
+  "childRunId": "run:thread:thread%3Adelegated-task%3Acommand%253Amcp%253A56262fd4-bb0b-44d8-8964-b0985862bcd1%253Adelegate-task%253Acodetwo-native-engine-routing-r13-20261006:ordinal:1",
+  "childNodeId": "node:delegated-task:command%3Amcp%3A56262fd4-bb0b-44d8-8964-b0985862bcd1%3Adelegate-task%3Acodetwo-native-engine-routing-r13-20261006",
+  "status": "failed",
+  "workState": "result_available",
+  "hasPendingChildRuns": false,
+  "latestTerminalRunId": "run:thread:thread%3Adelegated-task%3Acommand%253Amcp%253A56262fd4-bb0b-44d8-8964-b0985862bcd1%253Adelegate-task%253Acodetwo-native-engine-routing-r13-20261006:ordinal:1",
+  "latestTerminalStatus": "failed",
+  "latestTerminalSummary": "Provider turn failed.",
+  "latestTerminalResultContextTransferId": "context-transfer:type:subagent_result:source-thread:thread%3Adelegated-task%3Acommand%253Amcp%253A56262fd4-bb0b-44d8-8964-b0985862bcd1%253Adelegate-task%253Acodetwo-native-engine-routing-r13-20261006:target-thread:91d5d393-cf9a-4530-add8-406180f05ce9:4a9118ba-2554-4e21-8c25-a76175c45cae",
+  "providerInstanceId": "cursor",
+  "model": "claude-sonnet-5-5",
+  "summary": "Provider turn failed.",
+  "resultContextTransferId": "context-transfer:type:subagent_result:source-thread:thread%3Adelegated-task%3Acommand%253Amcp%253A56262fd4-bb0b-44d8-8964-b0985862bcd1%253Adelegate-task%253Acodetwo-native-engine-routing-r13-20261006:target-thread:91d5d393-cf9a-4530-add8-406180f05ce9:4a9118ba-2554-4e21-8c25-a76175c45cae",
+  "waitTimedOut": false
+}

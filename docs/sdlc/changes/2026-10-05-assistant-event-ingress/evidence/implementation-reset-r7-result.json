@@ -1,0 +1,24 @@
+{
+  "started_at": "2026-10-05T18:28:36.492Z",
+  "budget_seconds": 480,
+  "cancelled_at": "2026-10-05T18:36:54Z",
+  "supervision": "Original run auto-cancelled/automatically resumed by platform. Root did not start a continuation. At cumulative budget expiry, root issued one task_cancel and verified interrupted/pending false. Partial UI/reset tests were repaired and checked by owner; not accepted worker completion.",
+  "terminal": {
+    "taskId": "node:delegated-task:command%3Amcp%3Aa2bd3135-86ac-4b2d-8315-4a4037f61b62%3Adelegate-task%3Aassistant-event-ingress-ui-reset-20261006-r7",
+    "childThreadId": "thread:delegated-task:command%3Amcp%3Aa2bd3135-86ac-4b2d-8315-4a4037f61b62%3Adelegate-task%3Aassistant-event-ingress-ui-reset-20261006-r7",
+    "childRunId": "run:thread:thread%3Adelegated-task%3Acommand%253Amcp%253Aa2bd3135-86ac-4b2d-8315-4a4037f61b62%253Adelegate-task%253Aassistant-event-ingress-ui-reset-20261006-r7:ordinal:1",
+    "childNodeId": "node:delegated-task:command%3Amcp%3Aa2bd3135-86ac-4b2d-8315-4a4037f61b62%3Adelegate-task%3Aassistant-event-ingress-ui-reset-20261006-r7",
+    "status": "interrupted",
+    "workState": "result_available",
+    "hasPendingChildRuns": false,
+    "latestTerminalRunId": "run:thread:thread%3Adelegated-task%3Acommand%253Amcp%253Aa2bd3135-86ac-4b2d-8315-4a4037f61b62%253Adelegate-task%253Aassistant-event-ingress-ui-reset-20261006-r7:ordinal:2",
+    "latestTerminalStatus": "interrupted",
+    "latestTerminalSummary": "Now the single run of the assistant suite, tsc and lint.",
+    "latestTerminalResultContextTransferId": "context-transfer:type:subagent_result:source-thread:thread%3Adelegated-task%3Acommand%253Amcp%253Aa2bd3135-86ac-4b2d-8315-4a4037f61b62%253Adelegate-task%253Aassistant-event-ingress-ui-reset-20261006-r7:target-thread:91d5d393-cf9a-4530-add8-406180f05ce9:abcca3f7-c6b3-4bca-a68f-283eb6478bc4",
+    "providerInstanceId": "cursor",
+    "model": "claude-sonnet-5-5",
+    "summary": "Now the single run of the assistant suite, tsc and lint.",
+    "resultContextTransferId": "context-transfer:type:subagent_result:source-thread:thread%3Adelegated-task%3Acommand%253Amcp%253Aa2bd3135-86ac-4b2d-8315-4a4037f61b62%253Adelegate-task%253Aassistant-event-ingress-ui-reset-20261006-r7:target-thread:91d5d393-cf9a-4530-add8-406180f05ce9:abcca3f7-c6b3-4bca-a68f-283eb6478bc4",
+    "waitTimedOut": false
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "kind": "Parent additional negative probes, not external independent acceptance",
+  "sourceSetSha256": "1a005f27c4624dc4a59f2110aa2ec7269dd801d7c82ecc122889c0ce24561d1d",
+  "isolatedTestException": "Append only native-fault-probe-r7.rs to existing isolated integration test; product source unchanged.",
+  "command": "cargo test --offline -p codetwo-core --test native_provider_runtime parent_probe",
+  "exitCode": 101,
+  "passed": 0,
+  "failed": 2,
+  "findings": [
+    "Writer I/O failure leaves queued request pending past250ms while reader remains open.",
+    "Ambiguous provider RPC error classifiedRejected despite no proof of rejection before execution."
+  ],
+  "probeSha256": "ad4c119d865479c36c3e9575c0cf65f538930777d74373b997e144fd8440fcac",
+  "logSha256": "e73e68c682eb4f46f2840d2dd02b13b743563ad25afd0829095d37fae941387c"
+}

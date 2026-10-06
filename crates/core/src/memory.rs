@@ -20,6 +20,7 @@ use crate::store::{Store, StoreError};
 
 const SEARCH_CANDIDATE_LIMIT: usize = 600;
 const AUTO_L1_LIMIT: usize = 12;
+const CHIEF_CORE_LIMIT: usize = 4;
 const AUTO_L2_LIMIT: usize = 3;
 const AUTO_L0_LIMIT: usize = 3;
 const MAX_EPISODES_PER_PROJECT: usize = 300;
@@ -555,14 +556,21 @@ struct Candidate {
 }
 
 pub(crate) fn install(conn: &Connection) -> Result<(), StoreError> {
+    let tx = conn.unchecked_transaction()?;
+    let conn = &tx;
     conn.execute_batch(SCHEMA)?;
     // Additive migration for stores created by the first memory implementation.
     let _ = conn.execute(
         "ALTER TABLE memory_settings ADD COLUMN include_external_context INTEGER NOT NULL DEFAULT 1",
         [],
     );
+    let origin_added = conn
+        .execute(
+            "ALTER TABLE memories ADD COLUMN origin TEXT NOT NULL DEFAULT 'automatic'",
+            [],
+        )
+        .is_ok();
     for statement in [
-        "ALTER TABLE memories ADD COLUMN origin TEXT NOT NULL DEFAULT 'automatic'",
         "ALTER TABLE memories ADD COLUMN forgotten_at INTEGER",
         "ALTER TABLE memories ADD COLUMN supersedes_id TEXT",
         "ALTER TABLE memories ADD COLUMN conflict_with_id TEXT",
@@ -578,13 +586,20 @@ pub(crate) fn install(conn: &Connection) -> Result<(), StoreError> {
            include_external_context TEXT NOT NULL DEFAULT 'inherit'
          );
          CREATE INDEX IF NOT EXISTS memories_project_activity
-           ON memories(project_path,active,pinned,accessed_at,updated_at);
-         UPDATE memories SET origin=CASE
+           ON memories(project_path,active,pinned,accessed_at,updated_at);",
+    )?;
+    // Only the legacy schema lacked provenance. Reopening a current Store must not reinterpret
+    // an explicitly automatic record as a confirmed manual note merely because sources are empty.
+    if origin_added {
+        conn.execute_batch(
+            "UPDATE memories SET origin=CASE
            WHEN layer='L3' THEN 'profile'
            WHEN session_id IS NULL AND sources_json='[]' THEN 'manual'
            ELSE origin
          END WHERE origin='automatic';",
-    )?;
+        )?;
+    }
+    tx.commit()?;
     Ok(())
 }
 
@@ -684,7 +699,7 @@ impl Store {
         })
     }
 
-    /// Add a user-authored L1 memory. Manual notes are high confidence but still recalled data.
+    /// Add the exact user-authored L1 text. Manual notes are still recalled data.
     pub fn add_memory(
         &self,
         project_path: &str,
@@ -698,9 +713,10 @@ impl Store {
         }
         let content = content.trim().to_string();
         let now = now_millis();
-        let conn = self.conn.lock().unwrap();
+        let mut conn = self.conn.lock().unwrap();
+        let tx = conn.transaction()?;
         let id = insert_or_reinforce_l1(
-            &conn,
+            &tx,
             project_path,
             None,
             category,
@@ -711,8 +727,10 @@ impl Store {
             now,
             "manual",
         )?;
-        refresh_profile(&conn, project_path, now)?;
-        load_memory(&conn, &id)?.ok_or_else(|| rusqlite::Error::QueryReturnedNoRows.into())
+        refresh_profile(&tx, project_path, now)?;
+        let record = load_memory(&tx, &id)?.ok_or(rusqlite::Error::QueryReturnedNoRows)?;
+        tx.commit()?;
+        Ok(record)
     }
 
     pub fn list_memories(
@@ -1129,7 +1147,7 @@ impl Store {
         limit: usize,
     ) -> Result<Vec<MemoryRecord>, StoreError> {
         let conn = self.conn.lock().unwrap();
-        search_with_conn(&conn, project_path, query, limit)
+        search_with_conn(&conn, project_path, query, limit, true)
     }
 
     /// Build the bounded prompt block. This is kept separate from the persisted user transcript so
@@ -1151,6 +1169,30 @@ impl Store {
         current_session: &str,
         query: &str,
     ) -> Result<MemoryContext, StoreError> {
+        self.build_memory_context(project_path, current_session, query, false)
+    }
+
+    /// Chief-of-staff variant of [`Self::memory_context_with_receipt`]. Besides the pinned pocket
+    /// it always carries up to [`CHIEF_CORE_LIMIT`] active, conflict-free, user-confirmed
+    /// (`manual`/`user_correction`) L1 preference/constraint notes, even when the query shares no
+    /// words with them. Settings, project and session read policy are checked exactly as in the
+    /// standard path, and L1 never exceeds [`AUTO_L1_LIMIT`].
+    pub fn chief_memory_context_with_receipt(
+        &self,
+        project_path: &str,
+        current_session: &str,
+        query: &str,
+    ) -> Result<MemoryContext, StoreError> {
+        self.build_memory_context(project_path, current_session, query, true)
+    }
+
+    fn build_memory_context(
+        &self,
+        project_path: &str,
+        current_session: &str,
+        query: &str,
+        chief_core: bool,
+    ) -> Result<MemoryContext, StoreError> {
         let settings = self.effective_memory_settings(project_path)?;
         let (read, _) = self.session_memory_policy(current_session)?;
         if !settings.enabled || !settings.inject || read == MemoryAccess::Deny {
@@ -1171,7 +1213,30 @@ impl Store {
             }
         }
 
-        let recalled = self.search_memories(project_path, query, 40)?;
+        if chief_core {
+            let mut added = 0;
+            for record in self.chief_core_candidates(project_path)? {
+                let l1 = selected.iter().filter(|m| m.layer == "L1").count();
+                if added >= CHIEF_CORE_LIMIT || l1 >= AUTO_L1_LIMIT {
+                    break;
+                }
+                if seen.insert(record.id.clone()) {
+                    selected.push(record);
+                    added += 1;
+                }
+            }
+        }
+
+        let recalled = {
+            let conn = self.conn.lock().unwrap();
+            search_with_conn(
+                &conn,
+                project_path,
+                query,
+                40,
+                explicitly_recalls_past(query),
+            )?
+        };
         for record in recalled {
             let per_layer = selected.iter().filter(|m| m.layer == record.layer).count();
             let allowed = match record.layer.as_str() {
@@ -1240,6 +1305,28 @@ impl Store {
             estimated_tokens,
             items,
         })
+    }
+
+    /// Confirmed (user-authored) preference/constraint notes, newest first. Automatic and
+    /// candidate-derived memories are deliberately excluded so they are never promoted.
+    fn chief_core_candidates(&self, project_path: &str) -> Result<Vec<MemoryRecord>, StoreError> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT id,project_path,session_id,layer,category,content,confidence,sources_json,
+                    pinned,active,created_at,updated_at,accessed_at,access_count,origin,forgotten_at,
+                    supersedes_id,conflict_with_id,conflict_reason
+             FROM memories
+             WHERE project_path=?1 AND active=1 AND conflict_with_id IS NULL AND layer='L1'
+               AND category IN ('preference','constraint')
+               AND origin IN ('manual','user_correction')
+             ORDER BY updated_at DESC, id LIMIT ?2",
+        )?;
+        // Room for a full pinned pocket that may already hold some of these.
+        let rows = stmt.query_map(
+            params![project_path, (AUTO_L1_LIMIT + CHIEF_CORE_LIMIT) as i64],
+            row_to_memory,
+        )?;
+        collect_rows(rows)
     }
 
     /// Persist a transparent injection receipt after the user part has a stable sequence id.
@@ -1735,7 +1822,9 @@ fn insert_or_reinforce_l1(
     for (id, existing, old_confidence, source_json, was_pinned, existing_origin) in candidates {
         let existing_tokens: HashSet<String> = tokenize(&existing).into_iter().collect();
         let similarity = jaccard(&target_tokens, &existing_tokens);
-        if similarity >= DUPLICATE_THRESHOLD {
+        // Confirmed manual text must not silently become a similar, different note.
+        // Automatic capture retains its existing conservative fuzzy reinforcement.
+        if existing == content || (origin != "manual" && similarity >= DUPLICATE_THRESHOLD) {
             if origin == "automatic" && existing_origin == "user_correction" {
                 return Ok(id);
             }
@@ -1851,6 +1940,7 @@ fn search_with_conn(
     project_path: &str,
     query: &str,
     limit: usize,
+    include_raw: bool,
 ) -> Result<Vec<MemoryRecord>, StoreError> {
     let terms = query_terms(query);
     if terms.is_empty() {
@@ -1865,95 +1955,115 @@ fn search_with_conn(
         return collect_rows(rows);
     }
 
+    // Prefilter and rank by term matches in SQL *before* applying the candidate cap, so a long run
+    // of newer unrelated records cannot hide older relevant knowledge. Terms are bound parameters
+    // (max 12); the exact lexical score and per-layer RRF below are unchanged.
     let mut by_layer: BTreeMap<String, Vec<Candidate>> = BTreeMap::new();
-    let mut stmt = conn.prepare(
-        "SELECT id,project_path,session_id,layer,category,content,confidence,sources_json,
-                pinned,active,created_at,updated_at,accessed_at,access_count,origin,forgotten_at,
-                supersedes_id,conflict_with_id,conflict_reason
-         FROM memories WHERE project_path=?1 AND active=1 AND conflict_with_id IS NULL
-         ORDER BY updated_at DESC LIMIT ?2",
-    )?;
-    for row in stmt.query_map(
-        params![project_path, SEARCH_CANDIDATE_LIMIT as i64],
-        row_to_memory,
-    )? {
-        let record = row?;
-        let lexical = lexical_score(&terms, &record.content, query);
-        if lexical > 0.0 {
-            let recency = record.updated_at;
-            by_layer
-                .entry(record.layer.clone())
-                .or_default()
-                .push(Candidate {
-                    record,
-                    lexical,
-                    recency,
-                });
+    let (any_content, score_content) = term_match_sql("content", terms.len());
+    let term_params = |terms: &[String]| -> Vec<rusqlite::types::Value> {
+        std::iter::once(project_path.to_string())
+            .chain(terms.iter().cloned())
+            .map(rusqlite::types::Value::Text)
+            .collect()
+    };
+    // Total stays at SEARCH_CANDIDATE_LIMIT; L3 is a single slow-changing profile per project.
+    for (layer, cap) in [("L1", 400usize), ("L2", 150), ("L3", 50)] {
+        let mut stmt = conn.prepare(&format!(
+            "SELECT id,project_path,session_id,layer,category,content,confidence,sources_json,
+                    pinned,active,created_at,updated_at,accessed_at,access_count,origin,forgotten_at,
+                    supersedes_id,conflict_with_id,conflict_reason
+             FROM memories
+             WHERE project_path=?1 AND active=1 AND conflict_with_id IS NULL AND layer='{layer}'
+               AND ({any_content})
+             ORDER BY ({score_content}) DESC, pinned DESC, updated_at DESC LIMIT {cap}"
+        ))?;
+        for row in stmt.query_map(
+            rusqlite::params_from_iter(term_params(&terms)),
+            row_to_memory,
+        )? {
+            let record = row?;
+            let lexical = lexical_score(&terms, &record.content, query);
+            if lexical > 0.0 {
+                let recency = record.updated_at;
+                by_layer
+                    .entry(record.layer.clone())
+                    .or_default()
+                    .push(Candidate {
+                        record,
+                        lexical,
+                        recency,
+                    });
+            }
         }
     }
 
-    let mut raw_stmt = conn.prepare(
-        "SELECT p.session_id,p.seq,p.role,p.part_json,s.cwd,s.created_at
+    if include_raw {
+        let text_expr =
+            "CASE WHEN json_valid(p.part_json) THEN json_extract(p.part_json,'$.text') END";
+        let (any_raw, score_raw) = term_match_sql(text_expr, terms.len());
+        let mut raw_stmt = conn.prepare(&format!(
+            "SELECT p.session_id,p.seq,p.role,p.part_json,s.cwd,s.created_at
          FROM parts p JOIN sessions s ON s.id=p.session_id
-         WHERE s.cwd=?1 AND p.part_json LIKE '%\"kind\":\"text\"%'
-         ORDER BY s.created_at DESC,p.seq DESC LIMIT ?2",
-    )?;
-    let raw_rows =
-        raw_stmt.query_map(params![project_path, SEARCH_CANDIDATE_LIMIT as i64], |r| {
-            Ok((
-                r.get::<_, String>(0)?,
-                r.get::<_, i64>(1)?,
-                r.get::<_, String>(2)?,
-                r.get::<_, String>(3)?,
-                r.get::<_, String>(4)?,
-                r.get::<_, i64>(5)?,
-            ))
-        })?;
-    for row in raw_rows {
-        let (session_id, seq, role_json, part_json, cwd, created_at) = row?;
-        let Ok(Part::Text { text }) = serde_json::from_str::<Part>(&part_json) else {
-            continue;
-        };
-        let lexical = lexical_score(&terms, &text, query);
-        if lexical <= 0.0 {
-            continue;
+         WHERE s.cwd=?1 AND p.part_json LIKE '%\"kind\":\"text\"%' AND ({any_raw})
+         ORDER BY ({score_raw}) DESC, s.created_at DESC, p.seq DESC LIMIT {SEARCH_CANDIDATE_LIMIT}"
+        ))?;
+        let raw_rows =
+            raw_stmt.query_map(rusqlite::params_from_iter(term_params(&terms)), |r| {
+                Ok((
+                    r.get::<_, String>(0)?,
+                    r.get::<_, i64>(1)?,
+                    r.get::<_, String>(2)?,
+                    r.get::<_, String>(3)?,
+                    r.get::<_, String>(4)?,
+                    r.get::<_, i64>(5)?,
+                ))
+            })?;
+        for row in raw_rows {
+            let (session_id, seq, role_json, part_json, cwd, created_at) = row?;
+            let Ok(Part::Text { text }) = serde_json::from_str::<Part>(&part_json) else {
+                continue;
+            };
+            let lexical = lexical_score(&terms, &text, query);
+            if lexical <= 0.0 {
+                continue;
+            }
+            let role = serde_json::from_str::<Role>(&role_json).unwrap_or(Role::User);
+            let content = format!(
+                "{}: {}",
+                if role == Role::User { "User" } else { "Agent" },
+                truncate_chars(&text, 1_600)
+            );
+            by_layer.entry("L0".into()).or_default().push(Candidate {
+                record: MemoryRecord {
+                    id: format!("l0:{session_id}:{seq}"),
+                    project_path: cwd,
+                    session_id: Some(session_id.clone()),
+                    layer: "L0".into(),
+                    category: "raw".into(),
+                    content,
+                    confidence: 1.0,
+                    sources: vec![MemorySourceRef {
+                        session_id,
+                        part_seq: seq,
+                    }],
+                    pinned: false,
+                    active: true,
+                    created_at,
+                    updated_at: created_at,
+                    accessed_at: None,
+                    access_count: 0,
+                    origin: "automatic".into(),
+                    forgotten_at: None,
+                    supersedes_id: None,
+                    conflict_with_id: None,
+                    conflict_reason: None,
+                    relevance: None,
+                    editable: false,
+                },
+                lexical,
+                recency: created_at,
+            });
         }
-        let role = serde_json::from_str::<Role>(&role_json).unwrap_or(Role::User);
-        let content = format!(
-            "{}: {}",
-            if role == Role::User { "User" } else { "Agent" },
-            truncate_chars(&text, 1_600)
-        );
-        by_layer.entry("L0".into()).or_default().push(Candidate {
-            record: MemoryRecord {
-                id: format!("l0:{session_id}:{seq}"),
-                project_path: cwd,
-                session_id: Some(session_id.clone()),
-                layer: "L0".into(),
-                category: "raw".into(),
-                content,
-                confidence: 1.0,
-                sources: vec![MemorySourceRef {
-                    session_id,
-                    part_seq: seq,
-                }],
-                pinned: false,
-                active: true,
-                created_at,
-                updated_at: created_at,
-                accessed_at: None,
-                access_count: 0,
-                origin: "automatic".into(),
-                forgotten_at: None,
-                supersedes_id: None,
-                conflict_with_id: None,
-                conflict_reason: None,
-                relevance: None,
-                editable: false,
-            },
-            lexical,
-            recency: created_at,
-        });
     }
 
     let weights = [("L0", 0.85), ("L1", 1.0), ("L2", 0.92), ("L3", 0.75)];
@@ -2357,6 +2467,22 @@ fn query_terms(query: &str) -> Vec<String> {
     tokenize(query).into_iter().take(12).collect()
 }
 
+/// SQL fragments for "any term occurs" and "number of terms that occur" over a text expression.
+/// Terms are bound as `?2..` (`?1` is the project) and are ASCII-alphanumeric or CJK, so SQLite's
+/// ASCII `lower()` agrees with the Rust lowercase used by the exact lexical score afterwards.
+fn term_match_sql(expr: &str, term_count: usize) -> (String, String) {
+    let hits: Vec<String> = (0..term_count)
+        .map(|i| format!("instr(lower({expr}),?{})>0", i + 2))
+        .collect();
+    let any = hits.join(" OR ");
+    let score = hits
+        .iter()
+        .map(|hit| format!("({hit})"))
+        .collect::<Vec<_>>()
+        .join(" + ");
+    (any, score)
+}
+
 fn tokenize(text: &str) -> Vec<String> {
     let mut tokens = Vec::new();
     let mut seen = HashSet::new();
@@ -2557,6 +2683,87 @@ fn redact_sensitive(text: &str) -> String {
     output.join("\n")
 }
 
+/// One memory read through a [`crate::assistant::MemoryGrant`], with the edge it was read by.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct ScopedMemory {
+    pub record: MemoryRecord,
+    /// `scope:<key>` for an owned scope or `share:<id>` for an approved reference.
+    pub via: String,
+    pub content_hash: String,
+}
+
+impl Store {
+    pub(crate) fn memory_by_id(&self, id: &str) -> Result<Option<MemoryRecord>, StoreError> {
+        load_memory(&self.conn.lock().unwrap(), id)
+    }
+
+    /// Scoped, deny-first read for the project hierarchy. The grant is only a sealed identity
+    /// receipt: its edges are re-derived here from the CURRENT `AssistantState`, so revoked shares,
+    /// retired projects, moved bindings and changed goal owners are denied even for a grant cached
+    /// earlier. Whole scopes are read only while their own settings allow injection. A share is
+    /// returned only while it is still approved, its memory is active, conflict-free, in the
+    /// recorded source scope and byte-identical (hash) to what the user approved, and neither the
+    /// source nor the destination scope turns injection off. A destination deny suppresses all
+    /// context sources, including the actor's own workspace scopes.
+    pub fn scoped_memory_read(
+        &self,
+        grant: &crate::assistant::MemoryGrant,
+        limit_per_scope: usize,
+    ) -> Result<Vec<ScopedMemory>, StoreError> {
+        let state = self.assistant_state()?;
+        let grant = crate::assistant::current_memory_grant(&state, grant)?;
+        for scope in grant.target_scopes() {
+            let settings = self.effective_memory_settings(scope)?;
+            if !settings.enabled || !settings.inject {
+                return Ok(Vec::new());
+            }
+        }
+        let mut seen = HashSet::new();
+        let mut out = Vec::new();
+        for scope in grant.scopes() {
+            let settings = self.effective_memory_settings(scope)?;
+            if !settings.enabled || !settings.inject {
+                continue;
+            }
+            for record in self.list_memories(scope, limit_per_scope.min(200))? {
+                if seen.insert(record.id.clone()) {
+                    let content_hash =
+                        crate::assistant::memory_content_hash(scope, &record.content);
+                    out.push(ScopedMemory {
+                        record,
+                        via: format!("scope:{scope}"),
+                        content_hash,
+                    });
+                }
+            }
+        }
+        for share in grant.shares() {
+            let Some(record) = self.memory_by_id(&share.memory_id)? else {
+                continue;
+            };
+            let settings = self.effective_memory_settings(&share.source_scope)?;
+            if !settings.enabled
+                || !settings.inject
+                || !record.active
+                || record.conflict_with_id.is_some()
+                || record.project_path != share.source_scope
+                || crate::assistant::memory_content_hash(&record.project_path, &record.content)
+                    != share.content_hash
+            {
+                continue;
+            }
+            if seen.insert(record.id.clone()) {
+                out.push(ScopedMemory {
+                    record,
+                    via: format!("share:{}", share.share_id),
+                    content_hash: share.content_hash.clone(),
+                });
+            }
+        }
+        Ok(out)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2710,6 +2917,70 @@ mod tests {
         assert_eq!(saved.layer, "L1");
         assert!(saved.pinned);
         assert_eq!(store.memory_stats("/work").unwrap().l1, 1);
+    }
+
+    #[test]
+    fn manual_memory_preserves_exact_text_even_when_nearly_identical() {
+        let store = Store::open_in_memory().unwrap();
+        let old =
+            "For this project always send the complete weekly report to the team before release";
+        let new =
+            "For this project never send the complete weekly report to the team before release";
+        let first = store.add_memory("/work", "constraint", old, false).unwrap();
+        let second = store.add_memory("/work", "constraint", new, true).unwrap();
+        assert_ne!(first.id, second.id);
+        assert_eq!(second.content, new);
+        assert_eq!(
+            store
+                .list_memories("/work", 10)
+                .unwrap()
+                .iter()
+                .find(|m| m.id == first.id)
+                .unwrap()
+                .content,
+            old
+        );
+        let repeated = store.add_memory("/work", "constraint", new, false).unwrap();
+        assert_eq!(repeated.id, second.id);
+        assert_eq!(repeated.content, new);
+        assert_eq!(store.memory_stats("/work").unwrap().l1, 2);
+    }
+
+    #[test]
+    fn manual_memory_rolls_back_if_profile_refresh_fails() {
+        let store = Store::open_in_memory().unwrap();
+        store
+            .add_memory("/work", "fact", "First note", false)
+            .unwrap();
+        store
+            .add_memory("/work", "fact", "Second note", false)
+            .unwrap();
+        store
+            .conn
+            .lock()
+            .unwrap()
+            .execute_batch(
+                "CREATE TRIGGER fail_profile BEFORE INSERT ON memories WHEN NEW.layer='L3'
+             BEGIN SELECT RAISE(ABORT, 'fixture profile failure'); END;",
+            )
+            .unwrap();
+        assert!(store
+            .add_memory("/work", "fact", "Third note", false)
+            .is_err());
+        let rows = store.list_memories("/work", 10).unwrap();
+        assert_eq!(rows.len(), 2);
+        assert!(!rows.iter().any(|r| r.content == "Third note"));
+        store
+            .conn
+            .lock()
+            .unwrap()
+            .execute_batch("DROP TRIGGER fail_profile")
+            .unwrap();
+        let saved = store
+            .add_memory("/work", "fact", "Third note", false)
+            .unwrap();
+        assert_eq!(saved.content, "Third note");
+        assert_eq!(store.memory_stats("/work").unwrap().l1, 3);
     }
 
     #[test]
@@ -3244,5 +3515,395 @@ mod tests {
         assert!(!redacted.contains("sk-secret"));
         assert!(!redacted.contains("private-base64-material"));
         assert!(redacted.contains("[REDACTED]"));
+    }
+
+    fn raw_memory(
+        project: &str,
+        layer: &str,
+        category: &str,
+        content: String,
+        origin: &str,
+        pinned: bool,
+        updated_at: i64,
+    ) -> MemoryRecord {
+        MemoryRecord {
+            id: uuid::Uuid::new_v4().to_string(),
+            project_path: project.into(),
+            session_id: None,
+            layer: layer.into(),
+            category: category.into(),
+            content,
+            confidence: 0.9,
+            sources: Vec::new(),
+            pinned,
+            active: true,
+            created_at: updated_at,
+            updated_at,
+            accessed_at: None,
+            access_count: 0,
+            origin: origin.into(),
+            forgotten_at: None,
+            supersedes_id: None,
+            conflict_with_id: None,
+            conflict_reason: None,
+            relevance: None,
+            editable: origin == "manual",
+        }
+    }
+
+    fn insert_fillers(store: &Store, project: &str, layer: &str, count: usize) {
+        let conn = store.conn.lock().unwrap();
+        for i in 0..count {
+            insert_memory(
+                &conn,
+                &raw_memory(
+                    project,
+                    layer,
+                    "fact",
+                    format!("unrelated filler entry number {i} about weather"),
+                    "automatic",
+                    false,
+                    1_000_000 + i as i64,
+                ),
+            )
+            .unwrap();
+        }
+    }
+
+    fn backdate(store: &Store, id: &str) {
+        store
+            .conn
+            .lock()
+            .unwrap()
+            .execute("UPDATE memories SET updated_at=1000 WHERE id=?1", [id])
+            .unwrap();
+    }
+
+    fn l1_items(context: &MemoryContext) -> Vec<&MemoryReceiptItem> {
+        context.items.iter().filter(|i| i.layer == "L1").collect()
+    }
+
+    #[test]
+    fn legacy_origin_is_backfilled_once_without_reclassifying_current_automatic_notes() {
+        let conn = Connection::open_in_memory().unwrap();
+        let legacy = SCHEMA.replace("  origin        TEXT NOT NULL DEFAULT 'automatic',\n", "");
+        conn.execute_batch(&legacy).unwrap();
+        conn.execute("INSERT INTO memories(id,project_path,layer,category,content,created_at,updated_at) VALUES('legacy','/work','L1','preference','Owner legacy note',1,1)", []).unwrap();
+        install(&conn).unwrap();
+        let origin: String = conn
+            .query_row("SELECT origin FROM memories WHERE id='legacy'", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert_eq!(origin, "manual");
+        conn.execute("INSERT INTO memories(id,project_path,layer,category,content,origin,created_at,updated_at) VALUES('current','/work','L1','preference','Unconfirmed current note','automatic',2,2)", []).unwrap();
+        install(&conn).unwrap();
+        let origin: String = conn
+            .query_row("SELECT origin FROM memories WHERE id='current'", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert_eq!(origin, "automatic");
+    }
+
+    #[test]
+    fn chief_core_survives_reopen_and_ignores_query_overlap_and_unconfirmed() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("memory-chief.db");
+        let path_str = path.to_str().unwrap().to_string();
+        {
+            let store = Store::open(&path_str).unwrap();
+            store
+                .add_memory("/work", "preference", "Prefer concise replies", false)
+                .unwrap();
+            store
+                .add_memory("/work", "constraint", "Never push to main directly", false)
+                .unwrap();
+            store
+                .add_memory("/work", "fact", "The build host is named zinc", false)
+                .unwrap();
+            // Automatic L1 and a pending candidate must never become confirmed core.
+            insert_memory(
+                &store.conn.lock().unwrap(),
+                &raw_memory(
+                    "/work",
+                    "L1",
+                    "preference",
+                    "Automatic guess prefers verbose replies".into(),
+                    "automatic",
+                    false,
+                    now_millis() + 10,
+                ),
+            )
+            .unwrap();
+            let s = session(&store, "/work");
+            let prompt = "I prefer pending candidate wording";
+            let seq = completed_turn(&store, &s, prompt);
+            store
+                .capture_completed_turn("/work", &s.id, prompt, seq)
+                .unwrap();
+        }
+
+        let store = Store::open(&path_str).unwrap();
+        let chat = session(&store, "/work");
+        let query = "hello there friend, good morning";
+        let standard = store
+            .memory_context_with_receipt("/work", &chat.id, query)
+            .unwrap();
+        assert!(l1_items(&standard).is_empty());
+
+        let chief = store
+            .chief_memory_context_with_receipt("/work", &chat.id, query)
+            .unwrap();
+        let contents: Vec<&str> = l1_items(&chief)
+            .into_iter()
+            .map(|i| i.content.as_str())
+            .collect();
+        assert_eq!(contents.len(), 2, "{contents:?}");
+        assert!(contents.contains(&"Prefer concise replies"));
+        assert!(contents.contains(&"Never push to main directly"));
+        assert!(!contents.iter().any(|c| c.contains("Automatic guess")));
+        assert!(!contents.iter().any(|c| c.contains("zinc")));
+        assert!(!contents.iter().any(|c| c.contains("pending candidate")));
+        assert!(chief.block.contains("untrusted recalled context"));
+        assert!(chief.block.contains("source manual"));
+        assert!(l1_items(&chief).iter().all(|i| i.source.is_none()));
+        assert!(chief.estimated_tokens > 0);
+
+        drop(store);
+        for suffix in ["", "-wal", "-shm"] {
+            let _ = std::fs::remove_file(format!("{path_str}{suffix}"));
+        }
+    }
+
+    #[test]
+    fn chief_core_adds_at_most_four_and_total_l1_stays_within_twelve() {
+        let store = Store::open_in_memory().unwrap();
+        let chat = session(&store, "/work");
+        for i in 0..10 {
+            store
+                .add_memory(
+                    "/work",
+                    "constraint",
+                    &format!("Rule alpha{i} applies"),
+                    false,
+                )
+                .unwrap();
+        }
+        let chief = store
+            .chief_memory_context_with_receipt("/work", &chat.id, "quokka")
+            .unwrap();
+        assert_eq!(l1_items(&chief).len(), 4);
+
+        // Pinned pocket (10) + core + query matches can never exceed the shared L1 cap.
+        for i in 0..10 {
+            store
+                .add_memory(
+                    "/work",
+                    "preference",
+                    &format!("Pinned note alpha{i}"),
+                    true,
+                )
+                .unwrap();
+        }
+        for i in 0..10 {
+            store
+                .add_memory(
+                    "/work",
+                    "constraint",
+                    &format!("Extra alpha{i} rule"),
+                    false,
+                )
+                .unwrap();
+        }
+        let chief = store
+            .chief_memory_context_with_receipt("/work", &chat.id, "alpha")
+            .unwrap();
+        assert!(l1_items(&chief).len() <= AUTO_L1_LIMIT);
+        let ids: HashSet<_> = chief.items.iter().map(|i| &i.id).collect();
+        assert_eq!(ids.len(), chief.items.len());
+    }
+
+    #[test]
+    fn old_english_and_chinese_notes_are_found_beyond_the_candidate_window() {
+        let store = Store::open_in_memory().unwrap();
+        let chat = session(&store, "/work");
+        let english = store
+            .add_memory(
+                "/work",
+                "fact",
+                "Deploys go to the zebrafish staging cluster",
+                false,
+            )
+            .unwrap();
+        let chinese = store
+            .add_memory("/work", "constraint", "项目约定使用青花瓷主题配色", false)
+            .unwrap();
+        backdate(&store, &english.id);
+        backdate(&store, &chinese.id);
+        insert_fillers(&store, "/work", "L1", SEARCH_CANDIDATE_LIMIT + 120);
+        insert_fillers(&store, "/work", "L2", 200);
+
+        let found = store
+            .search_memories("/work", "zebrafish staging", 10)
+            .unwrap();
+        assert_eq!(found[0].id, english.id);
+        assert!(found.len() <= 10);
+        let found = store.search_memories("/work", "青花瓷配色", 10).unwrap();
+        assert_eq!(found[0].id, chinese.id);
+
+        let context = store
+            .chief_memory_context_with_receipt("/work", &chat.id, "where do deploys go zebrafish")
+            .unwrap();
+        assert!(context
+            .items
+            .iter()
+            .any(|i| i.id == english.id && i.layer == "L1"));
+        assert!(l1_items(&context).len() <= AUTO_L1_LIMIT);
+
+        // Raw transcript recall has the same property: an old match survives newer unrelated text.
+        let old = session(&store, "/work");
+        store
+            .append_part(
+                &old.id,
+                Role::User,
+                &Part::Text {
+                    text: "The wombat quarterly report is due".into(),
+                },
+            )
+            .unwrap();
+        store
+            .conn
+            .lock()
+            .unwrap()
+            .execute("UPDATE sessions SET created_at=1000 WHERE id=?1", [&old.id])
+            .unwrap();
+        let busy = session(&store, "/work");
+        for i in 0..(SEARCH_CANDIDATE_LIMIT + 50) {
+            store
+                .append_part(
+                    &busy.id,
+                    Role::User,
+                    &Part::Text {
+                        text: format!("unrelated chatter line {i}"),
+                    },
+                )
+                .unwrap();
+        }
+        let raw = store.search_memories("/work", "wombat report", 5).unwrap();
+        assert!(raw
+            .iter()
+            .any(|r| r.layer == "L0" && r.content.contains("wombat")));
+    }
+
+    #[test]
+    fn chief_context_respects_isolation_and_every_read_switch() {
+        let store = Store::open_in_memory().unwrap();
+        let chat = session(&store, "/work");
+        store
+            .add_memory("/work", "constraint", "Always use the store API", true)
+            .unwrap();
+        store
+            .add_memory("/other", "constraint", "Other project secret rule", true)
+            .unwrap();
+
+        let chief = store
+            .chief_memory_context_with_receipt("/work", &chat.id, "hi")
+            .unwrap();
+        assert!(!chief.block.contains("Other project"));
+        assert!(!chief.items.is_empty());
+
+        store
+            .set_session_memory_policy(&chat.id, MemoryAccess::Deny, MemoryAccess::Allow)
+            .unwrap();
+        assert!(store
+            .chief_memory_context_with_receipt("/work", &chat.id, "hi")
+            .unwrap()
+            .items
+            .is_empty());
+        store
+            .set_session_memory_policy(&chat.id, MemoryAccess::Allow, MemoryAccess::Allow)
+            .unwrap();
+
+        store
+            .set_memory_project_policy(&MemoryProjectPolicy {
+                project_path: "/work".into(),
+                capture: MemoryPolicyValue::Inherit,
+                inject: MemoryPolicyValue::Deny,
+                include_external_context: MemoryPolicyValue::Inherit,
+            })
+            .unwrap();
+        assert!(store
+            .chief_memory_context_with_receipt("/work", &chat.id, "hi")
+            .unwrap()
+            .block
+            .is_empty());
+        store
+            .set_memory_project_policy(&MemoryProjectPolicy {
+                project_path: "/work".into(),
+                capture: MemoryPolicyValue::Inherit,
+                inject: MemoryPolicyValue::Inherit,
+                include_external_context: MemoryPolicyValue::Inherit,
+            })
+            .unwrap();
+        store
+            .set_memory_settings(MemorySettings {
+                enabled: true,
+                capture: true,
+                inject: false,
+                include_external_context: true,
+            })
+            .unwrap();
+        assert!(store
+            .chief_memory_context_with_receipt("/work", &chat.id, "hi")
+            .unwrap()
+            .items
+            .is_empty());
+    }
+
+    #[test]
+    fn corrected_or_forgotten_core_notes_do_not_reappear() {
+        let store = Store::open_in_memory().unwrap();
+        let chat = session(&store, "/work");
+        let old = store
+            .add_memory("/work", "constraint", "Always deploy on Fridays", false)
+            .unwrap();
+        let keep = store
+            .add_memory("/work", "preference", "Prefer short summaries", false)
+            .unwrap();
+        store
+            .add_memory("/work", "preference", "Prefer calm tone", false)
+            .unwrap();
+
+        let corrected = store
+            .correct_memory(&old.id, "constraint", "Never deploy on Fridays")
+            .unwrap();
+        store.set_memory_pinned(&corrected.id, false).unwrap();
+        let chief = store
+            .chief_memory_context_with_receipt("/work", &chat.id, "good morning")
+            .unwrap();
+        assert!(chief.items.iter().any(|i| i.id == corrected.id));
+        assert!(!chief.items.iter().any(|i| i.id == old.id));
+        assert!(!chief.block.contains("Always deploy on Fridays"));
+        // Searching the old wording must not resurrect it either.
+        assert!(!store
+            .search_memories("/work", "deploy Fridays", 10)
+            .unwrap()
+            .iter()
+            .any(|r| r.id == old.id));
+
+        store.set_memory_active(&keep.id, false).unwrap();
+        let chief = store
+            .chief_memory_context_with_receipt("/work", &chat.id, "good morning")
+            .unwrap();
+        assert!(!chief.items.iter().any(|i| i.id == keep.id));
+        assert!(!chief.block.contains("Prefer short summaries"));
+
+        store.delete_memory(&corrected.id).unwrap();
+        let chief = store
+            .chief_memory_context_with_receipt("/work", &chat.id, "good morning")
+            .unwrap();
+        assert!(!chief.block.contains("Never deploy on Fridays"));
+        assert!(!chief.block.contains("Always deploy on Fridays"));
     }
 }

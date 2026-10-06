@@ -1308,6 +1308,151 @@ export function SessionControls({
  * centred measure and a real block gutter. It is the same BlockNote document in both — headings,
  * lists, code, `/` skills and `@` files work throughout.
  */
+/** The one circular send control: the full Composer and the chief-of-staff conversation share it. */
+export function ComposerSendButton({
+  empty,
+  loading = false,
+  disabled = false,
+  label,
+  tooltip,
+  hint,
+  onClick,
+}: {
+  empty: boolean;
+  loading?: boolean;
+  disabled?: boolean;
+  label: string;
+  tooltip: string;
+  hint?: ReactNode;
+  onClick: () => void;
+}) {
+  return (
+    <Tooltip>
+      {/* Kept enabled on purpose: a disabled button explains nothing, and clicking it
+        focuses the document and says what's missing. */}
+      <TooltipTrigger
+        render={
+          <Button
+            size="icon"
+            variant={empty ? "secondary" : "default"}
+            className="size-8 shrink-0 rounded-full"
+            onClick={onClick}
+            disabled={loading || disabled}
+            aria-label={label}
+          >
+            {loading ? (
+              <ActivityOrb state="connecting" aria-hidden="true" />
+            ) : (
+              <ArrowUp className="size-4" />
+            )}
+          </Button>
+        }
+      />
+      <TooltipContent>
+        {tooltip}
+        {!loading && hint != null && (
+          <span className="ml-1.5 opacity-60">{hint}</span>
+        )}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
+/**
+ * The composer card chrome (surface, editor scroll box, control row) without any session
+ * configuration. The chief-of-staff conversation uses it so its input is the same surface as
+ * the main Composer without requiring a session, model or checkout.
+ */
+export function ComposerCard({
+  children,
+  controls,
+  maxHeight = 190,
+  docMode = false,
+  attachments,
+  overlay,
+  footer,
+}: {
+  children: ReactNode;
+  controls: ReactNode;
+  maxHeight?: number;
+  docMode?: boolean;
+  attachments?: ReactNode;
+  overlay?: ReactNode;
+  footer?: ReactNode;
+}) {
+  return (
+    <div
+      className={cn(
+        // The width container the control row compresses against (see the chip labels below):
+        // in compact mode this is the card's own measure, expanded it's the page column — either
+        // way, the width the controls actually have.
+        "@container/composer isolate flex flex-col",
+        docMode ? "min-h-0 flex-1" : "mx-auto w-full max-w-3xl"
+      )}
+    >
+      {/* No `overflow-hidden`: BlockNote's drag/insert handles render just outside the text
+            column, and clipping them takes the block gutter away. The compact card paints its own
+            surface so its background can never drift away from the editor in WebKit. */}
+      <div
+        className={cn(
+          "composer-card relative z-10 flex flex-col",
+          docMode
+            ? // Expanded, the composer *is* the page: no card, no border, the app's own surface.
+              // `relative` anchors the floating control bar below.
+              "min-h-0 flex-1"
+            : "rounded-composer bg-canvas shadow-composer dark:bg-raised"
+        )}
+      >
+        <div
+          className={cn(
+            "min-h-0 overflow-y-auto",
+            docMode ? "bn-doc-mode flex-1" : "min-h-28 py-4"
+          )}
+          style={docMode ? undefined : { maxHeight }}
+        >
+          {attachments}
+          {children}
+        </div>
+
+        {/* R5: an empty page in an active scene with a brief offers to start from it. A
+              positioned overlay inside the same tree (see the reconciliation note above) — it
+              never auto-inserts, and dismissing it keeps it away for this session. Only rendered
+              in doc mode, where the card is `relative`. */}
+        {overlay}
+
+        {/* Expanded, the control rows *float* over the foot of the page as their own raised card.
+              In normal flow it sat at the column's bottom edge, where the transcript panel beside
+              the page ended up over the run button and swallowed its clicks; floating on its own
+              z-plane keeps every control clickable no matter what the layout around the page does.
+              The session configuration row wraps independently, keeping its high-frequency
+              controls visible without crowding the run, stop, voice, or document controls.
+              `pointer-events-none` on the strip, `auto` on the card: the page stays clickable
+              either side of the floating bar. */}
+        <div
+          className={cn(
+            docMode &&
+              "pointer-events-none absolute inset-x-0 bottom-5 z-20 px-6"
+          )}
+        >
+          <div
+            className={cn(
+              "flex min-w-0 flex-wrap items-end gap-1",
+              docMode
+                ? "rounded-composer bg-canvas shadow-composer dark:bg-raised pointer-events-auto mx-auto w-full max-w-3xl p-2"
+                : // Keep every outer edge 8px from the controls. The 24px surface radius then
+                  // shares its bottom-right centre with the circular send/stop control.
+                  "p-2"
+            )}
+          >
+            {controls}
+          </div>
+        </div>
+      </div>
+      {footer}
+    </div>
+  );
+}
+
 export function Composer({
   children,
   config,
@@ -1644,38 +1789,20 @@ export function Composer({
             </Tooltip>
           </>
         ) : (
-          <Tooltip>
-            {/* Kept enabled on purpose: a disabled button explains nothing, and clicking it
-              focuses the document and says what's missing. */}
-            <TooltipTrigger
-              render={
-                <Button
-                  size="icon"
-                  variant={composerEmpty ? "secondary" : "default"}
-                  className="size-8 shrink-0 rounded-full"
-                  onClick={onRun}
-                  disabled={loading}
-                  aria-label={
-                    loading ? t("composer.loadingSession") : t("composer.run")
-                  }
-                >
-                  {loading ? (
-                    <ActivityOrb state="connecting" aria-hidden="true" />
-                  ) : (
-                    <ArrowUp className="size-4" />
-                  )}
-                </Button>
-              }
-            />
-            <TooltipContent>
-              {loading
+          <ComposerSendButton
+            empty={composerEmpty}
+            loading={loading}
+            label={loading ? t("composer.loadingSession") : t("composer.run")}
+            tooltip={
+              loading
                 ? t("composer.loadingSession")
                 : composerEmpty
                   ? t("composer.runEmpty")
-                  : t("composer.run")}
-              {!loading && <span className="ml-1.5 opacity-60">{runHint}</span>}
-            </TooltipContent>
-          </Tooltip>
+                  : t("composer.run")
+            }
+            hint={runHint}
+            onClick={onRun}
+          />
         )}
       </div>
     </>
@@ -1697,104 +1824,76 @@ export function Composer({
         docMode ? "min-h-0 min-w-0 flex-1" : "shrink-0 px-6 pt-2 pb-6"
       )}
     >
-      <div
-        className={cn(
-          // The width container the control row compresses against (see the chip labels below):
-          // in compact mode this is the card's own measure, expanded it's the page column — either
-          // way, the width the controls actually have.
-          "@container/composer isolate flex flex-col",
-          docMode ? "min-h-0 flex-1" : "mx-auto w-full max-w-3xl"
-        )}
-      >
-        {/* No `overflow-hidden`: BlockNote's drag/insert handles render just outside the text
-            column, and clipping them takes the block gutter away. The compact card paints its own
-            surface so its background can never drift away from the editor in WebKit. */}
-        <div
-          className={cn(
-            "composer-card relative z-10 flex flex-col",
-            docMode
-              ? // Expanded, the composer *is* the page: no card, no border, the app's own surface.
-                // `relative` anchors the floating control bar below.
-                "min-h-0 flex-1"
-              : "rounded-composer bg-canvas shadow-composer dark:bg-raised"
-          )}
-        >
-          <div
-            className={cn(
-              "min-h-0 overflow-y-auto",
-              docMode ? "bn-doc-mode flex-1" : "min-h-28 py-4"
-            )}
-            style={docMode ? undefined : { maxHeight: applied }}
-          >
-            {appshots.length > 0 && (
-              <div
-                data-appshot-attachments
-                className="flex gap-2 overflow-x-auto px-4 pb-2"
-              >
-                {appshots.map((appshot) => (
-                  <div
-                    key={appshot.id}
-                    className="group rounded-control bg-fill-quiet shadow-surface relative flex w-64 shrink-0 items-center gap-2 p-1.5"
-                  >
-                    <img
-                      src={appshot.preview_data_url}
-                      alt=""
-                      className="rounded-control aspect-5/3 w-20 shrink-0 object-cover"
-                    />
-                    <div className="min-w-0 flex-1 pr-5">
-                      <p className="text-metadata truncate font-medium">
-                        {appshot.window_title}
+      <ComposerCard
+        docMode={docMode}
+        maxHeight={applied}
+        controls={controls}
+        attachments={
+          appshots.length > 0 && (
+            <div
+              data-appshot-attachments
+              className="flex gap-2 overflow-x-auto px-4 pb-2"
+            >
+              {appshots.map((appshot) => (
+                <div
+                  key={appshot.id}
+                  className="group rounded-control bg-fill-quiet shadow-surface relative flex w-64 shrink-0 items-center gap-2 p-1.5"
+                >
+                  <img
+                    src={appshot.preview_data_url}
+                    alt=""
+                    className="rounded-control aspect-5/3 w-20 shrink-0 object-cover"
+                  />
+                  <div className="min-w-0 flex-1 pr-5">
+                    <p className="text-metadata truncate font-medium">
+                      {appshot.window_title}
+                    </p>
+                    {appshot.kind === "attachment" ? (
+                      <p className="text-callout text-muted-foreground">
+                        {t("composer.imageDimensions", {
+                          width: appshot.width,
+                          height: appshot.height,
+                        })}
                       </p>
-                      {appshot.kind === "attachment" ? (
-                        <p className="text-callout text-muted-foreground">
-                          {t("composer.imageDimensions", {
-                            width: appshot.width,
-                            height: appshot.height,
+                    ) : (
+                      <>
+                        <p className="text-callout text-muted-foreground truncate">
+                          {appshot.app_name}
+                        </p>
+                        <p className="text-metadata text-muted-foreground">
+                          {t("composer.appshotText", {
+                            count: appshot.text_length,
                           })}
                         </p>
-                      ) : (
-                        <>
-                          <p className="text-callout text-muted-foreground truncate">
-                            {appshot.app_name}
-                          </p>
-                          <p className="text-metadata text-muted-foreground">
-                            {t("composer.appshotText", {
-                              count: appshot.text_length,
-                            })}
-                          </p>
-                        </>
-                      )}
-                    </div>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      className="text-muted-foreground absolute top-1 right-1 size-6 opacity-70 hover:opacity-100"
-                      aria-label={
-                        appshot.kind === "attachment"
-                          ? t("composer.removeImage", {
-                              title: appshot.window_title,
-                            })
-                          : t("composer.removeAppshot", {
-                              title: appshot.window_title,
-                            })
-                      }
-                      onClick={() => onRemoveAppshot?.(appshot.id)}
-                    >
-                      <X className="size-3.5" />
-                    </Button>
+                      </>
+                    )}
                   </div>
-                ))}
-              </div>
-            )}
-            {children}
-          </div>
-
-          {/* R5: an empty page in an active scene with a brief offers to start from it. A
-              positioned overlay inside the same tree (see the reconciliation note above) — it
-              never auto-inserts, and dismissing it keeps it away for this session. Only rendered
-              in doc mode, where the card is `relative`. */}
-          {showBriefOffer && config.activeScene && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="text-muted-foreground absolute top-1 right-1 size-6 opacity-70 hover:opacity-100"
+                    aria-label={
+                      appshot.kind === "attachment"
+                        ? t("composer.removeImage", {
+                            title: appshot.window_title,
+                          })
+                        : t("composer.removeAppshot", {
+                            title: appshot.window_title,
+                          })
+                    }
+                    onClick={() => onRemoveAppshot?.(appshot.id)}
+                  >
+                    <X className="size-3.5" />
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )
+        }
+        overlay={
+          showBriefOffer &&
+          config.activeScene && (
             <div className="pointer-events-none absolute inset-x-0 top-8 z-20 px-6">
               <div className="raised-material canvas-ui-module shadow-raised pointer-events-auto mx-auto flex w-max max-w-full items-center gap-2 px-3 py-2">
                 <ListChecks className="text-muted-foreground size-3.5 shrink-0" />
@@ -1814,40 +1913,15 @@ export function Composer({
                 </Button>
               </div>
             </div>
-          )}
-
-          {/* Expanded, the control rows *float* over the foot of the page as their own raised card.
-              In normal flow it sat at the column's bottom edge, where the transcript panel beside
-              the page ended up over the run button and swallowed its clicks; floating on its own
-              z-plane keeps every control clickable no matter what the layout around the page does.
-              The session configuration row wraps independently, keeping its high-frequency
-              controls visible without crowding the run, stop, voice, or document controls.
-              `pointer-events-none` on the strip, `auto` on the card: the page stays clickable
-              either side of the floating bar. */}
-          <div
-            className={cn(
-              docMode &&
-                "pointer-events-none absolute inset-x-0 bottom-5 z-20 px-6"
-            )}
-          >
-            <div
-              className={cn(
-                "flex min-w-0 flex-wrap items-end gap-1",
-                docMode
-                  ? "rounded-composer bg-canvas shadow-composer dark:bg-raised pointer-events-auto mx-auto w-full max-w-3xl p-2"
-                  : // Keep every outer edge 8px from the controls. The 24px surface radius then
-                    // shares its bottom-right centre with the circular send/stop control.
-                    "p-2"
-              )}
-            >
-              {controls}
-            </div>
-          </div>
-        </div>
-        {!docMode && checkout && (
-          <CheckoutBar config={config} checkout={checkout} />
-        )}
-      </div>
+          )
+        }
+        footer={
+          !docMode &&
+          checkout && <CheckoutBar config={config} checkout={checkout} />
+        }
+      >
+        {children}
+      </ComposerCard>
     </section>
   );
 }

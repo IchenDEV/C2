@@ -278,6 +278,14 @@ async fn run(cli: Cli) -> Result<(), String> {
 
 #[tokio::main]
 async fn main() {
+    if std::env::args().any(|argument| argument == "--codetwo-assistant-mcp") {
+        if let Err(error) = codetwo_core::assistant_bridge::run_stdio() {
+            eprintln!("{error}");
+            std::process::exit(1);
+        }
+        return;
+    }
+
     let parsed = match parse_args(std::env::args().skip(1)) {
         Ok(parsed) => parsed,
         Err(error) => {

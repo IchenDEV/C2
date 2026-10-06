@@ -1,0 +1,38 @@
+{
+  "started_at": "2026-10-05 17:21:59 UTC",
+  "round_budget_ms": 600000,
+  "supervision": "mode=wait 30000 timed out; monitor same task within original budget; do not reset start time",
+  "cwd": "/Users/chenli/.t3/worktrees/codeTwo/t3code-6738e658",
+  "target": {
+    "providerInstanceId": "cursor",
+    "model": "claude-sonnet-5-5",
+    "options": [
+      {
+        "id": "contextWindow",
+        "value": "300k"
+      },
+      {
+        "id": "reasoning_effort",
+        "value": "high"
+      }
+    ]
+  },
+  "runtimeMode": "approval-required",
+  "interactionMode": "plan",
+  "taskId": "node:delegated-task:command%3Amcp%3A9e21d058-3a81-4c77-8e3a-95ba13065932%3Adelegate-task%3Aassistant-event-ingress-design-review-20261006-r1",
+  "childThreadId": "thread:delegated-task:command%3Amcp%3A9e21d058-3a81-4c77-8e3a-95ba13065932%3Adelegate-task%3Aassistant-event-ingress-design-review-20261006-r1",
+  "childRunId": "run:thread:thread%3Adelegated-task%3Acommand%253Amcp%253A9e21d058-3a81-4c77-8e3a-95ba13065932%253Adelegate-task%253Aassistant-event-ingress-design-review-20261006-r1:ordinal:1",
+  "childNodeId": "node:delegated-task:command%3Amcp%3A9e21d058-3a81-4c77-8e3a-95ba13065932%3Adelegate-task%3Aassistant-event-ingress-design-review-20261006-r1",
+  "status": "running",
+  "workState": "working",
+  "hasPendingChildRuns": false,
+  "latestTerminalRunId": null,
+  "latestTerminalStatus": null,
+  "latestTerminalSummary": null,
+  "latestTerminalResultContextTransferId": null,
+  "providerInstanceId": "cursor",
+  "model": "claude-sonnet-5-5",
+  "summary": null,
+  "resultContextTransferId": null,
+  "waitTimedOut": true
+}

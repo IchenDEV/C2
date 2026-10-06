@@ -1,0 +1,72 @@
+bun test v1.4.2 (744846f84)
+
+tests/assistantNotification.test.ts:
+(pass) only durable assistant alerts reach the native notification adapter [0.09ms]
+(pass) desktop rejection preserves the durable alert and subsequent renderer delivery [0.08ms]
+
+tests/sessionRailRendered.test.tsx:
+(pass) SessionRail row layout > renders external resource Sections in the same flat scroll flow [41.66ms]
+(pass) SessionRail row layout > keeps pinned Tasks ahead of global recency without inventing a Highlight Section [13.85ms]
+(pass) SessionRail row layout > shows every Project as an ordered folder with its own Tasks [9.86ms]
+(pass) SessionRail row layout > wraps root Projects in one expanded default Project group [14.81ms]
+(pass) SessionRail row layout > keeps explicit Sections separate from the ordinary unsectioned feed [33.35ms]
+(pass) SessionRail row layout > keeps Project rows collapsible without a trailing disclosure icon [16.32ms]
+(pass) SessionRail row layout > aligns an empty Project placeholder beneath the Project label [3.19ms]
+(pass) SessionRail row layout > exposes dnd-kit keyboard guidance without native HTML5 drag attributes [11.12ms]
+(pass) SessionRail row layout > project menu removes registered projects and hides removal for synthesized ones [27.43ms]
+(pass) SessionRail row layout > keeps resize tracking native to the separator and releases it when the pointer is cancelled [6.35ms]
+(pass) SessionRail row layout > starts the task list without a duplicate window header [4.54ms]
+(pass) SessionRail row layout > keeps labeled global navigation and utilities outside the collapsed task list [4.64ms]
+(pass) SessionRail row layout > keeps device connections in the lower-left utility group with a phone icon [8.00ms]
+(pass) SessionRail row layout > removes the device-connections row when its plugin component is unavailable [4.25ms]
+(pass) SessionRail row layout > keeps one Quick Chat action beside the tracked Task action [4.32ms]
+(pass) SessionRail row layout > treats a user-created Highlight like every other editable Section [16.09ms]
+(pass) SessionRail row layout > shows a recent AI reply and metadata beneath the title when it is useful [5.21ms]
+(pass) SessionRail row layout > keeps provider identity accessible and shows its compact mark [3.37ms]
+(pass) SessionRail row layout > shows the latest AI reply, Provider mark, and relative age on the second line [3.56ms]
+(pass) SessionRail row layout > keeps grouped Task provenance on the summary rail instead of an empty third line [3.86ms]
+(pass) SessionRail row layout > uses the same two-line style for ordinary ungrouped Tasks [2.81ms]
+(pass) SessionRail row layout > shows regular checkout/worktree provenance and the linked PR outcome [10.52ms]
+(pass) SessionRail row layout > omits punctuation-only previews without dropping Provider and age metadata [3.45ms]
+(pass) SessionRail row layout > uses semantic activity orbs for running sessions and sidebar loading [4.87ms]
+(pass) SessionRail row layout > keeps awaiting-input and failed states visible without restoring routine status copy [4.12ms]
+(pass) SessionRail row layout > uses compact spacing and exposes real session actions on right click [23.65ms]
+(pass) SessionRail row layout > finishes the archive exit before moving a session [16.31ms]
+(pass) SessionRail row layout > supports keyboard selection, row navigation, and the keyboard context-menu gesture [16.44ms]
+(pass) SessionRail row layout > switches session tabs with an immediate row-local selection surface [4.64ms]
+(pass) SessionRail row layout > confirms clipboard actions instead of failing silently [16.90ms]
+(pass) SessionRail empty projects > offers adding a Project when none are registered [1.61ms]
+
+tests/missionControlRendered.test.tsx:
+(pass) MissionControlPage > the close button dismisses without selecting or reviewing a task [4.62ms]
+(pass) MissionControlPage > renders one row per session with title, scene pill, and context [7.53ms]
+(pass) MissionControlPage > review click calls onSelect and onReview for that session, then closes [7.62ms]
+(pass) MissionControlPage > the full row primary action is a semantic button [7.57ms]
+(pass) MissionControlPage > shows the empty line when there are no sessions [7.54ms]
+(pass) MissionControlPage > a session without a checkout diff renders an em dash [7.38ms]
+
+tests/missionControl.test.ts:
+(pass) missionState > mirrors the rail: activity first, then the frontend running set [0.06ms]
+(pass) missionState > the in-flight set marks a session running before the core projection lands
+(pass) missionState > awaiting input and failed win over the running set
+(pass) missionRows > needsMe is exactly awaiting input or failed [0.03ms]
+(pass) missionRows > orders needsMe first, then running, then idle — stable within groups [0.03ms]
+(pass) missionRows > carries the remembered scene and the context percentage [0.02ms]
+(pass) needsMeCount > counts only sessions waiting on input or failed [0.02ms]
+
+tests/assistant.test.tsx:
+(pass) project status stays distinct from execution and takeover is explicit [13.84ms]
+(pass) global memory is inspectable and forgetting refreshes the notebook [28.76ms]
+(pass) a new goal follows the visible project filter and clears only after saving [14.76ms]
+(pass) a rejected goal save keeps the draft available for retry [13.40ms]
+(pass) inbox routes a blocking answer and a requirement decision to their exact records [33.50ms]
+(pass) messages, stop and rework are separate operations and failed sends retain drafts [26.69ms]
+(pass) unrelated worker activity does not reject a message composed against the same goal [12.91ms]
+(pass) a new requirement while composing retains the draft for an explicit retry [13.92ms]
+(pass) a polled replacement deliverable cannot reuse an earlier review draft [5019.21ms]
+(pass) forgetting a memory exposes affected assignments and sends a distinct correction [28.52ms]
+
+ 56 pass
+ 0 fail
+ 1229 expect() calls
+Ran 56 tests across 5 files. [5.70s]

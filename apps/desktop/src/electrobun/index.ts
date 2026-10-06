@@ -11,6 +11,7 @@ import Electrobun, {
   Utils,
 } from "electrobun/bun";
 
+import { showAssistantNotification } from "../assistant/notification";
 import type { AutomationAlert } from "../bridge";
 import { macOSApplicationMenu } from "./applicationMenu";
 import { AppshotManager } from "./appshots";
@@ -290,6 +291,14 @@ const host = new NativeHost({
       const alert = event.payload as Partial<AutomationAlert> | null;
       Utils.showNotification(
         automationAlertNotification(alert, applicationName)
+      );
+    }
+    if (event.name === "engine-event") {
+      showAssistantNotification(
+        event.payload,
+        (notification) => Utils.showNotification(notification),
+        (error) =>
+          console.warn("Assistant desktop notification unavailable", error)
       );
     }
     if (rendererReady) rpc.send.event(event);

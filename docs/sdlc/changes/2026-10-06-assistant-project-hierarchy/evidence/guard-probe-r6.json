@@ -1,0 +1,16 @@
+{
+  "kind": "Owner independent additional negative probes; not external independent acceptance",
+  "productSourceSetSha256": "6764992f1f8ead9bca74602a3f6e1bc90acea25a996c458aa69ffb82c00c0e42",
+  "isolatedTestException": "Append exact guard-probe-r6.rs to isolated copy of existing integration test only; product worktree untouched.",
+  "command": "cargo test --offline -p codetwo-core --test assistant_project_hierarchy guard_probe",
+  "exitCode": 101,
+  "passed": 0,
+  "failed": 2,
+  "findings": [
+    "Unknown old writer session can be replaced while preserving assignment id.",
+    "Replacement writer assignment can be appended while retaining old assignment id."
+  ],
+  "probeSha256": "af213412d1ed1689e8adeaf62245640c3a2b0d9da3afd95f53d4470a033fd2d2",
+  "logSha256": "7c9cad78c71f3569ffd88ae4d3b130ddb30b6537221f86e5f5249c1732c43f29",
+  "repairRound": 8
+}

@@ -50,7 +50,7 @@ plugin is reloaded or disabled and re-enabled.
 ```json
 {"jsonrpc":"2.0","id":1,"method":"initialize","params":{
   "protocolVersion": "1.0.0",
-  "host": { "name": "code2", "version": "0.0.0", "commands": ["git.status"] },
+  "host": { "name": "code2", "version": "0.0.0", "commands": ["git.status"], "observations": false },
   "config": { "…": "your entry from the plugin config, verbatim" },
   "dataDir": "/home/me/.codetwo/plugins/.data/my-plugin/projects/09a7…",
   "projectPath": "/home/me/work/my-project"
@@ -91,6 +91,11 @@ public global commands only. A project instance sees public global commands plus
 registered for the same normalized project; it never receives another project's command list.
 `command/call` rechecks the public marker and uses that same realm's normal project
 fallback/blocking rules, so guessing an internal command name does not grant access.
+
+`host.observations` is an optional boolean, default `false`, on the host object. It is `true` only
+when this runtime owns a connector declaring `observations` and the host provides the Store seam.
+Adapters must negotiate it before submitting feedback; an unsupported host must not be retried as
+if it had accepted a batch. This additive field does not change protocol-major compatibility.
 
 ## Methods
 
@@ -139,6 +144,7 @@ is a capability grant. Host commands remain accessible only through the allowlis
 | method | kind | params | result |
 |---|---|---|---|
 | `command/call` | request | `{ name, args }` | the extension-public command's result |
+| `observation/record` | request | scoped batch, see below | durable batch receipt |
 | `event/emit` | notification | `{ name, payload }` | — |
 | `log` | notification | `{ level, message }` | — |
 
@@ -149,6 +155,59 @@ plugin management, credentials, and other Core commands stay internal. If a publ
 is turned off or project fallback is blocked, the call fails through the normal command path.
 
 `level` is one of `error`, `warn`, `info`, `debug`, `trace`.
+
+### Observation record
+
+This host-owned callback is separate from `command/call`; internal `assistant.edit` remains
+inaccessible to extensions. The raw process owner, command realm and manifest connector are
+verified by the host. They cannot be supplied or replaced by payload fields. Connector/account
+bindings are user configuration; adapter-reported remote identities are not host-authenticated users.
+
+Request fields are `connector_id`, `account_scope`, `stream_id`, stable `batch_id`,
+`recovery` (`resumable` or `live_only`), `checkpoint_before`, `checkpoint_after`, and `events`.
+Checkpoints are opaque strings or actual JSON null. Each event has `event_id`, `kind`, `occurred_at`,
+`actor_id`, `resource_id`, `object_id`, nullable `object_version`, `reply_to`, `content`, `reference`,
+and `content_origin` (`event`, `snapshot`, or `reference`). Complete the network read before calling
+the host. Reference-only inputs are allowed; Core does not fetch arbitrary URLs. Event ids must be
+stable within the source, and batches must cover the entire before/after interval.
+
+Limits are 16 events per batch and 16 KiB UTF-8 content per event. Oversized content with a reliable
+event id is recorded as terminal rejected metadata; it is never silently truncated. Canonical event
+JSON is SHA-256 hashed with a fixed field order, excluding transport headers and host receipt time.
+One input body is retained for all goal receipts. Same source/event/hash recovers its receipt;
+different content under the same key is quarantined without replacing the original. Opaque object
+versions are never ordered by time or lexical comparison.
+
+The response is `{status,batch_id,current_checkpoint,event_receipts,retry_after_ms}` with additive
+`reason` when needed. Only `recorded` acknowledges persistent consumption. All inputs, filtering or
+rejection metadata, per-goal receipts, batch result and checkpoint CAS commit in one Store transaction.
+Empty unchanged polls are `noop` without rows; empty cursor advancement is an adapter's explicit
+coverage attestation and is recorded. `backpressure`, `out_of_order`, `unsupported`, `rejected` and
+`needs_reset` do not acknowledge consumption. A timeout/disconnect is unknown: recover the exact
+original batch id and parameters, never invent a new id and replay a possible effect.
+
+Each source/stream has at most one in-flight record; each runtime has at most four across streams.
+Observation overload returns structured backpressure and does not shut down unrelated callbacks.
+The short local Store transaction outlives callback cancellation until it finishes, preserving that
+in-flight limit. Provider/network calls do not hold the assistant control gate or this transaction.
+
+Optional `cursor_invalid` records the provider's reason and returns `needs_reset`. A user may approve
+an exact source version, stream, old checkpoint, new baseline and gap reason through
+`assistant.edit` `source_reset`. `assistant.observations` exposes the resulting approval reference.
+The adapter then submits `reset: {approval_ref}` on the matching record with those exact
+before/after values. The host rejects invented, stale or mismatched approvals and consumes the
+approved reset in the same transaction; recording an approval does not claim the adapter completed
+the reset. Source/account identity, deduplication keys and unknown attempts survive resets.
+
+Follow-up uses the existing per-goal Runtime with fixed input references and source/control/version
+checks. Core allows only sourced reports, questions and proposed changes. External feedback cannot
+dispatch work, steer workers, change control, accept deliverables, confirm memory, answer permission
+requests or send messages. Paused/budget/attention and unknown receipts stay distinct. Source
+capacity, gaps and ambiguous input references are visible in the existing notification channel and
+on-demand Event sources inspector; arrival does not increment the user's assistant revision.
+See the approved [event ingress design](../sdlc/changes/2026-10-05-assistant-event-ingress/spec.md)
+for the binding, bounded retention and observation-only authority contract. This protocol does not
+implement a platform subscription or a cloud listener.
 
 ## Events
 

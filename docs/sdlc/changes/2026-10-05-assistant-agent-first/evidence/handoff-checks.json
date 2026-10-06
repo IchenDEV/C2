@@ -1,0 +1,28 @@
+{
+  "kind": "owner document, lifecycle, formatting and scope checks after independent acceptance and cleanup",
+  "status": "passed",
+  "commands": [
+    "bun script/verify/docs.ts",
+    "bun script/verify/sdlc.ts --worktree",
+    "git diff --check"
+  ],
+  "scoped_rustfmt_exit_code": 0,
+  "logs": [
+    "handoff-docs.log",
+    "handoff-sdlc.log",
+    "handoff-diff.log"
+  ],
+  "docs_exit_code": 0,
+  "sdlc_worktree_exit_code": 0,
+  "diff_check_exit_code": 0,
+  "final_source_hashes_match": 13,
+  "final_baseline_file_count": 1671,
+  "unrelated_baseline_changes": 0,
+  "scratch_exists": false,
+  "port_14675_listener": null,
+  "initial_document_corrections": [
+    "verification_mode independent was replaced with repository-supported fresh-context",
+    "rollback bytes moved from unplanned .codex/artifacts into existing evidence scope"
+  ],
+  "lifecycle_eval": "not applicable; no lifecycle authorization/routing/checker/template changes"
+}

@@ -1,0 +1,24 @@
+{
+  "cancellation": {
+    "taskId": "node:delegated-task:command%3Amcp%3A4f2da1e5-1b4b-4bca-aecd-77f4da6d7835%3Adelegate-task%3Aassistant-project-hierarchy-design-review-20261006-r3",
+    "status": "cancel_requested"
+  },
+  "terminal": {
+    "taskId": "node:delegated-task:command%3Amcp%3A4f2da1e5-1b4b-4bca-aecd-77f4da6d7835%3Adelegate-task%3Aassistant-project-hierarchy-design-review-20261006-r3",
+    "childThreadId": "thread:delegated-task:command%3Amcp%3A4f2da1e5-1b4b-4bca-aecd-77f4da6d7835%3Adelegate-task%3Aassistant-project-hierarchy-design-review-20261006-r3",
+    "childRunId": "run:thread:thread%3Adelegated-task%3Acommand%253Amcp%253A4f2da1e5-1b4b-4bca-aecd-77f4da6d7835%253Adelegate-task%253Aassistant-project-hierarchy-design-review-20261006-r3:ordinal:1",
+    "childNodeId": "node:delegated-task:command%3Amcp%3A4f2da1e5-1b4b-4bca-aecd-77f4da6d7835%3Adelegate-task%3Aassistant-project-hierarchy-design-review-20261006-r3",
+    "status": "interrupted",
+    "workState": "result_available",
+    "hasPendingChildRuns": false,
+    "latestTerminalRunId": "run:thread:thread%3Adelegated-task%3Acommand%253Amcp%253A4f2da1e5-1b4b-4bca-aecd-77f4da6d7835%253Adelegate-task%253Aassistant-project-hierarchy-design-review-20261006-r3:ordinal:1",
+    "latestTerminalStatus": "interrupted",
+    "latestTerminalSummary": "Child task ended with status interrupted.",
+    "latestTerminalResultContextTransferId": "context-transfer:type:subagent_result:source-thread:thread%3Adelegated-task%3Acommand%253Amcp%253A4f2da1e5-1b4b-4bca-aecd-77f4da6d7835%253Adelegate-task%253Aassistant-project-hierarchy-design-review-20261006-r3:target-thread:91d5d393-cf9a-4530-add8-406180f05ce9:a6656625-9197-4c65-b48f-06ae04de6cc0",
+    "providerInstanceId": "cursor",
+    "model": "claude-sonnet-5-5",
+    "summary": "Child task ended with status interrupted.",
+    "resultContextTransferId": "context-transfer:type:subagent_result:source-thread:thread%3Adelegated-task%3Acommand%253Amcp%253A4f2da1e5-1b4b-4bca-aecd-77f4da6d7835%253Adelegate-task%253Aassistant-project-hierarchy-design-review-20261006-r3:target-thread:91d5d393-cf9a-4530-add8-406180f05ce9:a6656625-9197-4c65-b48f-06ae04de6cc0",
+    "waitTimedOut": false
+  }
+}

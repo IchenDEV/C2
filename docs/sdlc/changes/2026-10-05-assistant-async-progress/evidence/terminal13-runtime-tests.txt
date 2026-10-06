@@ -1,0 +1,29 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.09s
+     Running unittests src/lib.rs (.codex/run/assistant-capacity/target/debug/deps/codetwo_core-26b14952dd983b08)
+
+running 23 tests
+test plugins::app::plugins::assistant::tests::creation_replay_and_unknown_prompt_recovery_are_bounded ... ok
+test plugins::app::plugins::assistant::tests::rejected_selected_model_never_runs_the_assignment_on_a_fallback ... ok
+test plugins::app::plugins::assistant::tests::streamed_evidence_preserves_file_hashes_and_excludes_previous_turns ... ok
+test plugins::app::plugins::assistant::tests::crashed_creation_claim_is_unknown_without_replay ... ok
+test plugins::app::plugins::assistant::tests::recovery_keeps_claimed_native_answers_unknown_without_replaying ... ok
+test plugins::app::plugins::assistant::tests::scoped_review_fences_ignore_b_but_reject_a_control_and_dependencies ... ok
+test plugins::app::plugins::assistant::tests::free_capacity_does_not_retry_an_unknown_review_or_infer_permission_from_error_text ... ok
+test plugins::app::plugins::assistant::tests::recovered_creation_retains_effort_and_unsupported_effort_never_prompts ... ok
+test plugins::app::plugins::assistant::tests::stop_before_revival_registration_is_not_lost ... ok
+test plugins::app::plugins::assistant::tests::claimed_steering_revoked_before_first_poll_sends_no_rpc ... ok
+test plugins::app::plugins::assistant::tests::a_missing_worker_does_not_freeze_an_independent_goal ... ok
+test plugins::app::plugins::assistant::tests::slow_steering_keeps_other_lanes_and_control_live ... ok
+test plugins::app::plugins::assistant::tests::recovery_retains_uncertain_stops_and_recognizes_only_terminal_receipts ... ok
+test plugins::app::plugins::assistant::tests::accepted_queue_revoked_during_session_new_does_not_reach_provider ... ok
+test plugins::app::plugins::assistant::tests::supervisor_resource_release_retries_waiting_independent_scope ... ok
+test plugins::app::plugins::assistant::tests::unsupported_steering_waits_for_turn_end_and_acceptance_is_not_adoption ... ok
+test plugins::app::plugins::assistant::tests::independent_review_decisions_commit_while_a_waits_and_b_changes ... ok
+test plugins::app::plugins::assistant::tests::blocked_project_keeps_questions_while_an_independent_project_completes ... ok
+test plugins::app::plugins::assistant::tests::stopped_revival_cannot_initialize_or_prompt_after_restart ... ok
+test plugins::app::plugins::assistant::tests::two_projects_link_existing_work_and_dispatch_once_through_real_engine ... ok
+test plugins::app::plugins::assistant::tests::slow_initialize_and_session_new_do_not_block_intake_dispatch_or_stop ... ok
+test plugins::app::plugins::assistant::tests::changed_inputs_revoke_native_answers_and_resume_until_worker_confirmation ... ok
+test plugins::app::plugins::assistant::tests::oversized_a_review_is_local_and_b_still_completes ... ok
+
+test result: ok. 23 passed; 0 failed; 0 ignored; 0 measured; 553 filtered out; finished in 1.12s

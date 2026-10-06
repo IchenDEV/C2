@@ -1,0 +1,64 @@
+{
+  "executor": "owner codex",
+  "browser": "T3 native collaborative preview tab_2; offline compiled production React in a standards-mode document",
+  "transport": "127.0.0.1/localhost navigation refused by preview despite host curl 200. Compiled JS/CSS inlined by native preview_evaluate after gzip transfer; no alternative browser.",
+  "api": "Explicit synthetic API and page-only in-memory storage; no Core connection or live external messages",
+  "production_components": [
+    "AssistantWorkspace",
+    "WorkspaceComposer",
+    "TranscriptPane",
+    "ObservationInspector",
+    "existing Memory Inspector"
+  ],
+  "bundle_sha256": "2b4e1423db8ec70f70b413bc94c2ae084c1e58a4fb97b05830d785966cf82eca",
+  "render_source_snapshot": "source-sha256-r8.json; later sole UI delta is Unicode escape-case spelling with identical predicate",
+  "viewport_evidence": [
+    {
+      "width": 1024,
+      "height": 768,
+      "light": true,
+      "dark": true,
+      "document_width": 1024
+    },
+    {
+      "width": 480,
+      "height": 800,
+      "light": true,
+      "dark": true,
+      "document_width": 480
+    }
+  ],
+  "details_summary_count": 0,
+  "new_runtime_errors": [],
+  "historical_console": [
+    "ERR_CONNECTION_REFUSED from failed local navigation",
+    "KaTeX warning before standards-mode reload",
+    "Yjs duplicate import from a second fixture mount; subsequent errors list empty"
+  ],
+  "reset_flow": {
+    "before_click_calls": [],
+    "after_click_calls": [
+      {
+        "revision": 210,
+        "action": {
+          "kind": "source_reset",
+          "source_id": "fixture-source",
+          "binding_version": 1,
+          "stream_id": "main",
+          "checkpoint_before": "old-cursor",
+          "checkpoint_after": "new-cursor",
+          "reason": "模拟验收：缺口内消息待人工核对"
+        }
+      }
+    ],
+    "approval_reference": "fixture-approved-reference",
+    "checkpoint_stays": "old-cursor",
+    "ui_claim": "Waiting for adapter; approval has not performed a reset."
+  },
+  "not_proved": [
+    "Core UI round trip",
+    "Electrobun/native notification",
+    "real external adapter/credentials",
+    "production recovery"
+  ]
+}

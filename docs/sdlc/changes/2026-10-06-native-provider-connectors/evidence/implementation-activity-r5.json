@@ -1,0 +1,105 @@
+{
+  "checkedAt": "2026-10-06T02:48:19.133Z",
+  "scope": "Visible post-terminal activity only; does not prove unlogged hooks or SDK internals. Checkpoints include shared worktree changes and are not per-agent authorship evidence.",
+  "records": [
+    {
+      "key": "native-foundation-r5",
+      "status": "interrupted",
+      "hasMore": false,
+      "itemCounts": {
+        "reasoning": 8,
+        "dynamic_tool": 10,
+        "command_execution": 2,
+        "file_search": 8,
+        "file_change": 7,
+        "assistant_message": 1,
+        "run_interrupt_request": 1,
+        "run_interrupt_result": 1,
+        "checkpoint": 1
+      },
+      "visibleLastText": "Now engine edits.",
+      "fileChanges": [
+        {
+          "itemId": "turn-item:provider:cursor:native-item:toolu_015DS4aZCEx4MWLXS3t1BvYr",
+          "text": "/Users/chenli/.t3/worktrees/codeTwo/t3code-6738e658/crates/core/src/provider_runtime.rs\n+107 -0\n--- /dev/null\n+++ b//Users/chenli/.t3/worktrees/codeTwo/t3code-6738e658/crates/core/src/provider_runtime.rs\n@@ -1,0 +1,107 @@\n+//! Provider-neutral runtime operations the Engine consumes.\n+//!\n+//! Nothing here names a wire protocol: ACP, Codex app-server, Claude SDK, Cursor and OpenCode\n+//! connectors each translate their own wire types at their edge (see [`crate::connectors`]).\n+//! A turn is split into *acceptance* (the connector took the work and, when the protocol allows,\n+//! names the native turn) and *terminal* (a later, single outcome). `stop` is only a request;\n+//! the writer is released by the terminal outcome, never by `stop` returning.\n+\n+use std::future::Future;\n+use std::pin::Pin;\n+\n+use async_trait::async_trait;\n+\n+/// Terminal outcome of one turn. Variant names are persisted in `Event::TurnEnded.stop_reason`\n+/// (via `Debug`), so they must not be renamed.\n+#[derive(Debug, Clone, Copy, PartialEq, Eq)]\n+pub enum TurnStop {\n+    EndTurn,\n+    MaxTokens,\n+    MaxTurnRequests,\n+    Refusal,\n+    Cancelled,\n+    /// The provider reported a stop reason this build does not know. Not a retry signal.\n+    Unknown,\n+}\n+\n+/// Neutral prompt content. Images are base64 data with a MIME type.\n+#[derive(Debug, Clone, PartialEq, Eq)]\n+pub enum RuntimeBlock {\n+    Text(String),\n+    Image { data: String, mime_type: String },\n+}\n+\n+/// Connector failure, already rendered for the u",
+          "truncated": true
+        },
+        {
+          "itemId": "turn-item:provider:cursor:native-item:toolu_01PpnU9gfj9ZCNPay3rQfjgw",
+          "text": "/Users/chenli/.t3/worktrees/codeTwo/t3code-6738e658/crates/core/src/connectors/mod.rs\n+3 -0\n--- /dev/null\n+++ b//Users/chenli/.t3/worktrees/codeTwo/t3code-6738e658/crates/core/src/connectors/mod.rs\n@@ -1,0 +1,3 @@\n+//! Provider connectors: each translates one wire protocol to [`crate::provider_runtime`].\n+\n+pub mod acp;",
+          "truncated": false
+        },
+        {
+          "itemId": "turn-item:provider:cursor:native-item:toolu_017vteffFbHV6pzC5wHNjzMt",
+          "text": "/Users/chenli/.t3/worktrees/codeTwo/t3code-6738e658/crates/core/src/connectors/acp.rs\n+101 -0\n--- /dev/null\n+++ b//Users/chenli/.t3/worktrees/codeTwo/t3code-6738e658/crates/core/src/connectors/acp.rs\n@@ -1,0 +1,101 @@\n+//! ACP adapter for [`ProviderRuntime`]. ACP wire types stop here.\n+\n+use std::sync::Arc;\n+\n+use async_trait::async_trait;\n+\n+use crate::acp::wire::{AgentCaps, ContentBlock, StopReason};\n+use crate::acp::AcpClient;\n+use crate::provider_runtime::{\n+    ProviderRuntime, ResumeSupport, RuntimeBlock, RuntimeCapabilities, RuntimeError,\n+    StopConfirmation, Support, TurnAcceptance, TurnStop, TurnTicket,\n+};\n+\n+pub struct AcpRuntime {\n+    client: Arc<AcpClient>,\n+    caps: AgentCaps,\n+}\n+\n+impl AcpRuntime {\n+    pub fn new(client: Arc<AcpClient>, caps: AgentCaps) -> Self {\n+        Self { client, caps }\n+    }\n+}\n+\n+fn support(advertised: bool) -> Support {\n+    if advertised {\n+        Support::Supported\n+    } else {\n+        Support::Unsupported\n+    }\n+}\n+\n+fn block(block: RuntimeBlock) -> ContentBlock {\n+    match block {\n+        RuntimeBlock::Text(text) => ContentBlock::text(text),\n+        RuntimeBlock::Image { data, mime_type } => ContentBlock::Image { data, mime_type },\n+    }\n+}\n+\n+fn stop(reason: StopReason) -> TurnStop {\n+    match reason {\n+        StopReason::EndTurn => TurnStop::EndTurn,\n+        StopReason::MaxTokens => TurnStop::MaxTokens,\n+        StopReason::MaxTurnRequests => TurnStop::MaxTurnRequests,\n+        StopReason::Refusal => TurnStop::",
+          "truncated": true
+        },
+        {
+          "itemId": "turn-item:provider:cursor:native-item:toolu_01UhEBX59JkmFjqZBm3Dqv88",
+          "text": "/Users/chenli/.t3/worktrees/codeTwo/t3code-6738e658/crates/core/src/lib.rs\n+1 -0\n--- a//Users/chenli/.t3/worktrees/codeTwo/t3code-6738e658/crates/core/src/lib.rs\n+++ b//Users/chenli/.t3/worktrees/codeTwo/t3code-6738e658/crates/core/src/lib.rs\n@@ -59,6 +59,7 @@\n pub mod project;\n pub mod provider;\n pub mod provider_lifecycle;\n+pub mod provider_runtime;\n pub mod pty;\n pub mod risk_v2;\n pub mod rules;",
+          "truncated": false
+        },
+        {
+          "itemId": "turn-item:provider:cursor:native-item:toolu_013TcmsosfRDtVvdjBSc9JHq",
+          "text": "/Users/chenli/.t3/worktrees/codeTwo/t3code-6738e658/crates/core/src/lib.rs\n+1 -0\n--- a//Users/chenli/.t3/worktrees/codeTwo/t3code-6738e658/crates/core/src/lib.rs\n+++ b//Users/chenli/.t3/worktrees/codeTwo/t3code-6738e658/crates/core/src/lib.rs\n@@ -34,6 +34,7 @@\n pub mod canvas;\n pub mod capability_v2;\n pub mod codex_runtime;\n+pub mod connectors;\n pub mod context;\n pub mod cost;\n pub mod device_sync;",
+          "truncated": false
+        },
+        {
+          "itemId": "turn-item:provider:cursor:native-item:toolu_01R7DTPvJjL1F3WoRPtfZRVP",
+          "text": "/Users/chenli/.t3/worktrees/codeTwo/t3code-6738e658/crates/core/src/engine.rs\n+2 -1\n--- a//Users/chenli/.t3/worktrees/codeTwo/t3code-6738e658/crates/core/src/engine.rs\n+++ b//Users/chenli/.t3/worktrees/codeTwo/t3code-6738e658/crates/core/src/engine.rs\n@@ -7061,7 +7061,8 @@\n                     }\n                 }\n                 tokio::spawn(async move {\n-                    let mut blocks = vec![ContentBlock::text(provider_prompt)];\n+                    let provider_runtime = AcpRuntime::new(client.clone(), caps);\n+                    let mut blocks = vec![RuntimeBlock::Text(provider_prompt)];\n                     // Attached images ride along as ACP image content blocks.\n                     for path in &compiled.images {\n                         if let Ok((mime_type, data)) = crate::workspace::read_image_base64(",
+          "truncated": false
+        },
+        {
+          "itemId": "turn-item:provider:cursor:native-item:toolu_01AmCTTKskXk7iYMXc1iQqJ7",
+          "text": "/Users/chenli/.t3/worktrees/codeTwo/t3code-6738e658/crates/core/src/engine.rs",
+          "truncated": false
+        }
+      ]
+    },
+    {
+      "key": "project-domain-r5",
+      "status": "interrupted",
+      "hasMore": false,
+      "itemCounts": {
+        "reasoning": 7,
+        "dynamic_tool": 9,
+        "command_execution": 2,
+        "file_search": 5,
+        "file_change": 3,
+        "run_interrupt_request": 1,
+        "run_interrupt_result": 1,
+        "checkpoint": 1
+      },
+      "visibleLastText": "I'm checking whether assistant state gets persisted anywhere else outside save_assistant_in_tx, then looking at how edit_hierarchy validates the revision against the expected state before saving, plus confirming the project_exists check applies to BindWorkspace.\n\nNow I'm sketching out the data model: a managed project memory key constant, a ProjectHierarchy struct tracking schema, revision, projects, bindings, instructions, goal owners, and attention with deterministic serialization via BTreeMap. I'm defining the supporting types too—ManagedProject with status, WorkspaceBinding tied to a path and version, InstructionReach levels, InstructionVersion/InstructionDoc pairing active and proposed instructions by scope, and a GoalOwner linking projects to bindings.\n\nI'm also working through the resolution logic: how to scope project IDs into strings, and methods for looking up a project, finding the active binding for a path, and resolving ambiguous path ownership across active bindings—deciding that paused projects still count as owners to keep things simple and safe. Then I need authorization checks, memory scope listings, and instruction applicability ordered globally before project-specific, plus a fingerprinting method for instructions.\n\nI'm also sketching free functions for hierarchy validation and goal authorization, and defining the HierarchyEdit enum covering operations like creating/renaming projects, setting status, binding or revoking workspaces, proposing/confirming ins",
+      "fileChanges": [
+        {
+          "itemId": "turn-item:provider:cursor:native-item:toolu_01HnzC6keiNcZ4ocfA8XvzTD",
+          "text": "/Users/chenli/.t3/worktrees/codeTwo/t3code-6738e658/crates/core/src/assistant.rs\n+4 -0\n--- a//Users/chenli/.t3/worktrees/codeTwo/t3code-6738e658/crates/core/src/assistant.rs\n+++ b//Users/chenli/.t3/worktrees/codeTwo/t3code-6738e658/crates/core/src/assistant.rs\n@@ -80,6 +80,10 @@\n     /// Versioned user decision raising the global observation history quota.\n     #[serde(default)]\n     pub source_history_global: Option<u32>,\n+    /// Business Project identity, bindings, instructions and goal owners. Absent until the user\n+    /// enables it, and then omitted from serialization so legacy documents stay byte-identical.\n+    #[serde(default, skip_serializing_if = \"Option::is_none\")]\n+    pub hierarchy: Option<ProjectHierarchy>,\n }\n \n #[derive(Debug, Clone, Serialize, Deserialize)]",
+          "truncated": false
+        },
+        {
+          "itemId": "turn-item:provider:cursor:native-item:toolu_018yYHTJh15wJf99qK5i7Thv",
+          "text": "/Users/chenli/.t3/worktrees/codeTwo/t3code-6738e658/crates/core/src/assistant.rs\n+14 -0\n--- a//Users/chenli/.t3/worktrees/codeTwo/t3code-6738e658/crates/core/src/assistant.rs\n+++ b//Users/chenli/.t3/worktrees/codeTwo/t3code-6738e658/crates/core/src/assistant.rs\n@@ -17,6 +17,20 @@\n \n pub(crate) fn install(conn: &Connection) -> Result<(), StoreError> {\n     conn.execute_batch(\"CREATE TABLE IF NOT EXISTS assistant_state (singleton INTEGER PRIMARY KEY CHECK(singleton=1), revision INTEGER NOT NULL, body TEXT NOT NULL); CREATE TABLE IF NOT EXISTS assistant_worker_receipts(session_id TEXT NOT NULL,command_id TEXT NOT NULL,operation TEXT NOT NULL,response TEXT NOT NULL,PRIMARY KEY(session_id,command_id));\")?;\n+    // Writer guard: once the hierarchy exists, a writer which does not know the field (an older\n+    // binary dropping it on read-modify-write) or which lowers its version is rejected by the\n+    // database itself. Legacy documents (no `hierarchy`) are unaffected.\n+    conn.execute_batch(\n+        \"CREATE TRIGGER IF NOT EXISTS assistant_hierarchy_writer_guard BEFORE UPDATE ON assistant_state\n+         WHEN json_extract(OLD.body,'$.hierarchy') IS NOT NULL AND (\n+              json_extract(NEW.body,'$.hierarchy') IS NULL\n+           OR json_extract(NEW.body,'$.hierarchy.schema') IS NULL\n+           OR json_extract(NEW.body,'$.hierarchy.revision') < json_extract(OLD.body,'$.hierarchy.revision'))\n+         BEGIN SELECT RAISE(ABORT,'assistant hierarchy writer guard: save is missi",
+          "truncated": true
+        },
+        {
+          "itemId": "turn-item:provider:cursor:native-item:toolu_018DqykPafGpbFep6AdCWfAG",
+          "text": "/Users/chenli/.t3/worktrees/codeTwo/t3code-6738e658/crates/core/src/assistant.rs\n+1 -0\n--- a//Users/chenli/.t3/worktrees/codeTwo/t3code-6738e658/crates/core/src/assistant.rs\n+++ b//Users/chenli/.t3/worktrees/codeTwo/t3code-6738e658/crates/core/src/assistant.rs\n@@ -1512,6 +1512,7 @@\n             state.questions[index].answer_delivery_id = Some(\"control:revoked\".into());\n         }\n     }\n+    validate_hierarchy(&state)?;\n     crate::prompt_delivery::cancel_obsolete_on(tx, &state)?;\n     state.revision = current + 1;\n     tx.execute(\"INSERT INTO assistant_state(singleton,revision,body) VALUES(1,?1,?2) ON CONFLICT(singleton) DO UPDATE SET revision=excluded.revision,body=excluded.body\",rusqlite::params![state.revision,serde_json::to_string(&state)?])?;",
+          "truncated": false
+        }
+      ]
+    },
+    {
+      "key": "sdk-capability-probes-r5",
+      "status": "interrupted",
+      "hasMore": false,
+      "itemCounts": {
+        "run_interrupt_request": 1,
+        "run_interrupt_result": 1,
+        "checkpoint": 1
+      },
+      "visibleLastText": null,
+      "fileChanges": []
+    }
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "prior_snapshot": "source-sha256-r9.json",
+  "final_snapshot": "source-sha256.json",
+  "changed_paths": [
+    "apps/desktop/tests/assistantEventIngress.test.tsx",
+    "crates/core/src/plugins/bundle.rs"
+  ],
+  "rust_normalized_source_identical": true,
+  "changes": "Only observation_connector_ids closure wrapping and oxfmt of new UI test file. Pre-existing bundle import and scene-validator format differences preserved.",
+  "test_or_product_behavior_changed": false,
+  "independent_final_format_recheck": "r10 completed/pending false, pass; 358 final hashes stable, normalized source identical and 21 UI PASS"
+}

@@ -1,0 +1,25 @@
+{
+  "round": "r8",
+  "verdict": "changes-required",
+  "owner_response": [
+    {
+      "finding": "P2 duplicate receipt goal_ids ordering",
+      "change": "Sort each new receipt goal_ids before persisting the batch response; duplicate SQL already sorts. Force reverse binding order in the existing regression so UUID order cannot hide a failure.",
+      "file": "crates/core/src/assistant_observation.rs"
+    },
+    {
+      "finding": "P2 slow observation A invalidated during ordinary B dispatch",
+      "cause": "The fixture also authorizes ordinary A dispatch. B review completes before session creation, freeing a review slot. A dispatch can then change A assignment control. obs_fingerprint correctly invalidates A's own earlier observation; unrelated B receipt or dispatch does not change that fingerprint.",
+      "change": "A pre-existing blocking question isolates the independent B/control test. A new deterministic production Runtime test leaves A dispatch enabled and asserts that same-goal dispatch invalidates the slow review without adopting its question.",
+      "focused_result": "9 observation Runtime tests passed; same_goal_dispatch_invalidates_a_slow_observation_review and slow_observation_a_does_not_block_b_receipt_review_or_user_control both passed.",
+      "product_version_fence_changed": false
+    },
+    {
+      "finding": "Owner UI lint escape-case error",
+      "change": "Uppercase Unicode escape digits only, with no change to the control-character predicate. Scoped lint passed."
+    }
+  ],
+  "prior_snapshot": "source-sha256-r8.json",
+  "current_snapshot": "source-sha256.json",
+  "acceptance": "Final independent recheck pending; this response is owner evidence, not independent acceptance."
+}

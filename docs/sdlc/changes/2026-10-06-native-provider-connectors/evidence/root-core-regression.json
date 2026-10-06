@@ -1,0 +1,215 @@
+{
+  "date": "2026-10-06",
+  "mode": "owner",
+  "verifier": "codex-main",
+  "command": "cargo test --offline -p codetwo-core",
+  "exitCode": 0,
+  "passed": 809,
+  "failed": 0,
+  "results": [
+    {
+      "suite": "Running unittests src/lib.rs (/Users/chenli/.t3/worktrees/codeTwo/t3code-6738e658/.codex/run/native-provider-connectors/validation/target/debug/deps/codetwo_core-a5036cd5ed20ab85)",
+      "passed": 603,
+      "failed": 0
+    },
+    {
+      "suite": "Running tests/acp_mcp.rs (/Users/chenli/.t3/worktrees/codeTwo/t3code-6738e658/.codex/run/native-provider-connectors/validation/target/debug/deps/acp_mcp-afdacda6129542e7)",
+      "passed": 1,
+      "failed": 0
+    },
+    {
+      "suite": "Running tests/acp_models.rs (/Users/chenli/.t3/worktrees/codeTwo/t3code-6738e658/.codex/run/native-provider-connectors/validation/target/debug/deps/acp_models-c18594d7504c64e1)",
+      "passed": 6,
+      "failed": 0
+    },
+    {
+      "suite": "Running tests/acp_process_cleanup.rs (/Users/chenli/.t3/worktrees/codeTwo/t3code-6738e658/.codex/run/native-provider-connectors/validation/target/debug/deps/acp_process_cleanup-0c9b2b5f4d182559)",
+      "passed": 1,
+      "failed": 0
+    },
+    {
+      "suite": "Running tests/acp_prompt_turn.rs (/Users/chenli/.t3/worktrees/codeTwo/t3code-6738e658/.codex/run/native-provider-connectors/validation/target/debug/deps/acp_prompt_turn-aecff504a490acef)",
+      "passed": 2,
+      "failed": 0
+    },
+    {
+      "suite": "Running tests/agent_skill_v2.rs (/Users/chenli/.t3/worktrees/codeTwo/t3code-6738e658/.codex/run/native-provider-connectors/validation/target/debug/deps/agent_skill_v2-fa15b13162f7c73a)",
+      "passed": 1,
+      "failed": 0
+    },
+    {
+      "suite": "Running tests/architecture_boundary.rs (/Users/chenli/.t3/worktrees/codeTwo/t3code-6738e658/.codex/run/native-provider-connectors/validation/target/debug/deps/architecture_boundary-5878bee2208f6b11)",
+      "passed": 2,
+      "failed": 0
+    },
+    {
+      "suite": "Running tests/assistant.rs (/Users/chenli/.t3/worktrees/codeTwo/t3code-6738e658/.codex/run/native-provider-connectors/validation/target/debug/deps/assistant-279ef2bab6f71d2a)",
+      "passed": 27,
+      "failed": 0
+    },
+    {
+      "suite": "Running tests/assistant_observation.rs (/Users/chenli/.t3/worktrees/codeTwo/t3code-6738e658/.codex/run/native-provider-connectors/validation/target/debug/deps/assistant_observation-a1ee52d1351fa2aa)",
+      "passed": 10,
+      "failed": 0
+    },
+    {
+      "suite": "Running tests/assistant_project_hierarchy.rs (/Users/chenli/.t3/worktrees/codeTwo/t3code-6738e658/.codex/run/native-provider-connectors/validation/target/debug/deps/assistant_project_hierarchy-073daa011e5883d6)",
+      "passed": 18,
+      "failed": 0
+    },
+    {
+      "suite": "Running tests/canvas_v1.rs (/Users/chenli/.t3/worktrees/codeTwo/t3code-6738e658/.codex/run/native-provider-connectors/validation/target/debug/deps/canvas_v1-687f7376e1d16420)",
+      "passed": 13,
+      "failed": 0
+    },
+    {
+      "suite": "Running tests/capability_v2.rs (/Users/chenli/.t3/worktrees/codeTwo/t3code-6738e658/.codex/run/native-provider-connectors/validation/target/debug/deps/capability_v2-88a7ceb87346a1e3)",
+      "passed": 3,
+      "failed": 0
+    },
+    {
+      "suite": "Running tests/collaboration_v1.rs (/Users/chenli/.t3/worktrees/codeTwo/t3code-6738e658/.codex/run/native-provider-connectors/validation/target/debug/deps/collaboration_v1-8311de582ef9b690)",
+      "passed": 3,
+      "failed": 0
+    },
+    {
+      "suite": "Running tests/engine_activity.rs (/Users/chenli/.t3/worktrees/codeTwo/t3code-6738e658/.codex/run/native-provider-connectors/validation/target/debug/deps/engine_activity-07aa6c5751db1403)",
+      "passed": 10,
+      "failed": 0
+    },
+    {
+      "suite": "Running tests/engine_builtin_models.rs (/Users/chenli/.t3/worktrees/codeTwo/t3code-6738e658/.codex/run/native-provider-connectors/validation/target/debug/deps/engine_builtin_models-01bcf0caad5ddaf8)",
+      "passed": 2,
+      "failed": 0
+    },
+    {
+      "suite": "Running tests/engine_elicitation.rs (/Users/chenli/.t3/worktrees/codeTwo/t3code-6738e658/.codex/run/native-provider-connectors/validation/target/debug/deps/engine_elicitation-1b969d999d818089)",
+      "passed": 3,
+      "failed": 0
+    },
+    {
+      "suite": "Running tests/engine_memory.rs (/Users/chenli/.t3/worktrees/codeTwo/t3code-6738e658/.codex/run/native-provider-connectors/validation/target/debug/deps/engine_memory-ff7817936ddc9ff6)",
+      "passed": 7,
+      "failed": 0
+    },
+    {
+      "suite": "Running tests/engine_permission.rs (/Users/chenli/.t3/worktrees/codeTwo/t3code-6738e658/.codex/run/native-provider-connectors/validation/target/debug/deps/engine_permission-eea5837182a711a6)",
+      "passed": 5,
+      "failed": 0
+    },
+    {
+      "suite": "Running tests/engine_provider_switch.rs (/Users/chenli/.t3/worktrees/codeTwo/t3code-6738e658/.codex/run/native-provider-connectors/validation/target/debug/deps/engine_provider_switch-3b4e868576d0e560)",
+      "passed": 9,
+      "failed": 0
+    },
+    {
+      "suite": "Running tests/engine_resume.rs (/Users/chenli/.t3/worktrees/codeTwo/t3code-6738e658/.codex/run/native-provider-connectors/validation/target/debug/deps/engine_resume-94c18219a6f446da)",
+      "passed": 3,
+      "failed": 0
+    },
+    {
+      "suite": "Running tests/engine_store.rs (/Users/chenli/.t3/worktrees/codeTwo/t3code-6738e658/.codex/run/native-provider-connectors/validation/target/debug/deps/engine_store-5ce17412c3ae6c06)",
+      "passed": 1,
+      "failed": 0
+    },
+    {
+      "suite": "Running tests/engine_turn_state.rs (/Users/chenli/.t3/worktrees/codeTwo/t3code-6738e658/.codex/run/native-provider-connectors/validation/target/debug/deps/engine_turn_state-ea6102e8b7375cf8)",
+      "passed": 5,
+      "failed": 0
+    },
+    {
+      "suite": "Running tests/native_provider_runtime.rs (/Users/chenli/.t3/worktrees/codeTwo/t3code-6738e658/.codex/run/native-provider-connectors/validation/target/debug/deps/native_provider_runtime-344ea2319e0e64fb)",
+      "passed": 11,
+      "failed": 0
+    },
+    {
+      "suite": "Running tests/office_pack.rs (/Users/chenli/.t3/worktrees/codeTwo/t3code-6738e658/.codex/run/native-provider-connectors/validation/target/debug/deps/office_pack-2648c4b8b5b97aa1)",
+      "passed": 4,
+      "failed": 0
+    },
+    {
+      "suite": "Running tests/orchestrator_v2.rs (/Users/chenli/.t3/worktrees/codeTwo/t3code-6738e658/.codex/run/native-provider-connectors/validation/target/debug/deps/orchestrator_v2-a1ad81f5050eee91)",
+      "passed": 6,
+      "failed": 0
+    },
+    {
+      "suite": "Running tests/parallel_task_session.rs (/Users/chenli/.t3/worktrees/codeTwo/t3code-6738e658/.codex/run/native-provider-connectors/validation/target/debug/deps/parallel_task_session-c903c57b4abb9755)",
+      "passed": 1,
+      "failed": 0
+    },
+    {
+      "suite": "Running tests/prompt_delivery.rs (/Users/chenli/.t3/worktrees/codeTwo/t3code-6738e658/.codex/run/native-provider-connectors/validation/target/debug/deps/prompt_delivery-762ecbef267a5614)",
+      "passed": 6,
+      "failed": 0
+    },
+    {
+      "suite": "Running tests/provider_tools.rs (/Users/chenli/.t3/worktrees/codeTwo/t3code-6738e658/.codex/run/native-provider-connectors/validation/target/debug/deps/provider_tools-d668e26ef8d85111)",
+      "passed": 8,
+      "failed": 0
+    },
+    {
+      "suite": "Running tests/result_contract_v2.rs (/Users/chenli/.t3/worktrees/codeTwo/t3code-6738e658/.codex/run/native-provider-connectors/validation/target/debug/deps/result_contract_v2-6ff7e6c387d2743f)",
+      "passed": 3,
+      "failed": 0
+    },
+    {
+      "suite": "Running tests/risk_gate_v2.rs (/Users/chenli/.t3/worktrees/codeTwo/t3code-6738e658/.codex/run/native-provider-connectors/validation/target/debug/deps/risk_gate_v2-e24060d7a1dad909)",
+      "passed": 3,
+      "failed": 0
+    },
+    {
+      "suite": "Running tests/scene_conformance.rs (/Users/chenli/.t3/worktrees/codeTwo/t3code-6738e658/.codex/run/native-provider-connectors/validation/target/debug/deps/scene_conformance-3762ea409ef6be03)",
+      "passed": 4,
+      "failed": 0
+    },
+    {
+      "suite": "Running tests/scene_runtime_hooks.rs (/Users/chenli/.t3/worktrees/codeTwo/t3code-6738e658/.codex/run/native-provider-connectors/validation/target/debug/deps/scene_runtime_hooks-f4d924a4f0fc313c)",
+      "passed": 1,
+      "failed": 0
+    },
+    {
+      "suite": "Running tests/scene_v2_conformance.rs (/Users/chenli/.t3/worktrees/codeTwo/t3code-6738e658/.codex/run/native-provider-connectors/validation/target/debug/deps/scene_v2_conformance-1396a84188e65d10)",
+      "passed": 4,
+      "failed": 0
+    },
+    {
+      "suite": "Running tests/task_budget_v2.rs (/Users/chenli/.t3/worktrees/codeTwo/t3code-6738e658/.codex/run/native-provider-connectors/validation/target/debug/deps/task_budget_v2-904f23cd2c999958)",
+      "passed": 3,
+      "failed": 0
+    },
+    {
+      "suite": "Running tests/task_cache_v2.rs (/Users/chenli/.t3/worktrees/codeTwo/t3code-6738e658/.codex/run/native-provider-connectors/validation/target/debug/deps/task_cache_v2-c28ec54fbb49cff1)",
+      "passed": 2,
+      "failed": 0
+    },
+    {
+      "suite": "Running tests/task_capsule_v2.rs (/Users/chenli/.t3/worktrees/codeTwo/t3code-6738e658/.codex/run/native-provider-connectors/validation/target/debug/deps/task_capsule_v2-d6050297d7ab77f7)",
+      "passed": 2,
+      "failed": 0
+    },
+    {
+      "suite": "Running tests/task_domain.rs (/Users/chenli/.t3/worktrees/codeTwo/t3code-6738e658/.codex/run/native-provider-connectors/validation/target/debug/deps/task_domain-157b4e2d6ef920b4)",
+      "passed": 2,
+      "failed": 0
+    },
+    {
+      "suite": "Running tests/task_store_v2.rs (/Users/chenli/.t3/worktrees/codeTwo/t3code-6738e658/.codex/run/native-provider-connectors/validation/target/debug/deps/task_store_v2-6c0020ec2aaba404)",
+      "passed": 9,
+      "failed": 0
+    },
+    {
+      "suite": "Running tests/voice_autodetect.rs (/Users/chenli/.t3/worktrees/codeTwo/t3code-6738e658/.codex/run/native-provider-connectors/validation/target/debug/deps/voice_autodetect-41105269450ead14)",
+      "passed": 1,
+      "failed": 0
+    },
+    {
+      "suite": "Doc-tests codetwo_core",
+      "passed": 4,
+      "failed": 0
+    }
+  ],
+  "sourceSnapshot": "root-transport-source-snapshot.json",
+  "sourceSetSha256": "2972afbe735a545e9b52bae8d05cb682facf074d9b1e093f6dfca69b650d7bd7",
+  "logSha256": "9eb5a0330daa6fd34edea1a1625533169fc4ea4eed961e3b0bdb11e77e1d9efc",
+  "limits": "Root M1/transport/neutral diagnostics only. Real Engine RuntimeHandle routing not completed. r13 subsequent changes need new acceptance. Native SDK/auth/paid model/UI/independent acceptance not proved."
+}

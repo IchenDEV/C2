@@ -1,0 +1,24 @@
+{
+  "cancellation": {
+    "taskId": "node:delegated-task:command%3Amcp%3A4f2da1e5-1b4b-4bca-aecd-77f4da6d7835%3Adelegate-task%3Aassistant-project-hierarchy-design-review-20261006-r4",
+    "status": "cancel_requested"
+  },
+  "terminal": {
+    "taskId": "node:delegated-task:command%3Amcp%3A4f2da1e5-1b4b-4bca-aecd-77f4da6d7835%3Adelegate-task%3Aassistant-project-hierarchy-design-review-20261006-r4",
+    "childThreadId": "thread:delegated-task:command%3Amcp%3A4f2da1e5-1b4b-4bca-aecd-77f4da6d7835%3Adelegate-task%3Aassistant-project-hierarchy-design-review-20261006-r4",
+    "childRunId": "run:thread:thread%3Adelegated-task%3Acommand%253Amcp%253A4f2da1e5-1b4b-4bca-aecd-77f4da6d7835%253Adelegate-task%253Aassistant-project-hierarchy-design-review-20261006-r4:ordinal:1",
+    "childNodeId": "node:delegated-task:command%3Amcp%3A4f2da1e5-1b4b-4bca-aecd-77f4da6d7835%3Adelegate-task%3Aassistant-project-hierarchy-design-review-20261006-r4",
+    "status": "interrupted",
+    "workState": "result_available",
+    "hasPendingChildRuns": false,
+    "latestTerminalRunId": "run:thread:thread%3Adelegated-task%3Acommand%253Amcp%253A4f2da1e5-1b4b-4bca-aecd-77f4da6d7835%253Adelegate-task%253Aassistant-project-hierarchy-design-review-20261006-r4:ordinal:1",
+    "latestTerminalStatus": "interrupted",
+    "latestTerminalResultContextTransferId": "context-transfer:type:subagent_result:source-thread:thread%3Adelegated-task%3Acommand%253Amcp%253A4f2da1e5-1b4b-4bca-aecd-77f4da6d7835%253Adelegate-task%253Aassistant-project-hierarchy-design-review-20261006-r4:target-thread:91d5d393-cf9a-4530-add8-406180f05ce9:bf309f45-0c13-4720-8c33-4ac6a89c3dc2",
+    "providerInstanceId": "cursor",
+    "model": "claude-sonnet-5-5",
+    "summary": "Child task ended with status interrupted.",
+    "resultContextTransferId": "context-transfer:type:subagent_result:source-thread:thread%3Adelegated-task%3Acommand%253Amcp%253A4f2da1e5-1b4b-4bca-aecd-77f4da6d7835%253Adelegate-task%253Aassistant-project-hierarchy-design-review-20261006-r4:target-thread:91d5d393-cf9a-4530-add8-406180f05ce9:bf309f45-0c13-4720-8c33-4ac6a89c3dc2",
+    "waitTimedOut": false
+  },
+  "visibleResult": "No assistant verdict in messages view; interrupted on cumulative budget, not accepted design review."
+}

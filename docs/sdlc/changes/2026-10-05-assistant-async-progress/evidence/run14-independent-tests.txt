@@ -1,0 +1,88 @@
+Run14 independent test evidence. Exact line excerpts; full original files and hashes are recorded in run14-independent-acceptance.json. These tests were run by the independent supervisor, not rerun by the recording owner.
+
+SOURCE: /Users/chenli/Documents/Codex/2026-10-05/task-7/r1-repair-final-original_resource_release.log
+
+running 1 test
+supervisor: initial C failed with full resources; turns=1
+supervisor: after resource release C assignments=1, turns=2, reviews=[("9ec90daa-b5a1-43c2-b00e-81f6d7885495", "failed", Some("invalid assistant: concurrency limit reached")), ("9ec90daa-b5a1-43c2-b00e-81f6d7885495", "completed", None)]
+test plugins::app::plugins::assistant::tests::independent_terminal_resource_release_retries_waiting_scope ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 576 filtered out; finished in 0.20s
+
+
+SOURCE: /Users/chenli/Documents/Codex/2026-10-05/task-7/r1-repair-final-core-confirmed.log
+running 577 tests
+test plugins::app::plugins::assistant::tests::creation_replay_and_unknown_prompt_recovery_are_bounded ... ok
+test plugins::app::plugins::assistant::tests::crashed_creation_claim_is_unknown_without_replay ... ok
+test plugins::app::plugins::assistant::tests::free_capacity_does_not_retry_an_unknown_review_or_infer_permission_from_error_text ... ok
+test plugins::app::plugins::assistant::tests::recovery_keeps_claimed_native_answers_unknown_without_replaying ... ok
+test plugins::app::plugins::assistant::tests::rejected_selected_model_never_runs_the_assignment_on_a_fallback ... ok
+test plugins::app::plugins::assistant::tests::streamed_evidence_preserves_file_hashes_and_excludes_previous_turns ... ok
+test plugins::app::plugins::assistant::tests::recovered_creation_retains_effort_and_unsupported_effort_never_prompts ... ok
+test plugins::app::plugins::assistant::tests::claimed_steering_revoked_before_first_poll_sends_no_rpc ... ok
+test plugins::app::plugins::assistant::tests::scoped_review_fences_ignore_b_but_reject_a_control_and_dependencies ... ok
+test plugins::app::plugins::assistant::tests::a_missing_worker_does_not_freeze_an_independent_goal ... ok
+test plugins::app::plugins::assistant::tests::stop_before_revival_registration_is_not_lost ... ok
+test plugins::app::plugins::assistant::tests::independent_terminal_resource_release_retries_waiting_scope ... ok
+test plugins::app::plugins::assistant::tests::accepted_queue_revoked_during_session_new_does_not_reach_provider ... ok
+test plugins::app::plugins::assistant::tests::supervisor_resource_release_retries_waiting_independent_scope ... ok
+test plugins::app::plugins::assistant::tests::blocked_project_keeps_questions_while_an_independent_project_completes ... ok
+test plugins::app::plugins::assistant::tests::unsupported_steering_waits_for_turn_end_and_acceptance_is_not_adoption ... ok
+test plugins::app::plugins::assistant::tests::slow_steering_keeps_other_lanes_and_control_live ... ok
+test plugins::app::plugins::assistant::tests::independent_review_decisions_commit_while_a_waits_and_b_changes ... ok
+test plugins::app::plugins::assistant::tests::recovery_retains_uncertain_stops_and_recognizes_only_terminal_receipts ... ok
+test plugins::app::plugins::assistant::tests::stopped_revival_cannot_initialize_or_prompt_after_restart ... ok
+test plugins::app::plugins::assistant::tests::changed_inputs_revoke_native_answers_and_resume_until_worker_confirmation ... ok
+test plugins::app::plugins::assistant::tests::two_projects_link_existing_work_and_dispatch_once_through_real_engine ... ok
+test plugins::app::plugins::assistant::tests::slow_initialize_and_session_new_do_not_block_intake_dispatch_or_stop ... ok
+test plugins::app::plugins::assistant::tests::oversized_a_review_is_local_and_b_still_completes ... ok
+test result: ok. 577 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.64s
+
+SOURCE: /Users/chenli/Documents/Codex/2026-10-05/task-7/r1-repair-final-assistant.log
+
+running 13 tests
+test artifact_verification_rejects_fifo_and_workspace_escape ... ok
+test takeover_of_uncreated_intent_releases_slot_and_resume_can_dispatch ... ok
+test one_free_slot_cannot_admit_two_independent_waiters ... ok
+test scope_concurrency_and_interrupted_receipts_fail_closed ... ok
+test entire_proposal_is_rejected_without_partial_dispatch ... ok
+test native_question_retry_clears_the_rejected_attempt_and_permissions_remain_specific ... ok
+test worker_identity_idempotency_questions_and_final_review_are_versioned ... ok
+test forgetting_and_global_switch_control_actual_project_recall ... ok
+test idle_is_not_acceptance_and_verdicts_bind_the_current_revision ... ok
+test dependency_files_and_submitted_input_versions_cannot_be_laundered_by_confirmation ... ok
+test durable_goals_reject_stale_decisions_and_preserve_user_takeover ... ok
+test a_recorded_native_answer_is_revoked_atomically_before_changed_control_can_deliver_it ... ok
+test unknown_delivery_and_claimed_native_answers_block_submission_and_acceptance ... ok
+
+test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.19s
+
+
+SOURCE: /Users/chenli/Documents/Codex/2026-10-05/task-7/r1-repair-final-prompt_delivery.log
+
+running 6 tests
+test live_steering_has_a_separate_lane_and_cannot_cross_into_a_later_turn ... ok
+test a_failed_delivery_migration_rolls_back_the_entire_coordination_install ... ok
+test busy_session_backlog_does_not_hide_an_independent_session ... ok
+test durable_queue_replays_only_identical_commands_and_claims_once ... ok
+test supported_provider_accepts_live_delivery_while_an_ordinary_prompt_waits ... ok
+test saved_control_invalidates_queued_and_fences_already_claimed_prompts ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.11s
+
+
+SOURCE: /Users/chenli/Documents/Codex/2026-10-05/task-7/r1-repair-final-core.log
+
+thread 'plugins::bundle::tests::checked_in_hello_runtime_conforms_to_the_c2_namespace' (8541343) panicked at crates/core/src/plugins/bundle.rs:3005:84:
+called `Result::unwrap()` on an `Err` value: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test plugins::bundle::tests::checked_in_hello_runtime_conforms_to_the_c2_namespace ... FAILED
+test plugins::bundle::tests::closes_static_runtime_command_ownership_and_schema ... ok
+test plugins::app::plugins::assistant::tests::a_missing_worker_does_not_freeze_an_independent_goal ... ok
+
+failures:
+
+failures:
+    plugins::bundle::tests::checked_in_hello_runtime_conforms_to_the_c2_namespace
+
+test result: FAILED. 576 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.24s

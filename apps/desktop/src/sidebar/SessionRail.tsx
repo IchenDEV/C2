@@ -273,6 +273,7 @@ export function SessionRail({
   displayProvider,
   onOpenMarket,
   onOpenAutomations,
+  onOpenAssistant,
   deviceConnectionsAvailable,
   deviceConnectionsOpen,
   onOpenDeviceConnections,
@@ -331,6 +332,7 @@ export function SessionRail({
   displayProvider: (p: SessionInfo["provider"]) => string;
   onOpenMarket: () => void;
   onOpenAutomations: () => void;
+  onOpenAssistant?: () => void;
   /** The built-in remote component is live and can open its pairing surface. */
   deviceConnectionsAvailable: boolean;
   deviceConnectionsOpen: boolean;
@@ -2151,6 +2153,17 @@ export function SessionRail({
           </RailUtilityButton>
         </div>
         <div data-rail-features className="flex flex-col items-center gap-2">
+          {onOpenAssistant && (
+            <div data-rail-feature="assistant">
+              <RailUtilityButton
+                label={t("mission.title")}
+                selected={false}
+                onSelect={onOpenAssistant}
+              >
+                <ChartNoAxesColumn className="size-4" />
+              </RailUtilityButton>
+            </div>
+          )}
           <div data-rail-feature="pull-requests">
             <RailUtilityButton
               label={t("pullRequests.title")}

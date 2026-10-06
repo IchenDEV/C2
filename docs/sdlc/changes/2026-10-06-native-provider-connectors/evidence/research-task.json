@@ -1,0 +1,32 @@
+{
+  "startedAt": "2026-10-06T02:02:22.140Z",
+  "budgetMs": 600000,
+  "brief": "工作目录 /Users/chenli/.t3/worktrees/codeTwo/t3code-6738e658。Cursor调研子任务，不再委派；单轮10分钟，从开始累计。用户明确要求 Sonnet5.5/300K/high/Full Access，已实际设置；保持这些，不切Auto/MAX，不改付费/账户/持久权限。只读Plan，不写代码/文档，不安装/登录、不启动付费模型或云agents、不读凭据，不发外部消息/PR/push/merge/deploy。其他工作在同目录，保留状态。一次最终报告后结束，不重复报告。\n新增用户任务：CodeTwo 主流 Claude Code/Codex/Cursor/OpenCode 连接器摆脱ACP包装，优先走各官方Agent SDK或App Server；ACP保留给第三方。主 Agent另有Engine seam只读任务，你只负责官方能力和T3/Herdr参考实现调研，不扫CodeTwo Engine。身份/版本/回执/单writer/unknown/停止/审批都要保留。新协议尚待具体人类设计确认，本轮不实施。\n直接官方入口：Codex https://developers.openai.com/codex/app-server ; Claude https://platform.claude.com/docs/en/agent-sdk/overview ; Cursor https://cursor.com/docs/sdk/typescript 和 https://cursor.com/docs/sdk/bridge ; OpenCode https://opencode.ai/docs/sdk/ https://opencode.ai/docs/server/ 以及独立OpenCode2 https://opencode.ai/v2/docs/build/sdk 。核对真实当前文档，不从模型记忆推测不存在SDK。Cursor官方已发现@cursor/sdk、Agent/Run/stream/resume与本地SDKBridge；不能因此自动网页登录或设置API key/计费。OpenCode两个版本不要混为一套API。\n参考T3 https://github.com/pingdotgg/t3code （若实际仓库不同注明），只通过只读HTTP/API或源码，不browser use GitHub。用户herdr拼写未给准确链接，正在澄清；只能搜索识别，不能任意同名repo当证据。\n返回紧凑中文报告<=2000字：\n1.每家选SDK/AppServer/Bridge与理由，具体版本或版本核实状态、认证/许可/预算阻点。\n2.create/resume/send/live-steer/stop/cancel/stream/approval/MCP/tools/usage/session history/cwd/model-options能力表，区分官方明确支持、需探针、不支持，不以AbortSignal等同停止执行回执。\n3.数据和事件/权限如何映射且不可丢失，必须合同测试；\n4.T3/herdr参考具体路径/commit/URL（获取失败如实），可借鉴不复制产品授权；\n5.运行、权限、文件变化声明。给primary链接，短引文，不长抄全文。",
+  "response": {
+    "content": [
+      {
+        "type": "text",
+        "text": "{\"taskId\":\"node:delegated-task:command%3Amcp%3A4f2da1e5-1b4b-4bca-aecd-77f4da6d7835%3Adelegate-task%3Anative-provider-sdk-research-20261006-r1\",\"childThreadId\":\"thread:delegated-task:command%3Amcp%3A4f2da1e5-1b4b-4bca-aecd-77f4da6d7835%3Adelegate-task%3Anative-provider-sdk-research-20261006-r1\",\"childRunId\":\"run:thread:thread%3Adelegated-task%3Acommand%253Amcp%253A4f2da1e5-1b4b-4bca-aecd-77f4da6d7835%253Adelegate-task%253Anative-provider-sdk-research-20261006-r1:ordinal:1\",\"childNodeId\":\"node:delegated-task:command%3Amcp%3A4f2da1e5-1b4b-4bca-aecd-77f4da6d7835%3Adelegate-task%3Anative-provider-sdk-research-20261006-r1\",\"status\":\"running\",\"workState\":\"working\",\"hasPendingChildRuns\":false,\"latestTerminalRunId\":null,\"latestTerminalStatus\":null,\"latestTerminalSummary\":null,\"latestTerminalResultContextTransferId\":null,\"providerInstanceId\":\"cursor\",\"model\":\"claude-sonnet-5-5\",\"summary\":null,\"resultContextTransferId\":null,\"waitTimedOut\":true}"
+      }
+    ],
+    "structuredContent": {
+      "taskId": "node:delegated-task:command%3Amcp%3A4f2da1e5-1b4b-4bca-aecd-77f4da6d7835%3Adelegate-task%3Anative-provider-sdk-research-20261006-r1",
+      "childThreadId": "thread:delegated-task:command%3Amcp%3A4f2da1e5-1b4b-4bca-aecd-77f4da6d7835%3Adelegate-task%3Anative-provider-sdk-research-20261006-r1",
+      "childRunId": "run:thread:thread%3Adelegated-task%3Acommand%253Amcp%253A4f2da1e5-1b4b-4bca-aecd-77f4da6d7835%253Adelegate-task%253Anative-provider-sdk-research-20261006-r1:ordinal:1",
+      "childNodeId": "node:delegated-task:command%3Amcp%3A4f2da1e5-1b4b-4bca-aecd-77f4da6d7835%3Adelegate-task%3Anative-provider-sdk-research-20261006-r1",
+      "status": "running",
+      "workState": "working",
+      "hasPendingChildRuns": false,
+      "latestTerminalRunId": null,
+      "latestTerminalStatus": null,
+      "latestTerminalSummary": null,
+      "latestTerminalResultContextTransferId": null,
+      "providerInstanceId": "cursor",
+      "model": "claude-sonnet-5-5",
+      "summary": null,
+      "resultContextTransferId": null,
+      "waitTimedOut": true
+    },
+    "isError": false
+  }
+}

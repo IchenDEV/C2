@@ -35,7 +35,21 @@ const CONNECTOR_CAPABILITIES: &[&str] = &[
     "messaging",
     "turn_notifications",
     "issues",
+    "observations",
 ];
+
+/// Connector ids whose manifest declares the host-owned `observations` capability.
+pub fn observation_connector_ids(connectors: &[PluginConnectorContribution]) -> Vec<String> {
+    connectors
+        .iter()
+        .filter(|c| {
+            c.capabilities
+                .iter()
+                .any(|capability| capability == "observations")
+        })
+        .map(|c| c.id.clone())
+        .collect()
+}
 const AGENT_PLUGIN_SCHEMA_JSON: &str =
     include_str!("schemas/agent-plugins/1.0.0/plugin.schema.json");
 const AGENT_MCP_SCHEMA_JSON: &str = include_str!("schemas/agent-plugins/1.0.0/mcp.schema.json");

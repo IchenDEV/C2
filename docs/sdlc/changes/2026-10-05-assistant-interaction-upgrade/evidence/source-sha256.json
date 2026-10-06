@@ -1,0 +1,12 @@
+{
+  "base": "14c20fce841384dbeaa16c48c7a7264d6e4a9f81",
+  "note": "Local UI follow-up only. Unchanged domain/Runtime hashes match independently accepted run14; its UI-source snapshot is historical for this new renderer change.",
+  "sha256": {
+    "apps/desktop/src/assistant/AssistantWorkspace.tsx": "f46b07c1254481644fc6808044e93316d41bb286e5e5e90ee169cb11e501b14d",
+    "apps/desktop/src/assistant/CoordinationPanel.tsx": "eae31e57cde452371381bf919f5236e7ce99c55b02ebf1d14d8461def5768323",
+    "apps/desktop/src/assistant/AssistantSelect.tsx": "244cf2a80c994bd14de989c1d20fdef4e21ff1f73150f23d228a1bee4765c0a3",
+    "apps/desktop/tests/assistant.test.tsx": "ce84d6c73a5504b9875e8ebdd6bf2141fd6c0fc37cdec964c93f2a900234fea9",
+    "crates/core/src/assistant.rs": "1a7ce98bfa1612d991e0875a5553a67a7cabe79d501afb956f643fc60062dc49",
+    "crates/core/src/plugins/app/plugins/assistant.rs": "56451c60e7e5affcd4ee629b8ce69cda249256f16e43bace506102b7a9d562ee"
+  }
+}

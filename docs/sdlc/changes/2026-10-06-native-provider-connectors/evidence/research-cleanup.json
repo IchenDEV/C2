@@ -1,0 +1,46 @@
+{
+  "checked_at": "2026-10-06T02:14:26.602156+00:00",
+  "removed": [
+    {
+      "path": "/tmp/t3tree.json",
+      "bytes": 10420726,
+      "sha256": "69af7d916398ad0e82bec7a1ab52be80a0a0bca570d990ce303df4b08ff91843"
+    },
+    {
+      "path": "/tmp/t3_ProviderAdapter.ts",
+      "bytes": 21512,
+      "sha256": "78079a5e4032ee46fa454be94dc153e8ff2987761863050b28261b4cfd82b325"
+    },
+    {
+      "path": "/tmp/t3_CursorAgentSdk.ts",
+      "bytes": 20297,
+      "sha256": "c633d9d1769f15862e646938be67d7c9ff7fba2ba0ce013b38382353b06af957"
+    },
+    {
+      "path": "/tmp/t3_CursorAdapterV2.ts",
+      "bytes": 101144,
+      "sha256": "79956fc6ca0230d674e9e17540f87bb3c47572ffc7d9c8cb44d08678f92c1fca"
+    },
+    {
+      "path": "/tmp/t3_ClaudeAdapterV2.ts",
+      "bytes": 331060,
+      "sha256": "e866cd7b3af2af42b91ff7c5c6c2acfe7920505640e33505f0aff50985d3f702"
+    },
+    {
+      "path": "/tmp/t3_CodexAdapterV2.ts",
+      "bytes": 285518,
+      "sha256": "e3a246abdf1d5fca3c67be388e7db0e74daef760931209ac4f75d955e9e46c82"
+    },
+    {
+      "path": "/tmp/t3_OpenCode2AdapterV2.ts",
+      "bytes": 176704,
+      "sha256": "b23e26e7b6ccdbded7b2fb1705c759e74a5a47ebc88540742468b88cd6147afd"
+    }
+  ],
+  "removed_logical_bytes": 11356961,
+  "retained_temporary": [],
+  "source_download_processes": [],
+  "exact_candidates_absent": true,
+  "platform_cache": "Cursor automatic agent-tools/history cache not treated as task scratch; shared cache not deleted",
+  "note": "r1 wrote /tmp source snapshots despite no-file-write brief; observed/recomputed/removed exact owned paths after terminal, no user process stopped"
+}

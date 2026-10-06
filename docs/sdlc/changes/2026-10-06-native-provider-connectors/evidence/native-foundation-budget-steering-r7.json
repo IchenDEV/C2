@@ -1,0 +1,14 @@
+{
+  "taskId": "node:delegated-task:command%3Amcp%3A4f2da1e5-1b4b-4bca-aecd-77f4da6d7835%3Adelegate-task%3Acodetwo-native-foundation-r7-20261006",
+  "originalStart": "2026-10-06T03:16:28.897Z",
+  "actualDeadline": "2026-10-06T03:46:28.897Z",
+  "reason": "Visible child planned deadline from first tool rather than original delegate start; in-flight reminder does not extend round or scope.",
+  "delivery": {
+    "threadId": "thread:delegated-task:command%3Amcp%3A4f2da1e5-1b4b-4bca-aecd-77f4da6d7835%3Adelegate-task%3Acodetwo-native-foundation-r7-20261006",
+    "messageId": "message:mcp:4f2da1e5-1b4b-4bca-aecd-77f4da6d7835:thread-send:codetwo-native-foundation-r7-budget-reminder-20261006",
+    "runId": "run:thread:thread%3Adelegated-task%3Acommand%253Amcp%253A4f2da1e5-1b4b-4bca-aecd-77f4da6d7835%253Adelegate-task%253Acodetwo-native-foundation-r7-20261006:ordinal:1",
+    "status": "starting",
+    "delivery": "steered"
+  },
+  "adoption": "Not inferred from message receipt; parent budget remains original deadline."
+}

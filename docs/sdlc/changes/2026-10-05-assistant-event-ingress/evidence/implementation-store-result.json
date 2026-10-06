@@ -1,0 +1,22 @@
+{
+  "budget_seconds": 600,
+  "elapsed_at_cancel_seconds": 605,
+  "terminal": {
+    "taskId": "node:delegated-task:command%3Amcp%3A9e21d058-3a81-4c77-8e3a-95ba13065932%3Adelegate-task%3Aassistant-event-ingress-store-20261006-r3",
+    "childThreadId": "thread:delegated-task:command%3Amcp%3A9e21d058-3a81-4c77-8e3a-95ba13065932%3Adelegate-task%3Aassistant-event-ingress-store-20261006-r3",
+    "childRunId": "run:thread:thread%3Adelegated-task%3Acommand%253Amcp%253A9e21d058-3a81-4c77-8e3a-95ba13065932%253Adelegate-task%253Aassistant-event-ingress-store-20261006-r3:ordinal:1",
+    "childNodeId": "node:delegated-task:command%3Amcp%3A9e21d058-3a81-4c77-8e3a-95ba13065932%3Adelegate-task%3Aassistant-event-ingress-store-20261006-r3",
+    "status": "interrupted",
+    "workState": "result_available",
+    "hasPendingChildRuns": false,
+    "latestTerminalRunId": "run:thread:thread%3Adelegated-task%3Acommand%253Amcp%253A9e21d058-3a81-4c77-8e3a-95ba13065932%253Adelegate-task%253Aassistant-event-ingress-store-20261006-r3:ordinal:1",
+    "latestTerminalStatus": "interrupted",
+    "latestTerminalResultContextTransferId": "context-transfer:type:subagent_result:source-thread:thread%3Adelegated-task%3Acommand%253Amcp%253A9e21d058-3a81-4c77-8e3a-95ba13065932%253Adelegate-task%253Aassistant-event-ingress-store-20261006-r3:target-thread:91d5d393-cf9a-4530-add8-406180f05ce9:3b5f4efd-e4a5-406e-8e21-274fa0a1d060",
+    "providerInstanceId": "cursor",
+    "model": "claude-sonnet-5-5",
+    "summary": "Now refactor into a shared in-tx function.",
+    "resultContextTransferId": "context-transfer:type:subagent_result:source-thread:thread%3Adelegated-task%3Acommand%253Amcp%253A9e21d058-3a81-4c77-8e3a-95ba13065932%253Adelegate-task%253Aassistant-event-ingress-store-20261006-r3:target-thread:91d5d393-cf9a-4530-add8-406180f05ce9:3b5f4efd-e4a5-406e-8e21-274fa0a1d060",
+    "waitTimedOut": false
+  },
+  "actual_note": "Task interrupted at supervision budget; partial source retained. It attempted a scratch build contrary to no-build brief; native SQLite/Ghostty permission errors observed, not acceptance. Scratch directory later absent. Root owns compilation and completion."
+}

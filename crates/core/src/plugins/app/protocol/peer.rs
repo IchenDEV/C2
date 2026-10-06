@@ -22,6 +22,10 @@ pub const DEFAULT_COMMAND_TIMEOUT: Duration = Duration::from_secs(60);
 pub trait HostHandler: Send + Sync + 'static {
     async fn call(&self, name: &str, args: Value) -> Result<Value, String>;
     async fn emit(&self, name: &str, payload: Value);
+    /// Host-only `observation/record`. Not an extension-public command.
+    async fn observe(&self, _params: Value) -> Result<Value, String> {
+        Err("the host does not accept observations".into())
+    }
     fn log(&self, level: &str, message: &str);
 }
 
@@ -295,6 +299,13 @@ where
         let params = value.get("params").cloned().unwrap_or(Value::Null);
         if let Some(id) = value.get("id").cloned() {
             if callbacks.len() >= MAX_HOST_CALLBACKS {
+                if method == "observation/record" {
+                    peer.send(json!({"jsonrpc":"2.0","id":id,"result":{
+                        "status":"backpressure","batch_id":params.get("batch_id").and_then(Value::as_str).unwrap_or_default(),
+                        "current_checkpoint":null,"event_receipts":[],"retry_after_ms":1000,"reason":"host_callbacks"
+                    }})).ok();
+                    continue;
+                }
                 peer.close(ProtocolError::Overloaded("host callbacks").to_string());
                 break;
             }
@@ -333,6 +344,7 @@ async fn handle_request(
                 serde_json::from_value(params).map_err(|error| error.to_string())?;
             handler.call(&params.name, params.args).await
         }
+        "observation/record" => handler.observe(params).await,
         other => Err(format!("the host has no method `{other}`")),
     }
 }

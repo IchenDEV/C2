@@ -1,0 +1,38 @@
+{
+  "at": "2026-10-05T19:16:01.635805+00:00",
+  "executor": "owner codex",
+  "source_snapshot": "source-sha256.json",
+  "environment": "macOS isolated source; offline Cargo; same libghostty-vt-sys 0.2.1/pkg-config only in copied Cargo.toml",
+  "core_command": "cargo test --offline -p codetwo-core",
+  "core_exit": 0,
+  "core_unit_passed": 603,
+  "core_total_passed": 780,
+  "core_ignored": 1,
+  "core_binaries": 38,
+  "assistant_coordination": 27,
+  "observation_integration": 10,
+  "prompt_delivery": 6,
+  "doctests": 4,
+  "affected_ui_tests": {
+    "command": "bun test tests/assistant.test.tsx tests/assistantEventIngress.test.tsx tests/assistantNotification.test.ts tests/assistantSharedConversation.test.tsx tests/assistantThread.test.tsx",
+    "passed": 64,
+    "failed": 0,
+    "log": "desktop-tests-final.log",
+    "reuse": "Only subsequent uppercase Unicode escape spelling in ObservationInspector.tsx; same predicate, final independent r9 runs fresh."
+  },
+  "ui_types": {
+    "command": "bunx --no-install tsc --noEmit",
+    "exit": 0,
+    "log": "types-final.log"
+  },
+  "ui_lint": {
+    "command": "bunx --no-install oxlint src/assistant/*.tsx src/assistant/*.ts tests/assistant*.ts*",
+    "exit": 0,
+    "log": "lint-owner-r9.log"
+  },
+  "paid_business_run": false,
+  "external_accounts": false,
+  "release": false,
+  "source_snapshot_at_core_execution": "source-sha256-r9.json",
+  "reuse_for_final_snapshot": "Only subsequent bundle helper closure formatting and UI test oxfmt; independent r10 confirmed normalized equivalence and repeated final 21 UI tests. Runtime/Memory unchanged."
+}

@@ -1,0 +1,64 @@
+{
+  "workspace": "/Users/chenli/.t3/worktrees/codeTwo/t3code-6738e658",
+  "base_commit": "14c20fce841384dbeaa16c48c7a7264d6e4a9f81",
+  "source_sha256": {
+    "apps/desktop/src/assistant/AssistantWorkspace.tsx": "15e310a0251136c7f665b28616c58aca128081ece4ddebe705215b95b52621f3",
+    "apps/desktop/src/assistant/CoordinationPanel.tsx": "71c553e97f56ae0d0aaf25857dc30fb45772cafefc4608ca7ca67d648bad0fd2",
+    "apps/desktop/src/assistant/api.ts": "2b39dde036fa654864e321211add2ea1b3dd48b1c446cfad286857e206b7dd57",
+    "apps/desktop/tests/assistant.test.tsx": "4ac48219fb211ce8b4b7c95513dd5786399ad2204bac916b7a44ebd9fb3cc53f",
+    "crates/core/src/assistant.rs": "f5878cb7547fba74c2c75bbf7ea67e3683d3c0198016951e152f5ec1aa5fa0b1",
+    "crates/core/src/plugins/app/plugins/assistant.rs": "b2bbe88e311fe82cf6fc2d3912a0fad30548ee54875221ba9c613410896e2df2",
+    "crates/core/tests/assistant.rs": "52ee83770cff078c5a61cd93448ddc1294090e954ec00fe531886766d29d0aaf",
+    "crates/core/src/memory.rs": "5e91534f768f1581c3502c76adffa72bf96d6e50a2741230c519dfd8718df02b",
+    "docs/reference/memory.md": "fefa26f032a882b09a250765b8ce294e78482af61c391e71283a7138a97b5cc0",
+    "crates/core/src/assistant_conversation.rs": "2ff6951b03c487454864b3c5e6be0d41841c2731e66aab587faf25d37253d9cb",
+    "apps/desktop/src/assistant/ChiefThread.tsx": "2ce71b6f4ad2e8d3e3b99f4123ea4be4175bba16592ada761baeee3157a2809e",
+    "apps/desktop/src/assistant/ThreadCards.tsx": "5437600849fccf2729b7fbacdd99ca4852b6060da7bd08ed45cb3b06bb7113fb",
+    "apps/desktop/tests/assistantThread.test.tsx": "71c4a383cf4372bd63bc33e45394694544d5a5e9ce1b4a92db4baef014b623f0"
+  },
+  "baseline_file_count": 1671,
+  "existing_file_changes": {
+    "apps/desktop/src/assistant/AssistantWorkspace.tsx": {
+      "before": "f46b07c1254481644fc6808044e93316d41bb286e5e5e90ee169cb11e501b14d",
+      "after": "15e310a0251136c7f665b28616c58aca128081ece4ddebe705215b95b52621f3"
+    },
+    "apps/desktop/src/assistant/CoordinationPanel.tsx": {
+      "before": "eae31e57cde452371381bf919f5236e7ce99c55b02ebf1d14d8461def5768323",
+      "after": "71c553e97f56ae0d0aaf25857dc30fb45772cafefc4608ca7ca67d648bad0fd2"
+    },
+    "apps/desktop/src/assistant/api.ts": {
+      "before": "49c3f3ef76afdffe42001a6d219b2800568c41f805ffce20ed16b8c358822272",
+      "after": "2b39dde036fa654864e321211add2ea1b3dd48b1c446cfad286857e206b7dd57"
+    },
+    "apps/desktop/tests/assistant.test.tsx": {
+      "before": "ce84d6c73a5504b9875e8ebdd6bf2141fd6c0fc37cdec964c93f2a900234fea9",
+      "after": "4ac48219fb211ce8b4b7c95513dd5786399ad2204bac916b7a44ebd9fb3cc53f"
+    },
+    "crates/core/src/assistant.rs": {
+      "before": "1a7ce98bfa1612d991e0875a5553a67a7cabe79d501afb956f643fc60062dc49",
+      "after": "f5878cb7547fba74c2c75bbf7ea67e3683d3c0198016951e152f5ec1aa5fa0b1"
+    },
+    "crates/core/src/plugins/app/plugins/assistant.rs": {
+      "before": "56451c60e7e5affcd4ee629b8ce69cda249256f16e43bace506102b7a9d562ee",
+      "after": "b2bbe88e311fe82cf6fc2d3912a0fad30548ee54875221ba9c613410896e2df2"
+    },
+    "crates/core/tests/assistant.rs": {
+      "before": "4b0f25a0cdd4453b2aa97a158b23b0d84b17186c73ddce230634459510ced1dd",
+      "after": "52ee83770cff078c5a61cd93448ddc1294090e954ec00fe531886766d29d0aaf"
+    },
+    "crates/core/src/memory.rs": {
+      "before": "fb494d581457e3668b6d824c532ed27470d3a73c8f7512be8d8f7678fc2b346b",
+      "after": "5e91534f768f1581c3502c76adffa72bf96d6e50a2741230c519dfd8718df02b"
+    },
+    "docs/reference/memory.md": {
+      "before": "c9d4d53e14cdb43c69f6049d0f039c39525fdb9a3d4df6c2bd2a4d78888c5e19",
+      "after": "fefa26f032a882b09a250765b8ce294e78482af61c391e71283a7138a97b5cc0"
+    }
+  },
+  "isolated_runtime_extra_probe": "original-resource-release-probe.rs; only isolated copy renames test to original_independent_resource_release_probe",
+  "manifest_unchanged": {
+    "Cargo.toml": true,
+    "Cargo.lock": true,
+    "crates/core/Cargo.toml": true
+  }
+}

@@ -1,0 +1,29 @@
+2026-10-05 — Read-only review by existing assistant_independent_review agent.
+This file records the review messages received by the implementation owner; it is not human design approval.
+
+Review corrections:
+1. Persistent session revival initialize could evade Stop before a live runtime existed.
+   Fixed session-bound revival cancellation, short atomic handoff, and with/without-effort regression.
+2. Stop after the initial authority check but before revival registration could lose cancellation.
+   Fixed registration-before-durable-authority/turn validation. Added pre-registration Stop regression.
+3. Shared managed queue acceptance lacked final Provider-send authority validation.
+   Fixed one final Engine validation for managed initial prompts and persisted delivery rows.
+   Added takeover and changed requirements while session/new is stalled after Engine acceptance.
+
+Independent execution:
+- Matching binary Runtime 19 tests passed; assistant 12 and delivery 6 passed.
+- After two test-only additions, matching binary Runtime 21 tests passed in 4.24 seconds.
+- Reviewer confirmed binary timestamps against the corresponding source before execution.
+- No new confirmed P1/P2 remained after the corrections.
+
+UI review:
+Reviewer inspected all five screenshots and ui-result.json, confirming unknown-state lockout,
+message-state distinctions, stop notification and A paused/B active. Offline UI fixtures do not
+prove external Provider business completion or native OS notification delivery.
+A nonblocking navigation-highlight question was independently raised. The implementation owner
+then reopened the actual page: aria-current/classes were correct immediately; the background was
+in a 0.12-second CSS transition. Settled computed styles made Projects transparent and Inbox
+selected. Inbox screenshots were replaced after settling; ui-result.json records the check.
+
+The reviewer changed no files, started no app services, spawned no new team and left no resources.
+Original human decisions remain recorded separately in Intent/Spec.

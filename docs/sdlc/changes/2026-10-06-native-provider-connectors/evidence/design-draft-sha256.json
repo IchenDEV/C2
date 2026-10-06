@@ -1,0 +1,15 @@
+{
+  "checked_at": "2026-10-06T02:22:32.143764+00:00",
+  "scope": "Exact eight draft lifecycle documents; no production source changed in this turn",
+  "sha256": {
+    "docs/sdlc/changes/2026-10-06-assistant-project-hierarchy/intent.md": "8db35f8620136ec9de9dcd6935513c5ee106adcd569d96db10d82b789c974cd5",
+    "docs/sdlc/changes/2026-10-06-assistant-project-hierarchy/spec.md": "01dc014a98e9aaa0be7806c7b7c8414f70653e9ebbb2e3caf150abe7f3959b69",
+    "docs/sdlc/changes/2026-10-06-assistant-project-hierarchy/plan.md": "7d6c6e20a40ef41874f681615aee03865c9d977b5ea11995d65578dd9a8a6281",
+    "docs/sdlc/changes/2026-10-06-assistant-project-hierarchy/verification.md": "52fee689098691fa6985d4c47cb8add211c6f50265ddc546f46a352d5b0f86b0",
+    "docs/sdlc/changes/2026-10-06-native-provider-connectors/intent.md": "c4fef0704471f346a8a89f91561129c5d90c629fc31e86ec659d5823fcdc7a3c",
+    "docs/sdlc/changes/2026-10-06-native-provider-connectors/spec.md": "8070854e133628258fb87779e9a828248431fc480b02c87bc2a895d6a4636896",
+    "docs/sdlc/changes/2026-10-06-native-provider-connectors/plan.md": "b8f3f162984ffb91fa1f212dd94d5db4728195020515185afd64d938cdbcbc57",
+    "docs/sdlc/changes/2026-10-06-native-provider-connectors/verification.md": "655916510e3de8b686ce6ef8f8470dca64ff5c586d1c88718838a8095b5a72e9"
+  },
+  "preexisting_source_evidence": "worktree-handoff.json; hierarchy evidence/preexisting-baseline.json"
+}

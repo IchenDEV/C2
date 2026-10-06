@@ -1,0 +1,166 @@
+{
+  "checkedAt": "2026-10-06 04:48:13 UTC",
+  "scope": "Tasks recorded by these two bundles, all owned by the original parent thread; no new delegation or cancellation.",
+  "tasks": [
+    {
+      "taskId": "node:delegated-task:command%3Amcp%3A4f2da1e5-1b4b-4bca-aecd-77f4da6d7835%3Adelegate-task%3Aassistant-project-hierarchy-core-feasibility-20261006-r2",
+      "childThreadId": "thread:delegated-task:command%3Amcp%3A4f2da1e5-1b4b-4bca-aecd-77f4da6d7835%3Adelegate-task%3Aassistant-project-hierarchy-core-feasibility-20261006-r2",
+      "status": "completed",
+      "workState": "result_available",
+      "hasPendingChildRuns": false,
+      "latestTerminalStatus": "completed"
+    },
+    {
+      "taskId": "node:delegated-task:command%3Amcp%3A4f2da1e5-1b4b-4bca-aecd-77f4da6d7835%3Adelegate-task%3Aassistant-project-hierarchy-design-review-20261006-r3",
+      "childThreadId": "thread:delegated-task:command%3Amcp%3A4f2da1e5-1b4b-4bca-aecd-77f4da6d7835%3Adelegate-task%3Aassistant-project-hierarchy-design-review-20261006-r3",
+      "status": "interrupted",
+      "workState": "result_available",
+      "hasPendingChildRuns": false,
+      "latestTerminalStatus": "interrupted"
+    },
+    {
+      "taskId": "node:delegated-task:command%3Amcp%3A4f2da1e5-1b4b-4bca-aecd-77f4da6d7835%3Adelegate-task%3Aassistant-project-hierarchy-design-review-20261006-r4",
+      "childThreadId": "thread:delegated-task:command%3Amcp%3A4f2da1e5-1b4b-4bca-aecd-77f4da6d7835%3Adelegate-task%3Aassistant-project-hierarchy-design-review-20261006-r4",
+      "status": "interrupted",
+      "workState": "result_available",
+      "hasPendingChildRuns": false,
+      "latestTerminalStatus": "interrupted"
+    },
+    {
+      "taskId": "node:delegated-task:command%3Amcp%3A4f2da1e5-1b4b-4bca-aecd-77f4da6d7835%3Adelegate-task%3Aassistant-project-hierarchy-official-research-20261006-r1",
+      "childThreadId": "thread:delegated-task:command%3Amcp%3A4f2da1e5-1b4b-4bca-aecd-77f4da6d7835%3Adelegate-task%3Aassistant-project-hierarchy-official-research-20261006-r1",
+      "status": "failed",
+      "workState": "result_available",
+      "hasPendingChildRuns": false,
+      "latestTerminalStatus": "completed"
+    },
+    {
+      "taskId": "node:delegated-task:command%3Amcp%3A4f2da1e5-1b4b-4bca-aecd-77f4da6d7835%3Adelegate-task%3Acodetwo-native-engine-complete-r12-20261006",
+      "childThreadId": "thread:delegated-task:command%3Amcp%3A4f2da1e5-1b4b-4bca-aecd-77f4da6d7835%3Adelegate-task%3Acodetwo-native-engine-complete-r12-20261006",
+      "status": "failed",
+      "workState": "result_available",
+      "hasPendingChildRuns": false,
+      "latestTerminalStatus": "failed"
+    },
+    {
+      "taskId": "node:delegated-task:command%3Amcp%3A4f2da1e5-1b4b-4bca-aecd-77f4da6d7835%3Adelegate-task%3Acodetwo-native-foundation-r5-20261006",
+      "childThreadId": "thread:delegated-task:command%3Amcp%3A4f2da1e5-1b4b-4bca-aecd-77f4da6d7835%3Adelegate-task%3Acodetwo-native-foundation-r5-20261006",
+      "status": "interrupted",
+      "workState": "result_available",
+      "hasPendingChildRuns": false,
+      "latestTerminalStatus": "interrupted"
+    },
+    {
+      "taskId": "node:delegated-task:command%3Amcp%3A4f2da1e5-1b4b-4bca-aecd-77f4da6d7835%3Adelegate-task%3Acodetwo-native-foundation-r6-20261006",
+      "childThreadId": "thread:delegated-task:command%3Amcp%3A4f2da1e5-1b4b-4bca-aecd-77f4da6d7835%3Adelegate-task%3Acodetwo-native-foundation-r6-20261006",
+      "status": "failed",
+      "workState": "result_available",
+      "hasPendingChildRuns": false,
+      "latestTerminalStatus": "failed"
+    },
+    {
+      "taskId": "node:delegated-task:command%3Amcp%3A4f2da1e5-1b4b-4bca-aecd-77f4da6d7835%3Adelegate-task%3Acodetwo-native-foundation-r7-20261006",
+      "childThreadId": "thread:delegated-task:command%3Amcp%3A4f2da1e5-1b4b-4bca-aecd-77f4da6d7835%3Adelegate-task%3Acodetwo-native-foundation-r7-20261006",
+      "status": "completed",
+      "workState": "result_available",
+      "hasPendingChildRuns": false,
+      "latestTerminalStatus": "completed"
+    },
+    {
+      "taskId": "node:delegated-task:command%3Amcp%3A4f2da1e5-1b4b-4bca-aecd-77f4da6d7835%3Adelegate-task%3Acodetwo-project-domain-complete-r10-20261006",
+      "childThreadId": "thread:delegated-task:command%3Amcp%3A4f2da1e5-1b4b-4bca-aecd-77f4da6d7835%3Adelegate-task%3Acodetwo-project-domain-complete-r10-20261006",
+      "status": "failed",
+      "workState": "result_available",
+      "hasPendingChildRuns": false,
+      "latestTerminalStatus": "failed"
+    },
+    {
+      "taskId": "node:delegated-task:command%3Amcp%3A4f2da1e5-1b4b-4bca-aecd-77f4da6d7835%3Adelegate-task%3Acodetwo-project-domain-r5-20261006",
+      "childThreadId": "thread:delegated-task:command%3Amcp%3A4f2da1e5-1b4b-4bca-aecd-77f4da6d7835%3Adelegate-task%3Acodetwo-project-domain-r5-20261006",
+      "status": "interrupted",
+      "workState": "result_available",
+      "hasPendingChildRuns": false,
+      "latestTerminalStatus": "interrupted"
+    },
+    {
+      "taskId": "node:delegated-task:command%3Amcp%3A4f2da1e5-1b4b-4bca-aecd-77f4da6d7835%3Adelegate-task%3Acodetwo-project-domain-r6-20261006",
+      "childThreadId": "thread:delegated-task:command%3Amcp%3A4f2da1e5-1b4b-4bca-aecd-77f4da6d7835%3Adelegate-task%3Acodetwo-project-domain-r6-20261006",
+      "status": "completed",
+      "workState": "result_available",
+      "hasPendingChildRuns": false,
+      "latestTerminalStatus": "completed"
+    },
+    {
+      "taskId": "node:delegated-task:command%3Amcp%3A4f2da1e5-1b4b-4bca-aecd-77f4da6d7835%3Adelegate-task%3Acodetwo-project-domain-repair-r8-20261006",
+      "childThreadId": "thread:delegated-task:command%3Amcp%3A4f2da1e5-1b4b-4bca-aecd-77f4da6d7835%3Adelegate-task%3Acodetwo-project-domain-repair-r8-20261006",
+      "status": "completed",
+      "workState": "result_available",
+      "hasPendingChildRuns": false,
+      "latestTerminalStatus": "completed"
+    },
+    {
+      "taskId": "node:delegated-task:command%3Amcp%3A4f2da1e5-1b4b-4bca-aecd-77f4da6d7835%3Adelegate-task%3Acodetwo-project-domain-retry-r11-20261006",
+      "childThreadId": "thread:delegated-task:command%3Amcp%3A4f2da1e5-1b4b-4bca-aecd-77f4da6d7835%3Adelegate-task%3Acodetwo-project-domain-retry-r11-20261006",
+      "status": "failed",
+      "workState": "result_available",
+      "hasPendingChildRuns": false,
+      "latestTerminalStatus": "failed"
+    },
+    {
+      "taskId": "node:delegated-task:command%3Amcp%3A4f2da1e5-1b4b-4bca-aecd-77f4da6d7835%3Adelegate-task%3Acodetwo-project-runtime-plan-r9-20261006",
+      "childThreadId": "thread:delegated-task:command%3Amcp%3A4f2da1e5-1b4b-4bca-aecd-77f4da6d7835%3Adelegate-task%3Acodetwo-project-runtime-plan-r9-20261006",
+      "status": "completed",
+      "workState": "result_available",
+      "hasPendingChildRuns": false,
+      "latestTerminalStatus": "completed"
+    },
+    {
+      "taskId": "node:delegated-task:command%3Amcp%3A4f2da1e5-1b4b-4bca-aecd-77f4da6d7835%3Adelegate-task%3Acodetwo-sdk-capability-probes-r5-20261006",
+      "childThreadId": "thread:delegated-task:command%3Amcp%3A4f2da1e5-1b4b-4bca-aecd-77f4da6d7835%3Adelegate-task%3Acodetwo-sdk-capability-probes-r5-20261006",
+      "status": "interrupted",
+      "workState": "result_available",
+      "hasPendingChildRuns": false,
+      "latestTerminalStatus": "interrupted"
+    },
+    {
+      "taskId": "node:delegated-task:command%3Amcp%3A4f2da1e5-1b4b-4bca-aecd-77f4da6d7835%3Adelegate-task%3Acodetwo-sdk-capability-probes-r6-20261006",
+      "childThreadId": "thread:delegated-task:command%3Amcp%3A4f2da1e5-1b4b-4bca-aecd-77f4da6d7835%3Adelegate-task%3Acodetwo-sdk-capability-probes-r6-20261006",
+      "status": "completed",
+      "workState": "result_available",
+      "hasPendingChildRuns": false,
+      "latestTerminalStatus": "completed"
+    },
+    {
+      "taskId": "node:delegated-task:command%3Amcp%3A4f2da1e5-1b4b-4bca-aecd-77f4da6d7835%3Adelegate-task%3Anative-provider-design-review-20261006-r3",
+      "childThreadId": "thread:delegated-task:command%3Amcp%3A4f2da1e5-1b4b-4bca-aecd-77f4da6d7835%3Adelegate-task%3Anative-provider-design-review-20261006-r3",
+      "status": "interrupted",
+      "workState": "result_available",
+      "hasPendingChildRuns": false,
+      "latestTerminalStatus": "interrupted"
+    },
+    {
+      "taskId": "node:delegated-task:command%3Amcp%3A4f2da1e5-1b4b-4bca-aecd-77f4da6d7835%3Adelegate-task%3Anative-provider-engine-seam-20261006-r2",
+      "childThreadId": "thread:delegated-task:command%3Amcp%3A4f2da1e5-1b4b-4bca-aecd-77f4da6d7835%3Adelegate-task%3Anative-provider-engine-seam-20261006-r2",
+      "status": "completed",
+      "workState": "result_available",
+      "hasPendingChildRuns": false,
+      "latestTerminalStatus": "completed"
+    },
+    {
+      "taskId": "node:delegated-task:command%3Amcp%3A4f2da1e5-1b4b-4bca-aecd-77f4da6d7835%3Adelegate-task%3Anative-provider-sdk-research-20261006-r1",
+      "childThreadId": "thread:delegated-task:command%3Amcp%3A4f2da1e5-1b4b-4bca-aecd-77f4da6d7835%3Adelegate-task%3Anative-provider-sdk-research-20261006-r1",
+      "status": "completed",
+      "workState": "result_available",
+      "hasPendingChildRuns": false,
+      "latestTerminalStatus": "completed"
+    },
+    {
+      "taskId": "node:delegated-task:command%3Amcp%3A56262fd4-bb0b-44d8-8964-b0985862bcd1%3Adelegate-task%3Acodetwo-native-engine-routing-r13-20261006",
+      "childThreadId": "thread:delegated-task:command%3Amcp%3A56262fd4-bb0b-44d8-8964-b0985862bcd1%3Adelegate-task%3Acodetwo-native-engine-routing-r13-20261006",
+      "status": "failed",
+      "workState": "result_available",
+      "hasPendingChildRuns": false,
+      "latestTerminalStatus": "failed"
+    }
+  ]
+}

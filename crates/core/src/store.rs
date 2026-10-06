@@ -48,6 +48,10 @@ pub enum StoreError {
         protocol: String,
         command_id: String,
     },
+    #[error("invalid assistant: {0}")]
+    InvalidAssistant(String),
+    #[error("invalid assistant: concurrency limit reached")]
+    AssistantConcurrencyLimit,
     #[error("invalid automation: {0}")]
     InvalidAutomation(String),
     #[error("invalid project: {0}")]
@@ -940,6 +944,16 @@ fn migrate_session_search(conn: &Connection) -> rusqlite::Result<()> {
     tx.commit()
 }
 
+/// Coordination state, tool receipts and delivery fencing migrate as one unit.
+fn install_coordination(conn: &Connection) -> Result<(), StoreError> {
+    let tx = conn.unchecked_transaction()?;
+    crate::assistant::install(&tx)?;
+    crate::assistant_observation::install(&tx)?;
+    crate::prompt_delivery::install(&tx)?;
+    tx.commit()?;
+    Ok(())
+}
+
 /// A project's display name when the user hasn't set one: the directory's own name.
 pub fn default_project_name(path: &str) -> String {
     std::path::Path::new(path)
@@ -957,6 +971,7 @@ impl Store {
         crate::memory::install(&conn)?;
         crate::canvas::install(&conn)?;
         crate::automation::install(&conn)?;
+        install_coordination(&conn)?;
         crate::task_store::install(&conn)?;
         Ok(Self {
             conn: Mutex::new(conn),
@@ -974,6 +989,7 @@ impl Store {
         crate::memory::install(&conn)?;
         crate::canvas::install(&conn)?;
         crate::automation::install(&conn)?;
+        install_coordination(&conn)?;
         crate::task_store::install(&conn)?;
         Ok(Self {
             conn: Mutex::new(conn),
@@ -2872,6 +2888,11 @@ impl Store {
             return Ok((sequence, true));
         }
 
+        if protocol == "c2-delivery-prompt" {
+            crate::prompt_delivery::require_delivery_on(&tx, command_id)?;
+        } else if protocol == "c2-assistant-prompt" {
+            crate::assistant::require_prompt_on(&tx, command_id, session_id)?;
+        }
         require_session_active_on(&tx, session_id)?;
         let stored: Option<Option<String>> = tx
             .query_row(

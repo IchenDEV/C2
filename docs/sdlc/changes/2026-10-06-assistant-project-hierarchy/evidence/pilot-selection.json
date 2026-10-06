@@ -1,0 +1,24 @@
+{
+  "recordedAt": "2026-10-06T03:35:52.870003+00:00",
+  "humanSource": "Current T3 human reply to the pilot Project/workspace question",
+  "humanDecision": "\u968f\u4fbf\u627e\u4e24\u4e2a\uff0c\u6216\u8005\u65b0\u5efa\u4e24\u4e2a\u73a9\u4e00\u73a9\u3002",
+  "chosenProjects": [
+    {
+      "name": "Atlas",
+      "workspaces": [
+        "/Users/chenli/.t3/worktrees/codeTwo/t3code-6738e658/.codex/run/assistant-project-hierarchy/pilot/atlas-api",
+        "/Users/chenli/.t3/worktrees/codeTwo/t3code-6738e658/.codex/run/assistant-project-hierarchy/pilot/atlas-web"
+      ]
+    },
+    {
+      "name": "Beacon",
+      "workspaces": [
+        "/Users/chenli/.t3/worktrees/codeTwo/t3code-6738e658/.codex/run/assistant-project-hierarchy/pilot/beacon-report"
+      ]
+    }
+  ],
+  "scope": "User-authorized disposable local demonstration directories only; no existing user task migration. No model/provider/account/permission change.",
+  "execution": "Scaffolds only; no Core/model sessions or project memory/instruction adoption claimed.",
+  "resourceOwner": "codex-main",
+  "cleanupTrigger": "End of pilot acceptance and final handoff; retain only reviewable evidence, unless user requests demo data kept."
+}

@@ -1,0 +1,81 @@
+{
+  "checked_at": "2026-10-06T02:23:15.646614+00:00",
+  "workdir": "/Users/chenli/.t3/worktrees/codeTwo/t3code-6738e658",
+  "head": "14c20fce841384dbeaa16c48c7a7264d6e4a9f81",
+  "baseline_head": "14c20fce841384dbeaa16c48c7a7264d6e4a9f81",
+  "baseline_file_count": 271,
+  "changed_baseline_files": [],
+  "unexpected_paths_outside_bundles": [],
+  "allowed_new_bundles": [
+    "docs/sdlc/changes/2026-10-06-assistant-project-hierarchy/",
+    "docs/sdlc/changes/2026-10-06-native-provider-connectors/"
+  ],
+  "source_snapshot_presence": [
+    {
+      "path": "/tmp/t3tree.json",
+      "exists": false
+    },
+    {
+      "path": "/tmp/t3_ProviderAdapter.ts",
+      "exists": false
+    },
+    {
+      "path": "/tmp/t3_CursorAgentSdk.ts",
+      "exists": false
+    },
+    {
+      "path": "/tmp/t3_CursorAdapterV2.ts",
+      "exists": false
+    },
+    {
+      "path": "/tmp/t3_ClaudeAdapterV2.ts",
+      "exists": false
+    },
+    {
+      "path": "/tmp/t3_CodexAdapterV2.ts",
+      "exists": false
+    },
+    {
+      "path": "/tmp/t3_OpenCode2AdapterV2.ts",
+      "exists": false
+    }
+  ],
+  "dedicated_scratch": [
+    {
+      "path": "/Users/chenli/.t3/worktrees/codeTwo/t3code-6738e658/.codex/run/assistant-project-hierarchy",
+      "exists": false
+    },
+    {
+      "path": "/Users/chenli/.t3/worktrees/codeTwo/t3code-6738e658/.codex/run/native-provider-connectors",
+      "exists": false
+    }
+  ],
+  "source_download_processes": [],
+  "scope": "Design-only records; no product/Core/UI/SDK process launched by owner. Shared platform caches and user processes preserved.",
+  "task_terminal_evidence": "supervision.json",
+  "draft_sha256_matches": true,
+  "byte_check_method": "SHA-256 over exact Path.read_bytes for 271 pre-existing dirty files and eight draft lifecycle documents; Git status detects other new changes",
+  "inspection_commands": [
+    "git status --porcelain=v1 -z --untracked-files=all",
+    "git rev-parse HEAD",
+    "ps -axo pid=,ppid=,command="
+  ],
+  "retained": [
+    {
+      "path": "/Users/chenli/.t3/worktrees/codeTwo/t3code-6738e658/docs/sdlc/changes/2026-10-06-assistant-project-hierarchy",
+      "purpose": "User-reviewable lifecycle drafts with necessary research and supervision evidence",
+      "owner": "codex-main",
+      "next_checkpoint": "Next design revision or first implementation after human design confirmation",
+      "file_count": 16,
+      "logical_bytes": 143740
+    },
+    {
+      "path": "/Users/chenli/.t3/worktrees/codeTwo/t3code-6738e658/docs/sdlc/changes/2026-10-06-native-provider-connectors",
+      "purpose": "User-reviewable lifecycle drafts with necessary research and supervision evidence",
+      "owner": "codex-main",
+      "next_checkpoint": "Next design revision or first implementation after human design confirmation",
+      "file_count": 17,
+      "logical_bytes": 81358
+    }
+  ]
+}

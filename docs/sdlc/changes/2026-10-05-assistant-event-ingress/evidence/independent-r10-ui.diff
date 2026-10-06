@@ -1,0 +1,27 @@
+--- .codex/run/assistant-event-memory/format-before/apps/desktop/tests/assistantEventIngress.test.tsx	2026-10-06 03:24:45
++++ apps/desktop/tests/assistantEventIngress.test.tsx	2026-10-06 03:24:45
+@@ -580,7 +580,10 @@
+   ...extra,
+ });
+ const resetButton = () =>
+-  Array.from(dom.document.querySelectorAll("button")).find((b) => b.getAttribute("aria-label") === "Reset cursor mail-inbox me@example.com");
++  Array.from(dom.document.querySelectorAll("button")).find(
++    (b) =>
++      b.getAttribute("aria-label") === "Reset cursor mail-inbox me@example.com"
++  );
+ const resetForm = () =>
+   dom.document.querySelector('form[aria-label="Reset stream cursor"]');
+ async function openReset() {
+@@ -770,7 +773,11 @@
+     () => expect(form.querySelector('[role="alert"]')).not.toBeNull(),
+     7000
+   );
+-  expect(Array.from(form.querySelectorAll("button")).find((b)=>b.textContent === "Keep my draft on the latest version")).toBeUndefined();
++  expect(
++    Array.from(form.querySelectorAll("button")).find(
++      (b) => b.textContent === "Keep my draft on the latest version"
++    )
++  ).toBeUndefined();
+   expect(button(form, "Approve reset").disabled).toBe(true);
+   submit(form);
+   await sleep(10);

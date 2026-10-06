@@ -1,0 +1,50 @@
+{
+  "revision_spec_sha256": "1b89b6992f467f5aadafbf67f11a942112dfd6c948b3b6e10198887060c512af",
+  "review_kind": "Owner responses to static r1, not independent reacceptance or human approval",
+  "responses": [
+    {
+      "finding": "P1-1 principal",
+      "response": "Preserve raw plugin prefix/realm/manifest connector owner; account scope explicitly adapter-reported and human-pinned. Dedicated record RPC and closed observations capability/initialize feature negotiation."
+    },
+    {
+      "finding": "P1-2 checkpoint and poison events",
+      "response": "Batch stream before/after checkpoint CAS; one inflight per stream/four per plugin; terminal rejected/filtered records can commit coverage; backpressure no commit. Store owns checkpoint. Stable batch_id/request hash stores original atomic batch receipt; unknown outcome lookup retains same id even after checkpoint advance."
+    },
+    {
+      "finding": "P1-3 single JSON revision and size",
+      "response": "Store side tables own observations/keys/checkpoints/target receipts; ingest never bumps user AssistantState revision; bounded storage/quotas/no independent state service."
+    },
+    {
+      "finding": "P1-4 fingerprint and budget starvation",
+      "response": "ScopedReview freezes input ids/hashes and binding versions; receipt state excluded; later arrivals wait next review; per-source cadence and deferred limits, no global attention/tick fail."
+    },
+    {
+      "finding": "P1-5 action authority",
+      "response": "V1 observation-only Core allowlist excludes dispatch/executor communicate/accept/control/memory/permission/send. Status statements retain external provenance and cannot launder a user decision; new execution instructions require original user path."
+    },
+    {
+      "finding": "P2-6 wake and receipt eligibility",
+      "response": "Original runs own reviewing projection, per-goal receipts bounded; Paused/terminal/not-submitted/goals needing attention deferred and notified, not reopened."
+    },
+    {
+      "finding": "P2-7 quotas",
+      "response": "Source/binding quotas; unbound input metadata only, reserved/aggregated gap counts, explicit oversize rejection, canonical hash contract excluding transient host fields."
+    },
+    {
+      "finding": "P2-8 read and immutable input",
+      "response": "Adapter pre-reads; reference-only is immutable and not fetched by Runtime. Snapshot/event/reference origin explicit."
+    },
+    {
+      "finding": "P2-9 excessive capability abstraction",
+      "response": "Only observations record/resume recovery added to ingress. No unused CommunicationIntent table or universal reply API. Existing connector messaging remains future extension with exact destination/content/binding authorization."
+    },
+    {
+      "finding": "P2-10 pause",
+      "response": "Specify enabled=false, global attention, goal state, absent settings and deconfigured bindings separately; observe requires configured trusted binding, pause continues receiving only."
+    },
+    {
+      "finding": "P2-11 event callback blocking",
+      "response": "connector/event handler notify-only; durable work in record request; retain 2-second fallback, no second wake scheduler."
+    }
+  ]
+}

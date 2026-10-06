@@ -9,40 +9,29 @@
 //! The event pump, the skill subscription, and the session commands all belong to its scope, so
 //! "reload the engine" is a real operation rather than a restart.
 
+use crate::engine::{Engine, ParallelTaskCreation};
+use crate::event::Op;
+use crate::kernel::{async_trait, Context, Injection, Plugin, PluginError, PluginResult};
+use crate::permission::{ExecutionPolicy, PermissionMode, SandboxPolicy};
 use crate::plugins::app::events::{EngineEvent, ScenesChanged, SkillsChanged};
 use crate::plugins::app::service::{
     EngineService, EventBus, Paths, ProviderService, SceneService, SkillService, StoreService,
 };
 use crate::plugins::app::{json, take_args};
-use crate::engine::{Engine, ParallelTaskCreation};
-use crate::event::Op;
-use crate::permission::{ExecutionPolicy, PermissionMode, SandboxPolicy};
 use crate::provider::ProviderId;
 use crate::session::TranscriptCursor;
 use crate::task::TaskId;
 use crate::worktree::WorktreeBaseline;
-use crate::kernel::{async_trait, Context, Injection, Plugin, PluginError, PluginResult};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
-use std::sync::Mutex;
-
-#[derive(Clone)]
-struct QueuedPrompt {
-    doc: Vec<crate::skill::DocBlock>,
-    request_id: Option<String>,
-}
 
 /// What the engine is built from. A host that needs a different construction gets these and
 /// returns an engine without forking the plugin graph.
 pub struct EngineInputs {
     pub providers: Vec<crate::provider::Provider>,
-    pub provider_tools: Arc<
-        std::sync::RwLock<
-            std::collections::HashMap<String, crate::provider::ProviderToolset>,
-        >,
-    >,
+    pub provider_tools:
+        Arc<std::sync::RwLock<std::collections::HashMap<String, crate::provider::ProviderToolset>>>,
     pub skills: crate::skill::SkillLibrary,
     pub store: Arc<crate::store::Store>,
     pub memory: Option<crate::memory::MemoryCapability>,
@@ -141,8 +130,8 @@ impl Plugin for EnginePlugin {
             ),
         };
         engine.set_private_data_dir(paths.data_dir.clone());
-        let worktree_settings = crate::worktree::load_settings(&paths.data_dir)
-            .unwrap_or_else(|error| {
+        let worktree_settings =
+            crate::worktree::load_settings(&paths.data_dir).unwrap_or_else(|error| {
                 tracing::warn!("could not load worktree settings: {error}");
                 crate::worktree::WorktreeSettings::default()
             });
@@ -253,9 +242,7 @@ fn register_commands(
                     activity_state: match session.activity.state {
                         crate::session::SessionRunState::Idle => "idle",
                         crate::session::SessionRunState::Running { .. } => "running",
-                        crate::session::SessionRunState::AwaitingInput { .. } => {
-                            "awaiting_input"
-                        }
+                        crate::session::SessionRunState::AwaitingInput { .. } => "awaiting_input",
                         crate::session::SessionRunState::Failed { .. } => "failed",
                     },
                 })
@@ -637,19 +624,18 @@ fn register_commands(
         }
     })?;
 
-    let prompt_queues = Arc::new(Mutex::new(HashMap::<String, VecDeque<QueuedPrompt>>::new()));
     let closing = engine.clone();
-    let closing_queues = prompt_queues.clone();
     ctx.command("engine.close_transient_session", move |args| {
         let engine = closing.clone();
-        let queues = closing_queues.clone();
         async move {
             let args: SessionArgs = take_args(args)?;
             let closed = engine
                 .close_transient_session(&args.session)
                 .map_err(PluginError::new)?;
             if closed {
-                queues.lock().unwrap().remove(&args.session);
+                engine
+                    .cancel_pending_prompts(&args.session)
+                    .map_err(PluginError::new)?;
             }
             json(closed)
         }
@@ -669,118 +655,47 @@ fn register_commands(
     })?;
 
     let queueing = engine.clone();
-    let queued_bus = bus.clone();
-    let queues = prompt_queues.clone();
     ctx.command("engine.queue", move |args| {
         let engine = queueing.clone();
-        let bus = queued_bus.clone();
-        let queues = queues.clone();
         async move {
             let args: PromptArgs = take_args(args)?;
-            if crate::skill::canonical_doc_text(&args.doc)
-                .trim()
-                .is_empty()
-            {
-                return Err(PluginError::new("prompt is empty"));
-            }
-            if engine.session_is_switching_provider(&args.session) {
-                return Err(PluginError::new(
-                    "the provider is still switching for this session",
-                ));
-            }
-            if !engine.session_is_busy(&args.session) {
-                engine
-                    .submit(Op::Prompt {
-                        session: args.session,
-                        doc: args.doc,
-                        request_id: args.request_id,
-                    })
-                    .await
-                    .map_err(PluginError::new)?;
-                return json(serde_json::json!({ "position": 0 }));
-            }
-            let position = {
-                let mut queues = queues.lock().unwrap();
-                let queue = queues.entry(args.session.clone()).or_default();
-                queue.push_back(QueuedPrompt {
-                    doc: args.doc,
-                    request_id: args.request_id.clone(),
-                });
-                queue.len()
-            };
-            bus.publish(crate::event::Event::PromptQueued {
-                session: args.session,
-                request_id: args.request_id,
-                position,
-            });
-            json(serde_json::json!({ "position": position }))
+            let delivery = engine
+                .deliver_prompt(&args.session, args.doc, "queue", args.request_id, None)
+                .await
+                .map_err(PluginError::new)?;
+            let position = engine
+                .delivery_position(&delivery.id)
+                .map_err(PluginError::new)?;
+            json(serde_json::json!({ "position": position, "delivery": delivery }))
         }
     })?;
-
     let steering = engine.clone();
     ctx.command("engine.steer", move |args| {
         let engine = steering.clone();
         async move {
             let args: PromptArgs = take_args(args)?;
-            let outcome = engine
-                .steer_prompt(&args.session, args.doc, args.request_id)
+            let delivery = engine
+                .deliver_prompt(&args.session, args.doc, "steer", args.request_id, None)
                 .await
                 .map_err(PluginError::new)?;
-            json(serde_json::json!({ "outcome": outcome }))
+            if delivery.state != "accepted" {
+                return Err(PluginError::new(delivery.outcome));
+            }
+            json(serde_json::json!({ "outcome": delivery.outcome, "delivery": delivery }))
         }
     })?;
-
-    let draining_engine = engine.clone();
-    let draining_bus = bus.clone();
-    let mut queue_events = bus.subscribe();
+    let draining = engine.clone();
+    let mut delivery_events = bus.subscribe();
     ctx.spawn(async move {
+        let mut interval = tokio::time::interval(std::time::Duration::from_secs(2));
         loop {
-            let event = match queue_events.recv().await {
-                Ok(event) => event,
-                Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
-                Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
-            };
-            let session = match &event {
-                crate::event::Event::TurnEnded { session, .. } => Some(session.clone()),
-                crate::event::Event::Error {
-                    session: Some(session),
-                    terminal: true,
-                    ..
-                } => Some(session.clone()),
-                _ => None,
-            };
-            let Some(session) = session else { continue };
-            if draining_engine.session_is_busy(&session) {
-                continue;
-            }
-            let (next, remaining) = {
-                let mut queues = prompt_queues.lock().unwrap();
-                let Some(queue) = queues.get_mut(&session) else {
-                    continue;
-                };
-                let next = queue.pop_front();
-                let remaining = queue.iter().cloned().collect::<Vec<_>>();
-                if queue.is_empty() {
-                    queues.remove(&session);
+            tokio::select! {
+                _ = interval.tick() => {},
+                event = delivery_events.recv() => {
+                    if matches!(event, Err(tokio::sync::broadcast::error::RecvError::Closed)) { break; }
                 }
-                (next, remaining)
-            };
-            for (index, queued) in remaining.into_iter().enumerate() {
-                draining_bus.publish(crate::event::Event::PromptQueued {
-                    session: session.clone(),
-                    request_id: queued.request_id,
-                    position: index + 1,
-                });
             }
-            if let Some(next) = next {
-                let _ = draining_engine
-                    .submit(Op::Prompt {
-                        session,
-                        doc: next.doc,
-                        request_id: next.request_id,
-                    })
-                    .await;
-            }
+            if let Err(error) = draining.drain_prompt_deliveries().await { tracing::warn!(%error, "prompt delivery reconciliation failed"); }
         }
     });
 
@@ -960,6 +875,9 @@ fn register_commands(
         let engine = cancelling.clone();
         async move {
             let args: SessionArgs = take_args(args)?;
+            engine
+                .cancel_pending_prompts(&args.session)
+                .map_err(PluginError::new)?;
             engine
                 .submit(Op::Cancel {
                     session: args.session,
