@@ -7,11 +7,12 @@
 use std::collections::{BTreeMap, HashMap};
 use std::sync::{Arc, Mutex};
 
-use tokio::sync::{mpsc, oneshot};
+use tokio::sync::oneshot;
 
 use crate::acp::wire::{CreateElicitationResponse, PermissionOutcome};
 use crate::elicitation::{ElicitationAnswer, ElicitationForm};
 use crate::event::Event;
+use crate::external_mcp::events::EventSender;
 use crate::permission::PermissionContext;
 use crate::session::{
     PendingInput, PendingInputKind, RunFailureReason, SessionActivity, SessionRunState,
@@ -31,8 +32,9 @@ struct TrackerInner {
     /// permission callbacks persist or broadcast revisions in the opposite order.
     transitions: Mutex<()>,
     state: Mutex<TrackerState>,
-    events: mpsc::UnboundedSender<Event>,
+    events: EventSender,
     store: Option<Arc<Store>>,
+    turn_terminal_hook: Mutex<Option<Arc<dyn Fn() + Send + Sync>>>,
 }
 
 #[derive(Default)]
@@ -102,15 +104,20 @@ pub struct TurnLease {
 }
 
 impl ActivityTracker {
-    pub fn new(events: mpsc::UnboundedSender<Event>, store: Option<Arc<Store>>) -> ActivityTracker {
+    pub fn new(events: impl Into<EventSender>, store: Option<Arc<Store>>) -> ActivityTracker {
         ActivityTracker {
             inner: Arc::new(TrackerInner {
                 transitions: Mutex::new(()),
                 state: Mutex::new(TrackerState::default()),
-                events,
+                events: events.into(),
                 store,
+                turn_terminal_hook: Mutex::new(None),
             }),
         }
+    }
+
+    pub(crate) fn set_turn_terminal_hook(&self, hook: Arc<dyn Fn() + Send + Sync>) {
+        *self.inner.turn_terminal_hook.lock().unwrap() = Some(hook);
     }
 
     /// Register a durable snapshot without replacing an active or newer live projection.
@@ -535,6 +542,9 @@ impl ActivityTracker {
         for route in routes {
             route.reply.cancel();
         }
+        if let Some(hook) = self.inner.turn_terminal_hook.lock().unwrap().clone() {
+            hook();
+        }
         true
     }
 
@@ -673,6 +683,7 @@ fn activity_for_turn(revision: u64, turn: &TrackedTurn) -> SessionActivity {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tokio::sync::mpsc;
 
     fn running_tracker() -> (ActivityTracker, TurnLease, mpsc::UnboundedReceiver<Event>) {
         let (events, mut receiver) = mpsc::unbounded_channel();

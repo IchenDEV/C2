@@ -121,6 +121,8 @@ pub enum StoreError {
         bound: String,
         requested: String,
     },
+    #[error("session {session_id} is bound to unknown runtime backend {backend:?}")]
+    UnknownRuntimeBackend { session_id: String, backend: String },
 }
 
 const SCHEMA: &str = "
@@ -2111,6 +2113,14 @@ impl Store {
     }
 
     pub(crate) fn upsert_session_on(conn: &Connection, s: &Session) -> Result<(), StoreError> {
+        // A deleted session id is never recreated by a stale runtime/callback writer.
+        if conn
+            .query_row("SELECT 1 FROM sync_tombstones WHERE entity='session' AND entity_id=?1", [&s.id], |_| Ok(()))
+            .optional()?
+            .is_some()
+        {
+            return Err(StoreError::SessionHandoffFenced { session_id: s.id.clone(), state: "deleted".into() });
+        }
         conn.execute(
             "INSERT INTO sessions
                (id,title,provider,model,cwd,project_path,worktree_path,permission_mode,sandbox_policy,acp_session_id,created_at,pinned,title_origin,activity_json,worktree_baseline_json,worktree_common_dir,worktree_git_dir,worktree_identity_json,memory_read,memory_write,worktree_discarded,transient,updated_at,last_active_at)
@@ -2282,9 +2292,17 @@ impl Store {
                 |row| Ok((row.get::<_, String>(0)?, row.get::<_, u32>(1)?)),
             )
             .optional()?;
-        Ok(row.and_then(|(name, version)| {
-            crate::provider_runtime::RuntimeBackendKind::parse(&name).map(|kind| (kind, version))
-        }))
+        // A row naming a backend this build doesn't know (written by a newer build) is an error:
+        // treating it as "no row" would silently send the session through ACP.
+        match row {
+            None => Ok(None),
+            Some((name, version)) => crate::provider_runtime::RuntimeBackendKind::parse(&name)
+                .map(|kind| Some((kind, version)))
+                .ok_or(StoreError::UnknownRuntimeBackend {
+                    session_id: session_id.to_string(),
+                    backend: name,
+                }),
+        }
     }
 
     /// Bind a session to one backend before its first provider call. Idempotent for the same
@@ -2757,6 +2775,42 @@ impl Store {
             [session_id],
         )?;
         Ok(())
+    }
+
+    /// Delete an idle session's owned records without removing its workspace or shared blobs.
+    /// The Engine holds an unaccepted turn reservation throughout this transaction.
+    pub(crate) fn delete_idle_session(&self, id: &str) -> Result<bool, StoreError> {
+        let mut conn = self.conn.lock().unwrap();
+        let tx = conn.transaction()?;
+        if let Some(status) = session_handoff_status_on(&tx, id)? {
+            if status.state != HandoffState::Active {
+                return Err(StoreError::SessionHandoffFenced {
+                    session_id: id.into(), state: status.state.as_db().into(),
+                });
+            }
+        } else { return Ok(false); }
+        // Task ownership and history are never dropped: an active lease is ownership, a released
+        // one is history that still references the session (a foreign key, enforced).
+        if tx.query_row("SELECT 1 FROM task_session_leases_v2 WHERE session_id=?1", [id], |_| Ok(())).optional()?.is_some() {
+            return Err(StoreError::SessionLeaseConflict { session_id: id.into(), reason: "session is referenced by task history".into() });
+        }
+        let now = crate::session::now_millis();
+        // Owned memories are removed like `memory.rs` does: tombstoned for sync, links cleared.
+        tx.execute("INSERT INTO sync_tombstones(entity,entity_id,deleted_at) SELECT 'memory',id,?2 FROM memories WHERE session_id=?1 ON CONFLICT(entity,entity_id) DO UPDATE SET deleted_at=MAX(deleted_at,excluded.deleted_at)", rusqlite::params![id, now])?;
+        tx.execute("UPDATE memories SET supersedes_id=NULL WHERE supersedes_id IN (SELECT id FROM memories WHERE session_id=?1)", [id])?;
+        tx.execute("UPDATE memories SET conflict_with_id=NULL,conflict_reason=NULL WHERE conflict_with_id IN (SELECT id FROM memories WHERE session_id=?1)", [id])?;
+        for table in ["memory_receipts", "memories", "memory_candidates", "memory_turns", "assistant_worker_receipts", "prompt_deliveries", "parts", "session_runtime", "command_receipts", "artifact_refs", "scene_artifacts"] {
+            tx.execute(&format!("DELETE FROM {table} WHERE session_id=?1"), [id])?;
+        }
+        // Run history belongs to its automation; only the dangling session reference is cleared.
+        tx.execute("UPDATE automation_runs SET session_id=NULL WHERE session_id=?1", [id])?;
+        tx.execute("UPDATE task_suggestions_v1 SET execution_session_id=NULL WHERE execution_session_id=?1", [id])?;
+        tx.execute("UPDATE issue_delegations SET session_id=NULL WHERE session_id=?1", [id])?;
+        tx.execute("UPDATE pipeline_transitions SET session_id=NULL WHERE session_id=?1", [id])?;
+        tx.execute("INSERT OR REPLACE INTO sync_tombstones(entity,entity_id,deleted_at) VALUES('session',?1,?2)", rusqlite::params![id, crate::session::now_millis()])?;
+        let removed = tx.execute("DELETE FROM sessions WHERE id=?1", [id])? > 0;
+        tx.commit()?;
+        Ok(removed)
     }
 
     /// Delete one app-lifetime side chat and all of its owned rows. Durable sessions are refused.
@@ -6139,5 +6193,25 @@ mod tests {
         assert!(store.sessions_for_pipeline("inst-1").unwrap().is_empty());
         // An unknown session is None, not an error (the reader is called from event glue).
         assert_eq!(store.session_pipeline("missing").unwrap(), None);
+    }
+
+    #[test]
+    fn a_binding_naming_an_unknown_backend_is_an_error_not_a_missing_row() {
+        let store = Store::open_in_memory().unwrap();
+        store
+            .conn
+            .lock()
+            .unwrap()
+            .execute(
+                "INSERT INTO session_runtime(session_id,backend,contract_version) VALUES ('s1','from-the-future',1)",
+                [],
+            )
+            .unwrap();
+        // Reading it as "no row" would send the session through ACP.
+        assert!(matches!(
+            store.session_runtime_binding("s1"),
+            Err(StoreError::UnknownRuntimeBackend { .. })
+        ));
+        assert_eq!(store.session_runtime_binding("missing").unwrap(), None);
     }
 }

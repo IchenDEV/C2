@@ -454,3 +454,148 @@ fn live_steering_has_a_separate_lane_and_cannot_cross_into_a_later_turn() {
         "cancelled"
     );
 }
+
+#[tokio::test]
+async fn queued_prompt_starts_when_prior_turn_ends_without_manual_drain() {
+    use codetwo_core::{
+        event::Event,
+        provider::{LaunchSpec, Provider},
+        skill::SkillLibrary,
+        Engine, Op,
+    };
+    use std::{sync::Arc, time::Duration};
+
+    let script = r#"
+import json,sys
+pending=None
+for line in sys.stdin:
+    m=json.loads(line); method=m.get('method'); mid=m.get('id'); result={}
+    if method=='initialize': result={'protocolVersion':1}
+    elif method=='session/new': result={'sessionId':'fast'}
+    elif method=='session/prompt': pending=mid; continue
+    elif method=='session/cancel':
+        if pending is not None:
+            print(json.dumps({'jsonrpc':'2.0','id':pending,'result':{'stopReason':'end_turn'}}),flush=True)
+        pending=None; continue
+    elif mid is None: continue
+    print(json.dumps({'jsonrpc':'2.0','id':mid,'result':result}),flush=True)
+"#;
+    let root = tempfile::tempdir().unwrap();
+    let store = Arc::new(Store::open_in_memory().unwrap());
+    let (engine, mut events) = Engine::with_store(
+        vec![Provider {
+            id: ProviderId::Grok,
+            display_name: "Fast turn fixture".into(),
+            launch: LaunchSpec::new("python3", ["-c", script]),
+            needs_node: false,
+        }],
+        SkillLibrary::new(vec![]),
+        store.clone(),
+    );
+    engine
+        .submit(Op::NewSession {
+            provider: ProviderId::Grok,
+            cwd: root.path().to_string_lossy().into(),
+            use_worktree: false,
+            worktree_base: None,
+            worktree_base_sha: None,
+            request_id: Some("create".into()),
+            model: None,
+            initial_policy: None,
+        })
+        .await
+        .unwrap();
+    let session = tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            if let Some(Event::SessionCreated { session, .. }) = events.recv().await {
+                break session;
+            }
+        }
+    })
+    .await
+    .unwrap();
+    let first = engine.clone();
+    let session_for_first = session.clone();
+    let first_turn = tokio::spawn(async move {
+        first
+            .submit(Op::Prompt {
+                session: session_for_first,
+                doc: vec![DocBlock::Text {
+                    text: "first".into(),
+                }],
+                request_id: Some("first-turn".into()),
+            })
+            .await
+    });
+    tokio::time::timeout(Duration::from_secs(5), async {
+        while engine.current_turn(&session).is_none() {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .unwrap();
+    engine
+        .enqueue_prompt(
+            &session,
+            vec![DocBlock::Text {
+                text: "queued follow-up".into(),
+            }],
+            "queue",
+            Some("queued-follow-up".into()),
+            None,
+        )
+        .unwrap();
+    assert_eq!(
+        store
+            .prompt_delivery("queued-follow-up")
+            .unwrap()
+            .unwrap()
+            .state,
+        "queued"
+    );
+    engine
+        .submit(Op::Cancel {
+            session: session.clone(),
+        })
+        .await
+        .unwrap();
+    first_turn.await.unwrap().unwrap();
+    tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            let state = store
+                .prompt_delivery("queued-follow-up")
+                .unwrap()
+                .unwrap()
+                .state;
+            if state == "accepted" {
+                break;
+            }
+            assert_ne!(state, "unknown");
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .unwrap();
+}
+
+#[tokio::test]
+async fn unknown_submitting_delivery_is_settled_and_not_retried_on_drain() {
+    use codetwo_core::{skill::SkillLibrary, Engine};
+    use std::sync::Arc;
+
+    let store = Arc::new(Store::open_in_memory().unwrap());
+    let (_, session, delivery) = setup(&store);
+    store.enqueue_delivery(&delivery).unwrap();
+    assert!(store.claim_delivery(&delivery.id).unwrap());
+    let (engine, _events) = Engine::with_store(vec![], SkillLibrary::new(vec![]), store.clone());
+    engine.drain_prompt_deliveries().await.unwrap();
+    let settled = store.prompt_delivery(&delivery.id).unwrap().unwrap();
+    assert_eq!(settled.state, "unknown");
+    assert!(store.pending_deliveries().unwrap().is_empty());
+    engine.drain_prompt_deliveries().await.unwrap();
+    assert_eq!(
+        store.prompt_delivery(&delivery.id).unwrap().unwrap().state,
+        "unknown"
+    );
+    assert!(store.transcript(&session.id).unwrap().is_empty());
+}

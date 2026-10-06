@@ -44,6 +44,14 @@ jobs:
               - 'Cargo.lock'
       - name: Install dependencies
         run: bun install --frozen-lockfile --cwd apps/desktop
+      - name: Repository lifecycle and documentation
+        run: |
+          bun script/verify/sdlc.ts
+          bun script/verify/docs.ts
+          bun test script/verify/checks.test.ts script/verify/four-stage.test.ts script/devflow.test.ts
+      - name: PR scope and readiness
+        if: github.event_name == 'pull_request'
+        run: bun script/devflow.ts check-pr
       - name: Desktop lint and typecheck
         working-directory: apps/desktop
         run: |
@@ -66,6 +74,12 @@ jobs:
         run: |
           curl -L https://ziglang.org/download/0.15.2/zig-x86_64-linux-0.15.2.tar.xz | tar xJ -C /tmp
           echo "/tmp/zig-x86_64-linux-0.15.2" >> "$GITHUB_PATH"
+      - name: Install Rust integration runtime dependencies
+        if: steps.changes.outputs.rust == 'true'
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes ripgrep
+          rg --version
       - name: Rust workspace check
         if: steps.changes.outputs.rust == 'true'
         run: cargo check --workspace --all-targets

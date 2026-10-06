@@ -1,27 +1,15 @@
 //! `codetwo-server` — run one C2 Core with either the compact remote or the full React Web UI.
 //!
-//! Env: `CODETWO_HOST` (default 0.0.0.0), `CODETWO_PORT` (default 4599), `CODETWO_PAIR_TTL`
+//! Env: `CODETWO_HOST` (default 0.0.0.0, or 127.0.0.1 for `serve`), `CODETWO_PORT` (default 4599), `CODETWO_PAIR_TTL`
 //! (pairing-token lifetime in seconds, default 900), `CODETWO_DATA_DIR`, and
 //! `CODETWO_WEB_UI_DIR`. `serve` is the headless daemon for a remote machine, and `pair` asks a
 //! running daemon for a fresh pairing link.
 
-use std::net::SocketAddr;
-use std::path::{Path, PathBuf};
-use std::process::Command;
-use std::sync::Arc;
+use std::path::PathBuf;
 use std::time::Duration;
 
-use codetwo_core::plugins::{
-    AppConfig, CanvasService, CoreApp, EngineService, EventBus, PluginManager, StoreService,
-};
-use codetwo_server::daemon::{
-    pairing_base_url, request_pairing_link, write_pairing_file, InstanceLock,
-};
-use codetwo_server::{
-    bind_and_serve_with_canvas, bind_and_serve_with_web_ui, pairing_endpoints,
-    pairing_url_for_endpoint, print_pairing, print_pairing_link, AuthState, KernelWebUiCommands,
-    DEFAULT_PAIRING_TTL,
-};
+use codetwo_server::daemon::request_pairing_link;
+use codetwo_server::serve::{resolve_data_dir, ServeConfig, ServeOptions, ServeSurface};
 
 const HELP: &str = r#"Usage:
   codetwo-server
@@ -145,125 +133,16 @@ fn parse_args(arguments: impl IntoIterator<Item = String>) -> Result<Parsed, Str
     Ok(Parsed::Run(cli))
 }
 
-fn default_data_dir() -> PathBuf {
-    let home = codetwo_core::provider::home_dir().unwrap_or_else(std::env::temp_dir);
-    home.join(".codetwo")
-}
-
-fn resolve_data_dir(explicit: Option<PathBuf>) -> PathBuf {
-    explicit
-        .or_else(|| std::env::var_os("CODETWO_DATA_DIR").map(PathBuf::from))
-        .unwrap_or_else(default_data_dir)
-}
-
-fn resolve_ui_dir(
-    explicit: Option<PathBuf>,
-    configured: Option<PathBuf>,
-    executable: &Path,
-) -> Result<PathBuf, String> {
-    let candidate = explicit
-        .or(configured)
-        .or_else(|| executable.parent().map(|parent| parent.join("web-ui")))
-        .ok_or_else(|| "cannot resolve the C2 Web UI directory".to_string())?;
-    if !candidate.join("index.html").is_file() {
-        return Err(format!(
-            "C2 Web UI assets are missing at {}. Run ./script/build/hosts.sh release or pass --ui-dir <path>.",
-            candidate.display()
-        ));
-    }
-    candidate.canonicalize().map_err(|error| {
-        format!(
-            "cannot resolve C2 Web UI assets at {}: {error}",
-            candidate.display()
-        )
-    })
-}
-
-fn local_pairing_url(port: u16, pairing_token: &str) -> String {
-    let endpoints = pairing_endpoints(port);
-    let endpoint = endpoints
-        .iter()
-        .find(|endpoint| endpoint.id == "loopback")
-        .or_else(|| endpoints.first())
-        .expect("pairing endpoints include loopback");
-    pairing_url_for_endpoint(&endpoint.url, pairing_token)
-}
-
-fn open_browser(url: &str) -> std::io::Result<()> {
-    #[cfg(target_os = "macos")]
-    let mut command = {
-        let mut command = Command::new("open");
-        command.arg(url);
-        command
-    };
-    #[cfg(target_os = "windows")]
-    let mut command = {
-        let mut command = Command::new("cmd");
-        command.args(["/C", "start", "", url]);
-        command
-    };
-    #[cfg(all(unix, not(target_os = "macos")))]
-    let mut command = {
-        let mut command = Command::new("xdg-open");
-        command.arg(url);
-        command
-    };
-    command.spawn().map(|_| ())
-}
-
-/// `serve` always exposes the command route; a UI directory is optional because a desktop or
-/// phone client may bring its own renderer. An explicit `--ui-dir` that is missing is an error.
-fn serve_ui_dir(cli_dir: Option<PathBuf>) -> Result<Option<PathBuf>, String> {
-    let executable = std::env::current_exe()
-        .map_err(|error| format!("cannot resolve codetwo-server executable: {error}"))?;
-    let configured = std::env::var_os("CODETWO_WEB_UI_DIR").map(PathBuf::from);
-    let explicit = cli_dir.is_some() || configured.is_some();
-    match resolve_ui_dir(cli_dir, configured, &executable) {
-        Ok(dir) => Ok(Some(dir)),
-        Err(error) if explicit => Err(error),
-        Err(_) => Ok(None),
-    }
-}
-
-async fn shutdown_signal() {
-    #[cfg(unix)]
-    {
-        if let Ok(mut terminate) =
-            tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
-        {
-            tokio::select! {
-                _ = tokio::signal::ctrl_c() => {}
-                _ = terminate.recv() => {}
-            }
-            return;
-        }
-    }
-    let _ = tokio::signal::ctrl_c().await;
-}
-
+/// Every launcher goes through `codetwo_server::serve`, the one Core boot path shared with
+/// `codetwo serve`; this binary only maps its commands onto that configuration.
 async fn run(cli: Cli) -> Result<(), String> {
     let serve = cli.surface == Surface::Serve;
-    let web_ui_dir = match cli.surface {
-        Surface::Compact => None,
-        Surface::Serve => serve_ui_dir(cli.ui_dir)?,
-        Surface::WebUi => {
-            let executable = std::env::current_exe()
-                .map_err(|error| format!("cannot resolve codetwo-server executable: {error}"))?;
-            Some(resolve_ui_dir(
-                cli.ui_dir,
-                std::env::var_os("CODETWO_WEB_UI_DIR").map(PathBuf::from),
-                &executable,
-            )?)
-        }
-    };
-
     // A headless daemon is reachable only where the operator says so; the interactive launchers
-    // keep their historical LAN-wide default.
-    let default_host = if serve { "127.0.0.1" } else { "0.0.0.0" };
+    // keep advertising a LAN-reachable pairing link.
     let host = cli
         .host
         .or_else(|| std::env::var("CODETWO_HOST").ok())
-        .unwrap_or_else(|| default_host.into());
+        .unwrap_or_else(|| if serve { "127.0.0.1" } else { "0.0.0.0" }.into());
     let port: u16 = cli
         .port
         .or_else(|| {
@@ -272,149 +151,29 @@ async fn run(cli: Cli) -> Result<(), String> {
                 .and_then(|value| value.parse().ok())
         })
         .unwrap_or(4599);
-    let pair_ttl = std::env::var("CODETWO_PAIR_TTL")
-        .ok()
-        .and_then(|value| value.parse().ok())
-        .map(Duration::from_secs)
-        .unwrap_or(DEFAULT_PAIRING_TTL);
-
-    let data_dir = resolve_data_dir(cli.data_dir);
-    std::fs::create_dir_all(&data_dir).map_err(|error| {
-        format!(
-            "cannot create data directory {}: {error}",
-            data_dir.display()
-        )
-    })?;
-    // One data directory, one live Core owner. Held until the process exits.
-    let _instance = if serve {
-        Some(InstanceLock::acquire(&data_dir)?)
-    } else {
-        None
+    let surface = match cli.surface {
+        Surface::Compact => ServeSurface::Compact,
+        Surface::WebUi => ServeSurface::WebUi,
+        Surface::Serve => ServeSurface::Daemon,
     };
-    let core = Arc::new(
-        CoreApp::boot(AppConfig::new(&data_dir))
-            .await
-            .map_err(|error| error.to_string())?,
-    );
-    let engine = core
-        .service::<EngineService>()
-        .ok_or_else(|| "engine plugin did not load".to_string())?
-        .0
-        .clone();
-    let store = core
-        .service::<StoreService>()
-        .ok_or_else(|| "store plugin did not load".to_string())?
-        .0
-        .clone();
-    let events = core
-        .service::<EventBus>()
-        .ok_or_else(|| "bus plugin did not load".to_string())?
-        .0
-        .clone();
-    let canvas_gate = core
-        .service::<CanvasService>()
-        .ok_or_else(|| "canvas service did not load".to_string())?
-        .gate;
-
-    let auth = Arc::new(AuthState::load(Some(data_dir.join("remote-devices.json"))));
-    let pairing_token = auth.issue_pairing_token(pair_ttl);
-    let addr: SocketAddr = format!("{host}:{port}")
-        .parse()
-        .map_err(|error| format!("invalid C2 server address {host}:{port}: {error}"))?;
-
-    let (local, mut handle) = if serve || web_ui_dir.is_some() {
-        let plugin_manager = core
-            .service::<PluginManager>()
-            .ok_or_else(|| "plugin manager did not load".to_string())?;
-        bind_and_serve_with_web_ui(
-            engine,
-            events,
-            addr,
-            auth.clone(),
-            store,
-            canvas_gate,
-            None,
-            Some(Arc::new(KernelWebUiCommands::new(plugin_manager))),
-            web_ui_dir,
-        )
-        .await
-        .map_err(|error| error.to_string())?
-    } else {
-        bind_and_serve_with_canvas(engine, events, addr, auth.clone(), store, canvas_gate)
-            .await
-            .map_err(|error| error.to_string())?
-    };
-
-    let paired = auth.list_devices().len();
-    if serve {
-        let public_url = cli
-            .public_url
-            .or_else(|| std::env::var("CODETWO_PUBLIC_URL").ok());
-        let (base, shareable) = pairing_base_url(&host, local.port(), public_url.as_deref());
-        println!("\n  C2 server is live on {local}");
-        println!("  data directory: {}", data_dir.display());
-        print_pairing_link(
-            &pairing_url_for_endpoint(&base, &pairing_token),
-            shareable,
-            pair_ttl,
-        );
-        if paired > 0 {
-            println!("  {paired} previously paired device(s) can reconnect without a new link.");
-        }
-        println!(
-            "  More devices: run `codetwo-server pair --data-dir {}`\n",
-            data_dir.display()
-        );
-        #[cfg(unix)]
-        {
-            let auth = auth.clone();
-            let data_dir = data_dir.clone();
-            tokio::spawn(async move {
-                let Ok(mut requests) =
-                    tokio::signal::unix::signal(tokio::signal::unix::SignalKind::user_defined1())
-                else {
-                    return;
-                };
-                while requests.recv().await.is_some() {
-                    let token = auth.issue_pairing_token(pair_ttl);
-                    let link = pairing_url_for_endpoint(&base, &token);
-                    if let Err(error) = write_pairing_file(&data_dir, &link) {
-                        eprintln!("codetwo-server: {error}");
-                    }
-                }
-            });
-        }
-    } else {
-        print_pairing(local.port(), &pairing_token);
-        if paired > 0 {
-            println!("  {paired} previously paired device(s) can reconnect without a new link.\n");
-        }
-        println!("  listening on {local}");
-        println!("  data directory: {}\n", data_dir.display());
-
-        if cli.surface == Surface::WebUi && cli.open_browser {
-            let url = local_pairing_url(local.port(), &pairing_token);
-            if let Err(error) = open_browser(&url) {
-                eprintln!("  could not open the browser: {error}");
-                eprintln!("  open this URL manually: {url}\n");
-            }
-        }
-    }
-
-    if serve {
-        tokio::select! {
-            _ = &mut handle => {}
-            _ = shutdown_signal() => handle.abort(),
-        }
-        // Stop providers and flush the store before the data directory is released.
-        if let Ok(core) = Arc::try_unwrap(core) {
-            core.stop().await;
-        }
-    } else {
-        let _core = core;
-        let _ = handle.await;
-    }
-    Ok(())
+    codetwo_server::serve::run_with(
+        ServeConfig {
+            surface,
+            ui_dir: cli.ui_dir,
+            data_dir: cli.data_dir,
+            open_browser: cli.open_browser,
+            host,
+            port,
+            external_mcp: false,
+            // No tunnel from this binary: remote access is `codetwo serve --remote ...` only.
+            remote_args: Vec::new(),
+        },
+        ServeOptions {
+            instance_lock: serve,
+            public_url: cli.public_url,
+        },
+    )
+    .await
 }
 
 #[tokio::main]
@@ -456,7 +215,8 @@ async fn main() {
 
 #[cfg(test)]
 mod tests {
-    use super::{parse_args, resolve_ui_dir, Cli, Parsed, Surface};
+    use super::{parse_args, Cli, Parsed, Surface};
+    use codetwo_server::serve::resolve_ui_dir;
     use std::path::PathBuf;
 
     fn parsed(arguments: &[&str]) -> Cli {

@@ -239,6 +239,48 @@ async fn sessions_without_a_binding_stay_acp_even_when_native_is_enabled_later()
     while events.try_recv().is_ok() {}
 }
 
+#[tokio::test]
+async fn a_binding_from_a_newer_contract_is_refused_not_guessed_or_sent_through_acp() {
+    let dir = tempfile::tempdir().unwrap();
+    let marker = dir.path().join("acp-started");
+    let store = Arc::new(Store::open_in_memory().unwrap());
+    let session = codetwo_core::session::Session::new(
+        ProviderId::ClaudeCode,
+        std::env::temp_dir().to_string_lossy().into_owned(),
+    );
+    store.upsert_session(&session).unwrap();
+    store
+        .bind_session_runtime(
+            &session.id,
+            RuntimeBackendKind::ClaudeAgentSdk,
+            codetwo_core::RUNTIME_CONTRACT_VERSION + 1,
+        )
+        .unwrap();
+
+    let (owner, mut events) = engine(&store, &marker, native_claude());
+    owner
+        .0
+        .submit(Op::Prompt {
+            session: session.id.clone(),
+            doc: vec![DocBlock::Text { text: "hi".into() }],
+            request_id: None,
+        })
+        .await
+        .ok();
+    let message = tokio::time::timeout(Duration::from_secs(10), async {
+        loop {
+            if let Event::Error { message, .. } = events.recv().await.expect("event channel closed")
+            {
+                return message;
+            }
+        }
+    })
+    .await
+    .expect("no error was reported");
+    assert!(message.contains("contract"), "{message}");
+    assert!(!marker.exists(), "ACP must not serve a native session");
+}
+
 #[test]
 fn a_session_binding_is_idempotent_and_never_rewritten_to_another_backend() {
     let store = Store::open_in_memory().unwrap();
@@ -475,9 +517,11 @@ async fn a_sidecar_crash_mid_turn_ends_the_turn_without_replaying_it() {
         .await
         .unwrap();
     // The turn must end with an error and release the session; it must not be re-sent.
+    let mut disposition = None;
     let message = tokio::time::timeout(Duration::from_secs(20), async {
         loop {
             match events.recv().await.expect("event channel closed") {
+                Event::ThreadDisposition { disposition: d, .. } => disposition = Some(d),
                 Event::Error { message, .. } => return message,
                 Event::TurnEnded { stop_reason, .. } => {
                     panic!("a crash is not a clean end: {stop_reason}")
@@ -489,6 +533,8 @@ async fn a_sidecar_crash_mid_turn_ends_the_turn_without_replaying_it() {
     .await
     .expect("crash was never reported");
     assert!(!message.is_empty());
+    // A crash proves nothing about the connection: it is reported broken before the error.
+    assert_eq!(disposition, Some(codetwo_core::ThreadDisposition::Broken));
     tokio::time::timeout(Duration::from_secs(10), async {
         while owner.0.current_turn(&session).is_some() {
             tokio::time::sleep(Duration::from_millis(5)).await;
@@ -542,4 +588,109 @@ async fn stop_right_after_the_turn_starts_still_settles() {
         seen.push(format!("{event:?}").chars().take(120).collect::<String>());
     }
     assert!(settled.is_ok(), "stop never settled; events: {seen:#?}");
+}
+
+#[tokio::test]
+async fn native_session_injects_codetwo_host_mcp_when_opted_in() {
+    let dir = tempfile::tempdir().unwrap();
+    let marker = dir.path().join("acp-started");
+    let store = Arc::new(Store::open_in_memory().unwrap());
+    let (owner, mut events) = engine(&store, &marker, native_claude());
+    owner.0.set_host_mcp_enabled(true);
+    owner
+        .0
+        .set_host_mcp_http_endpoint(Some("http://127.0.0.1:9/mcp".into()));
+    let session = create_session(&owner, &mut events).await.unwrap();
+    let _ = prompt(&owner, &mut events, &session, "hello").await;
+    let attached = owner.0.attached_mcp_servers_for_session(&session);
+    let codetwo = attached
+        .iter()
+        .find(|server| server.name == codetwo_core::HOST_MCP_SERVER_NAME)
+        .expect("codetwo host MCP server");
+    match &codetwo.transport {
+        codetwo_core::skill::McpTransport::Http { url, headers } => {
+            assert_eq!(url, "http://127.0.0.1:9/mcp");
+            assert!(headers.iter().any(|(k, v)| k == "Authorization" && v.starts_with("Bearer ")));
+        }
+        other => panic!("expected HTTP transport, got {other:?}"),
+    }
+}
+
+#[tokio::test]
+async fn host_mcp_injection_stays_off_without_opt_in() {
+    let dir = tempfile::tempdir().unwrap();
+    let marker = dir.path().join("acp-started");
+    let store = Arc::new(Store::open_in_memory().unwrap());
+    let (owner, mut events) = engine(&store, &marker, native_claude());
+    owner
+        .0
+        .set_host_mcp_http_endpoint(Some("http://127.0.0.1:9/mcp".into()));
+    let session = create_session(&owner, &mut events).await.unwrap();
+    let _ = prompt(&owner, &mut events, &session, "hello").await;
+    let attached = owner.0.attached_mcp_servers_for_session(&session);
+    assert!(
+        !attached
+            .iter()
+            .any(|server| server.name == codetwo_core::HOST_MCP_SERVER_NAME)
+    );
+}
+
+#[tokio::test]
+async fn a_broken_connection_loses_its_host_mcp_credential() {
+    let dir = tempfile::tempdir().unwrap();
+    let marker = dir.path().join("acp-started");
+    let store = Arc::new(Store::open_in_memory().unwrap());
+    let (owner, mut events) = engine(&store, &marker, native_claude());
+    owner.0.set_host_mcp_enabled(true);
+    owner
+        .0
+        .set_host_mcp_http_endpoint(Some("http://127.0.0.1:9/mcp".into()));
+    let session = create_session(&owner, &mut events).await.unwrap();
+    let _ = prompt(&owner, &mut events, &session, "hello").await;
+    let bearer = owner
+        .0
+        .attached_mcp_servers_for_session(&session)
+        .iter()
+        .find_map(|server| match &server.transport {
+            codetwo_core::skill::McpTransport::Http { headers, .. } => headers
+                .iter()
+                .find(|(name, _)| name == "Authorization")
+                .and_then(|(_, value)| value.strip_prefix("Bearer ").map(str::to_string)),
+            _ => None,
+        })
+        .expect("bearer injected");
+    let call = serde_json::json!({
+        "jsonrpc": "2.0", "id": 1, "method": "tools/call",
+        "params": {"name": "codetwo_capabilities", "arguments": {}}
+    });
+    let live = owner.0.handle_host_mcp_json(&bearer, &call);
+    assert!(live.get("error").is_none(), "live session is served: {live}");
+    assert!(live["result"]["isError"] != serde_json::json!(true), "{live}");
+
+    // The sidecar dies mid-turn: the outcome is Unknown, the connection is broken and evicted.
+    owner
+        .0
+        .submit(Op::Prompt {
+            session: session.clone(),
+            doc: vec![DocBlock::Text {
+                text: "crash now".into(),
+            }],
+            request_id: None,
+        })
+        .await
+        .unwrap();
+    tokio::time::timeout(Duration::from_secs(20), async {
+        loop {
+            if let Event::Error { .. } = events.recv().await.expect("event channel closed") {
+                break;
+            }
+        }
+    })
+    .await
+    .expect("crash was never reported");
+    let after = owner.0.handle_host_mcp_json(&bearer, &call);
+    assert!(
+        after.get("error").is_some() || after["result"]["isError"] == serde_json::json!(true),
+        "revoked credential must not be served: {after}"
+    );
 }

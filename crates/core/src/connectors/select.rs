@@ -59,6 +59,44 @@ fn sidecar_dir(kind: RuntimeBackendKind) -> Option<&'static str> {
     }
 }
 
+/// A directory is a sidecar root when it holds the shared sidecar runtime.
+fn is_sidecar_root(dir: &std::path::Path) -> bool {
+    dir.join("common/runtime.mjs").is_file()
+}
+
+/// Find the sidecars next to the running executable: the packaged layout
+/// (`<app>/provider-sidecars`, beside the `bin/` directory) or a development build under
+/// `target/<profile>/` inside the repository checkout.
+fn discover_sidecar_root() -> Option<PathBuf> {
+    let exe = std::env::current_exe().ok()?.canonicalize().ok()?;
+    let dir = exe.parent()?;
+    let mut candidates = vec![
+        dir.join("provider-sidecars"),
+        dir.join("../provider-sidecars"),
+    ];
+    for ancestor in dir.ancestors().take(5) {
+        candidates.push(ancestor.join("script/provider-sidecars"));
+    }
+    candidates
+        .into_iter()
+        .find(|candidate| is_sidecar_root(candidate))
+}
+
+/// `node` from PATH, falling back to the usual install locations a GUI-launched app does not
+/// have on its PATH. Sidecars need Node 22.13 or newer (the Cursor SDK's floor).
+fn discover_js_runtime() -> Option<PathBuf> {
+    let on_path = std::env::var_os("PATH")
+        .into_iter()
+        .flat_map(|paths| std::env::split_paths(&paths).collect::<Vec<_>>());
+    let fallbacks = ["/opt/homebrew/bin", "/usr/local/bin", "/usr/bin"]
+        .into_iter()
+        .map(PathBuf::from);
+    on_path
+        .chain(fallbacks)
+        .map(|dir| dir.join(if cfg!(windows) { "node.exe" } else { "node" }))
+        .find(|candidate| candidate.is_file())
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct NativeBackends {
     enabled: HashSet<RuntimeBackendKind>,
@@ -74,8 +112,12 @@ impl NativeBackends {
         if let Ok(list) = std::env::var(NATIVE_PROVIDERS_ENV) {
             config.enabled = list.split(',').filter_map(parse_opt_in).collect();
         }
-        config.sidecar_root = std::env::var_os(SIDECAR_ROOT_ENV).map(PathBuf::from);
-        config.js_runtime = std::env::var_os(JS_RUNTIME_ENV).map(PathBuf::from);
+        config.sidecar_root = std::env::var_os(SIDECAR_ROOT_ENV)
+            .map(PathBuf::from)
+            .or_else(discover_sidecar_root);
+        config.js_runtime = std::env::var_os(JS_RUNTIME_ENV)
+            .map(PathBuf::from)
+            .or_else(discover_js_runtime);
         config
     }
 
@@ -104,6 +146,26 @@ impl NativeBackends {
 
     pub fn is_enabled(&self, kind: RuntimeBackendKind) -> bool {
         self.enabled.contains(&kind)
+    }
+
+    pub fn sidecar_root(&self) -> Option<&std::path::Path> {
+        self.sidecar_root.as_deref()
+    }
+
+    /// Stable names for diagnostics and host MCP capability reporting.
+    pub fn enabled_native_kind_names(&self) -> Vec<&'static str> {
+        use crate::provider_runtime::RuntimeBackendKind;
+        [
+            RuntimeBackendKind::CodexAppServer,
+            RuntimeBackendKind::ClaudeAgentSdk,
+            RuntimeBackendKind::CursorSdk,
+            RuntimeBackendKind::OpenCodeV1,
+            RuntimeBackendKind::OpenCodeV2,
+        ]
+        .into_iter()
+        .filter(|kind| self.is_enabled(*kind))
+        .map(|kind| kind.as_str())
+        .collect()
     }
 
     /// Backend for a session that has no persisted choice and no provider-side session yet.
@@ -255,6 +317,27 @@ mod tests {
             RuntimeBackendKind::Acp
         );
         assert!(!config.is_enabled(RuntimeBackendKind::Acp));
+    }
+
+    #[test]
+    fn a_sidecar_root_is_recognised_by_its_shared_runtime() {
+        let root = tempfile_root();
+        assert!(!is_sidecar_root(&root));
+        std::fs::create_dir_all(root.join("common")).unwrap();
+        std::fs::write(root.join("common/runtime.mjs"), "").unwrap();
+        assert!(is_sidecar_root(&root));
+        std::fs::remove_dir_all(root).ok();
+    }
+
+    #[test]
+    fn the_repository_sidecars_are_found_from_a_development_build() {
+        // The test executable lives under target/<profile>/deps inside the checkout.
+        let root = discover_sidecar_root().expect("development layout should resolve");
+        assert!(
+            root.ends_with("script/provider-sidecars"),
+            "{}",
+            root.display()
+        );
     }
 
     #[test]

@@ -22,6 +22,7 @@ import {
   SlidersHorizontal,
   UserRound,
   Wrench,
+  Share2,
 } from "@/components/ui/icons";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
@@ -68,6 +69,7 @@ import { useTheme } from "../theme";
 import { UsagePanel } from "../usage/Usage";
 import { AppearanceSettings } from "./AppearanceSettings";
 import { AppshotsSettingsPage } from "./AppshotsSettings";
+import { ExternalMcpSettingsPage } from "./ExternalMcpSettings";
 import { MemorySettingsPage } from "./MemorySettings";
 import {
   BrowserPermissionsSettingsPage,
@@ -109,7 +111,8 @@ export type SettingsTab =
   | "browser-use"
   | "usage"
   | "developer"
-  | "browser";
+  | "browser"
+  | "external-mcp";
 
 interface SettingsNavItem {
   id: SettingsTab;
@@ -143,6 +146,7 @@ const NAV_GROUPS: {
       { id: "worktrees", icon: GitBranch, labelKey: "settings.worktrees" },
       { id: "memory", icon: BrainCircuit, labelKey: "memory.title" },
       { id: "sync", icon: RefreshCw, labelKey: "settings.sync" },
+      { id: "external-mcp", icon: Share2, labelKey: "settings.externalMcp" },
       { id: "environments", icon: Server, labelKey: "settings.environments" },
     ],
   },
@@ -546,6 +550,8 @@ export function SettingsPage({
                 syncStarter={deviceSyncStarter}
               />
             )}
+
+            {tab === "external-mcp" && <ExternalMcpSettingsPage />}
 
             {tab === "environments" && remoteEnvironmentsAvailable && (
               <RemoteEnvironmentsSettingsPage />

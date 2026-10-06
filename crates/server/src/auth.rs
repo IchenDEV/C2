@@ -13,8 +13,10 @@
 //! Only SHA-256 hashes of pairing tokens and bearers are kept (in memory and on disk); the raw
 //! value is shown once and never stored.
 
+use std::collections::HashMap;
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -26,6 +28,12 @@ use tokio::sync::broadcast;
 pub const DEFAULT_PAIRING_TTL: Duration = Duration::from_secs(15 * 60);
 /// Lifetime of a WebSocket ticket: just long enough to open the socket.
 pub const WS_TICKET_TTL: Duration = Duration::from_secs(5 * 60);
+/// Pairing lifetime when remote tunnel hardening is active.
+pub const REMOTE_PAIRING_TTL: Duration = Duration::from_secs(10 * 60);
+
+const AUTH_FAILURE_WINDOW_SECS: u64 = 15 * 60;
+const AUTH_FAILURE_MAX: u32 = 8;
+const AUTH_LOCKOUT_SECS: u64 = 15 * 60;
 
 fn now_secs() -> u64 {
     SystemTime::now()
@@ -158,6 +166,18 @@ struct PersistedAuth {
     devices: Vec<Device>,
 }
 
+struct AuthFailureBucket {
+    failures: u32,
+    locked_until: u64,
+    window_started: u64,
+}
+
+/// Rate-limit outcome for auth surfaces (pairing, bearer, WS ticket).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct AuthRateLimit {
+    pub retry_after_secs: u64,
+}
+
 /// All auth state for one server instance. Pairing tokens and tickets are memory-only; paired
 /// devices persist to `persist_path` (when set) so a phone stays paired across restarts.
 pub struct AuthState {
@@ -166,6 +186,8 @@ pub struct AuthState {
     devices: Mutex<Vec<Device>>,
     persist_path: Option<PathBuf>,
     revocations: broadcast::Sender<String>,
+    remote_hardening: AtomicBool,
+    auth_failures: Mutex<HashMap<String, AuthFailureBucket>>,
 }
 
 impl AuthState {
@@ -184,7 +206,85 @@ impl AuthState {
             devices: Mutex::new(devices),
             persist_path,
             revocations,
+            remote_hardening: AtomicBool::new(false),
+            auth_failures: Mutex::new(HashMap::new()),
         }
+    }
+
+    /// Enable stricter pairing TTL and per-source auth rate limits (remote tunnel mode).
+    pub fn set_remote_hardening(&self, enabled: bool) {
+        self.remote_hardening
+            .store(enabled, Ordering::Relaxed);
+    }
+
+    pub fn remote_hardening_enabled(&self) -> bool {
+        self.remote_hardening.load(Ordering::Relaxed)
+    }
+
+    pub fn effective_pairing_ttl(&self, default_ttl: Duration) -> Duration {
+        if self.remote_hardening_enabled() {
+            REMOTE_PAIRING_TTL
+        } else {
+            default_ttl
+        }
+    }
+
+    pub fn check_auth_rate_limit(&self, key: &str) -> Result<(), AuthRateLimit> {
+        if !self.remote_hardening_enabled() {
+            return Ok(());
+        }
+        let now = now_secs();
+        let mut failures = self.auth_failures.lock().unwrap();
+        let bucket = failures.entry(key.to_string()).or_insert(AuthFailureBucket {
+            failures: 0,
+            locked_until: 0,
+            window_started: now,
+        });
+        if bucket.locked_until > now {
+            return Err(AuthRateLimit {
+                retry_after_secs: bucket.locked_until - now,
+            });
+        }
+        if now.saturating_sub(bucket.window_started) > AUTH_FAILURE_WINDOW_SECS {
+            bucket.failures = 0;
+            bucket.window_started = now;
+        }
+        Ok(())
+    }
+
+    pub fn record_auth_failure(&self, key: &str) -> Option<AuthRateLimit> {
+        if !self.remote_hardening_enabled() {
+            return None;
+        }
+        let now = now_secs();
+        let mut failures = self.auth_failures.lock().unwrap();
+        let bucket = failures.entry(key.to_string()).or_insert(AuthFailureBucket {
+            failures: 0,
+            locked_until: 0,
+            window_started: now,
+        });
+        if now.saturating_sub(bucket.window_started) > AUTH_FAILURE_WINDOW_SECS {
+            bucket.failures = 0;
+            bucket.window_started = now;
+        }
+        bucket.failures = bucket.failures.saturating_add(1);
+        if bucket.failures >= AUTH_FAILURE_MAX {
+            bucket.locked_until = now + AUTH_LOCKOUT_SECS;
+            bucket.failures = 0;
+            bucket.window_started = now;
+            return Some(AuthRateLimit {
+                retry_after_secs: AUTH_LOCKOUT_SECS,
+            });
+        }
+        None
+    }
+
+    pub fn record_auth_success(&self, key: &str) {
+        if !self.remote_hardening_enabled() {
+            return;
+        }
+        let mut failures = self.auth_failures.lock().unwrap();
+        failures.remove(key);
     }
 
     /// A protocol adapter may keep non-secret compatibility metadata beside the shared device
