@@ -236,6 +236,8 @@ Quick tunnel requests with a public Host are refused until the hostname is disco
 
 ## Headless CLI
 
+Workspace search requires `ripgrep` (`rg`) on the server process PATH. Install it on headless hosts as well as desktop hosts; unavailable search returns an operation error. CI installs and checks this dependency before Rust integration tests.
+
 The `codetwo` binary is registered in `crates/server/Cargo.toml` and shares the server entry implementation. Client commands use the external MCP gate.
 
 | Command | Purpose |

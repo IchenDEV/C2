@@ -74,6 +74,12 @@ jobs:
         run: |
           curl -L https://ziglang.org/download/0.15.2/zig-x86_64-linux-0.15.2.tar.xz | tar xJ -C /tmp
           echo "/tmp/zig-x86_64-linux-0.15.2" >> "$GITHUB_PATH"
+      - name: Install Rust integration runtime dependencies
+        if: steps.changes.outputs.rust == 'true'
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes ripgrep
+          rg --version
       - name: Rust workspace check
         if: steps.changes.outputs.rust == 'true'
         run: cargo check --workspace --all-targets

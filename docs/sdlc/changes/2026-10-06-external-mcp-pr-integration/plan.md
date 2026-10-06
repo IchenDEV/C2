@@ -26,3 +26,5 @@ Independent scope review r1: omitted sidecar SDK/packaging, Codex title normaliz
 CI follow-up: preserve one-writer and Unknown connection eviction; repair provider-switch self-deadlock and adapt the fail-once test fixture to survive the specified broken-runtime replacement. Use existing switch regressions, verify host credential revocation and external operations, then independent static review and CI. No tests are skipped and no CI timeout increased.
 
 CI follow-up r3: use the published SessionActivityChanged snapshot for the nonpersistent Unknown fixture after runtime eviction. Keep all request/error/revision/failure-state assertions and explicitly check Broken and absence from the transient runtime list. No production behavior change or skipped test.
+
+CI follow-up r4: explicitly install the existing ripgrep runtime dependency on the Linux runner and document the server PATH requirement. Preserve the real search integration test and its query/confinement assertions. No search fallback or test skip.
