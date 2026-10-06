@@ -103,8 +103,8 @@ describe("shell chrome contract", () => {
     const chips = composer.indexOf("<SessionControls");
     expect(chips).toBeGreaterThan(-1);
     expect(chips).toBeLessThan(spacer);
-    expect(composer).toContain(
-      '"flex min-w-0 flex-wrap items-end gap-1",\n                docMode'
+    expect(composer).toMatch(
+      /"flex min-w-0 flex-wrap items-end gap-1",\s+docMode/u
     );
     expect(composer).not.toContain('"flex flex-col gap-1"');
     expect(composer.match(/<SessionControls/gu)).toHaveLength(1);

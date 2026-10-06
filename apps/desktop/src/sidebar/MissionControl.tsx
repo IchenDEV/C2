@@ -3,16 +3,10 @@ import { useEffect, useState } from "react";
 import { CompositeActionRow } from "@/components/business/composite-action-row";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
 
+import { AssistantWorkspace } from "../assistant/AssistantWorkspace";
 import { providerLabel, sessionDiffStat } from "../bridge";
 import type { SessionDiffStat, SessionInfo } from "../bridge";
 import { useLanguage, useT } from "../i18n";
@@ -93,7 +87,7 @@ export function DiffStatCell({
  * R6 (docs/roadmap.md): the cross-session overview answering "what needs me" — every session's
  * state, scene, working-tree diff, and context occupancy, with one click into review.
  */
-export function MissionControlDialog({
+export function MissionControlPage({
   sessions,
   runningSessions,
   contextWindows,
@@ -198,13 +192,12 @@ export function MissionControlDialog({
   };
 
   return (
-    <Dialog open onOpenChange={(open: boolean) => !open && onClose()}>
-      <DialogContent className="sm:max-w-3xl">
-        <DialogHeader>
-          <DialogTitle>{t("mission.title")}</DialogTitle>
-          <DialogDescription>{t("mission.hint")}</DialogDescription>
-        </DialogHeader>
-        {rows.length === 0 ? (
+    <AssistantWorkspace
+      onSelect={onSelect}
+      onClose={onClose}
+      initialTab="activity"
+      activity={
+        rows.length === 0 ? (
           <p className="text-callout text-muted-foreground px-2 py-4">
             {t("mission.empty")}
           </p>
@@ -212,8 +205,10 @@ export function MissionControlDialog({
           <div className="max-h-96 space-y-px overflow-y-auto">
             {rows.map(row)}
           </div>
-        )}
-      </DialogContent>
-    </Dialog>
+        )
+      }
+    />
   );
 }
+
+export { MissionControlPage as MissionControlDialog };

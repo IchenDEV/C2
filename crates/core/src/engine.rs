@@ -1,6 +1,6 @@
 //! The engine: the bridge between the frontend-facing SQ/EQ interface ([`Op`]/[`Event`]) and the
-//! ACP client. It owns sessions, spawns/initializes a provider per session, implements the ACP
-//! [`ClientHandler`] to translate `session/update` into [`Event`]s, and routes
+//! provider runtime. It owns sessions and initializes a backend per session. The current ACP
+//! callback seam implements [`ClientHandler`] to translate updates into [`Event`]s and routes
 //! `session/request_permission` either by auto-answering from the [`PermissionPolicy`] or by parking
 //! the request and surfacing an [`Event::PermissionRequest`] the UI answers via
 //! [`Op::AnswerPermission`].
@@ -19,17 +19,24 @@ use serde_json::{Map, Value};
 use tokio::sync::{mpsc, oneshot, watch};
 
 use crate::acp::wire::{
-    AgentCaps, ContentBlock, CreateElicitationRequest, CreateElicitationResponse, PermissionOption,
+    ContentBlock, CreateElicitationRequest, CreateElicitationResponse, PermissionOption,
     PermissionOutcome, RequestPermissionRequest, RequestPermissionResponse, SessionNotification,
-    SessionUpdate, StopReason,
+    SessionUpdate,
 };
-use crate::acp::{self, AcpClient, ClientHandler};
+#[cfg(test)]
+use crate::acp::AcpClient;
+use crate::acp::ClientHandler;
 use crate::activity::{ActivityTracker, TurnLease};
 use crate::artifact::{ArtifactStore, ToolOutput, ToolOutputNormalizer, ToolSource};
 use crate::canvas::{
     encode_canvas_history_marker, CanvasError, CanvasFeatureGate, CanvasPixelPolicy,
     CanvasPromptPayload, CanvasProviderImageCapability,
 };
+use crate::connectors::acp::config_option_infos;
+#[cfg(test)]
+use crate::connectors::acp::encode_mcp_servers;
+#[cfg(test)]
+use crate::connectors::acp::reasoning_option_from_models;
 use crate::error::AcpError;
 use crate::event::{ConfigOptionInfo, Event, ModelChoice, Op};
 use crate::memory::{prompt_source, MemoryCanvasRef, MemoryCapability, MemoryTurnProvenance};
@@ -39,6 +46,12 @@ use crate::permission::{
     PermissionPolicy, SandboxPolicy,
 };
 use crate::provider::{LaunchSpec, Provider, ProviderId, ProviderToolset};
+use crate::provider_runtime::{
+    RuntimeBackendKind, RuntimeCallbacks, RuntimeCapabilities, RuntimeContent, RuntimeEvent, RuntimeHandle,
+    RuntimeInit, RuntimePermissionOutcome, RuntimePermissionRequest, RuntimeQuestionOutcome,
+    RuntimeQuestionRequest, RuntimeSessionRestore, RuntimeSessionStart, SteerOutcome,
+    SteerSupport, TurnOutcome,
+};
 use crate::session::{
     initial_session_title, tool_status_is_in_flight, tool_status_is_terminal,
     transcript_context_with_omission, MemoryAccess, Part, Role, Session, SessionActivity,
@@ -976,17 +989,6 @@ fn rich_tool_kind(kind: Option<String>, source: &ToolSource, title: &str) -> Opt
     }
 }
 
-/// What we tell the agent we can do at `initialize`.
-///
-/// Only form elicitation so far. It matters more than it looks: the Claude adapter routes its
-/// built-in `AskUserQuestion` tool through `elicitation/create` *only* when this is advertised,
-/// and otherwise degrades the whole question into an allow/reject permission prompt that shows the
-/// tool's name and none of its questions. URL elicitation stays unadvertised — we have nowhere
-/// honest to send the user — and `fs` remains unclaimed, so agents keep doing their own file I/O.
-fn client_capabilities() -> Value {
-    serde_json::json!({"elicitation": {"form": {}}})
-}
-
 fn ensure_native_subagents(provider: &ProviderId, compiled: &CompiledPrompt) -> Result<(), String> {
     if compiled.subagents.is_empty() || provider.supports_native_subagents() {
         return Ok(());
@@ -1144,115 +1146,6 @@ fn sites_permission_kind(source: &ToolSource) -> Option<(PermissionContextKind, 
     }
 }
 
-/// Flatten ACP config options into the frontend shape. Non-select options (booleans we never
-/// advertise support for, future types) are dropped — the UI can only render selectors.
-fn config_option_infos(options: &[crate::acp::wire::SessionConfigOption]) -> Vec<ConfigOptionInfo> {
-    options
-        .iter()
-        .filter(|o| o.option_type.as_deref().unwrap_or("select") == "select")
-        .filter(|o| {
-            o.id != "collaboration_mode" && o.category.as_deref() != Some("collaboration_mode")
-        })
-        .map(|o| ConfigOptionInfo {
-            id: o.id.clone(),
-            name: o.name.clone(),
-            category: o.category.clone(),
-            current: o.current().unwrap_or_default(),
-            choices: o
-                .choices()
-                .into_iter()
-                .map(|c| ModelChoice {
-                    id: c.value,
-                    name: c.name,
-                    description: c.description,
-                })
-                .collect(),
-        })
-        .collect()
-}
-
-/// Some agents expose a model-specific effort ladder before ACP's config-options surface. Grok's
-/// current ACP server puts it in `ModelInfo._meta.reasoningEfforts` and switches it through the
-/// legacy `session/set_mode` method. Turn that provider-owned metadata into the same frontend shape
-/// without inventing levels or applying one provider's matrix to another.
-fn reasoning_option_from_models(
-    models: Option<&crate::acp::wire::SessionModelState>,
-) -> Option<ConfigOptionInfo> {
-    let models = models?;
-    let model = models
-        .available_models
-        .iter()
-        .find(|model| model.model_id == models.current_model_id)
-        .or_else(|| models.available_models.first())?;
-    let raw = model.meta.get("reasoningEfforts")?.as_array()?;
-    let mut choices: Vec<ModelChoice> = raw
-        .iter()
-        .filter_map(|effort| {
-            let id = effort
-                .get("value")
-                .or_else(|| effort.get("id"))?
-                .as_str()?
-                .to_string();
-            let name = effort
-                .get("label")
-                .and_then(serde_json::Value::as_str)
-                .unwrap_or(&id)
-                .to_string();
-            let description = effort
-                .get("description")
-                .and_then(serde_json::Value::as_str)
-                .map(str::to_string);
-            Some(ModelChoice {
-                id,
-                name,
-                description,
-            })
-        })
-        .collect();
-    if choices.len() < 2 {
-        return None;
-    }
-    const ORDER: [&str; 9] = [
-        "off", "none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra",
-    ];
-    choices.sort_by_key(|choice| {
-        ORDER
-            .iter()
-            .position(|effort| *effort == choice.id)
-            .unwrap_or(ORDER.len())
-    });
-    let current = model
-        .meta
-        .get("reasoningEffort")
-        .and_then(serde_json::Value::as_str)
-        .filter(|current| choices.iter().any(|choice| choice.id == *current))
-        .map(str::to_string)
-        .or_else(|| {
-            raw.iter().find_map(|effort| {
-                effort
-                    .get("default")
-                    .and_then(serde_json::Value::as_bool)
-                    .unwrap_or(false)
-                    .then(|| {
-                        effort
-                            .get("value")
-                            .or_else(|| effort.get("id"))
-                            .and_then(serde_json::Value::as_str)
-                            .map(str::to_string)
-                    })
-                    .flatten()
-            })
-        })
-        .unwrap_or_else(|| choices[0].id.clone());
-    Some(ConfigOptionInfo {
-        id: "reasoning_effort".into(),
-        name: "Reasoning Effort".into(),
-        category: Some("thought_level".into()),
-        current,
-        choices,
-    })
-}
-
 /// The current model implied by a config option set, for the session record: the display name of
 /// the selected choice in the "model"-category option (falling back to the raw value id).
 fn current_model_from_options(options: &[ConfigOptionInfo]) -> Option<String> {
@@ -1295,20 +1188,20 @@ fn reflect_flat_model_in_options(options: &mut [ConfigOptionInfo], selected: &st
     }
 }
 
-/// Lower one resolved immutable Canvas payload to ACP blocks.  The summary is always textual;
+/// Lower one resolved immutable Canvas payload to runtime blocks. The summary is always textual;
 /// ordered overview/detail PNG exports are attached only when the explicit policy permits them.
 /// A known-unsupported provider fails before any summary-only degradation can occur.
 pub fn lower_canvas_prompt_payload(
     payload: &CanvasPromptPayload,
     policy: CanvasPixelPolicy,
     capability: CanvasProviderImageCapability,
-) -> Result<Vec<ContentBlock>, CanvasError> {
+) -> Result<Vec<RuntimeContent>, CanvasError> {
     if policy == CanvasPixelPolicy::Required
         && matches!(capability, CanvasProviderImageCapability::Unsupported)
     {
         return Err(CanvasError::ProviderImageUnsupported { capability });
     }
-    let mut blocks = vec![ContentBlock::text(format!(
+    let mut blocks = vec![RuntimeContent::text(format!(
         "**Canvas {} (revision {}) structural summary:**\n{}",
         payload.title, payload.revision, payload.summary
     ))];
@@ -1316,7 +1209,7 @@ pub fn lower_canvas_prompt_payload(
         return Ok(blocks);
     }
     for export in &payload.exports {
-        blocks.push(ContentBlock::Image {
+        blocks.push(RuntimeContent::Image {
             data: crate::workspace::base64_encode(&export.bytes),
             mime_type: export.mime_type.clone(),
         });
@@ -1342,82 +1235,6 @@ fn canvas_history_projection(canonical: String, compiled: Option<&CompiledPrompt
         ));
     }
     out
-}
-
-fn encode_mcp_servers(
-    servers: &[McpServer],
-    caps: AgentCaps,
-) -> Result<Vec<serde_json::Value>, String> {
-    servers
-        .iter()
-        .map(|server| {
-            let supported = match &server.transport {
-                McpTransport::Stdio { .. } => true,
-                McpTransport::Http { .. } => caps.mcp_http,
-                McpTransport::Sse { .. } => caps.mcp_sse,
-            };
-            if supported {
-                Ok(server.to_acp_json())
-            } else {
-                let transport = match &server.transport {
-                    McpTransport::Http { .. } => "HTTP",
-                    McpTransport::Sse { .. } => "SSE",
-                    McpTransport::Stdio { .. } => unreachable!(),
-                };
-                Err(format!(
-                    "MCP server '{}' needs {transport} transport, but this agent did not advertise that ACP capability",
-                    server.name
-                ))
-            }
-        })
-        .collect()
-}
-
-struct ReplayGuard<'a>(&'a AtomicBool);
-
-impl Drop for ReplayGuard<'_> {
-    fn drop(&mut self) {
-        self.0.store(false, Ordering::SeqCst);
-    }
-}
-
-/// Re-attach using the least lossy advertised method. `session/resume` avoids asking an adapter
-/// to decode and replay history that C2 already persisted; older adapters fall back to
-/// `session/load` with replay suppression.
-async fn restore_provider_session(
-    client: &AcpClient,
-    caps: AgentCaps,
-    session_id: &str,
-    cwd: &str,
-    mcp_servers: Vec<Value>,
-    replaying: &AtomicBool,
-) -> Result<crate::acp::wire::LoadSessionResponse, String> {
-    let mut resume_error = None;
-    if caps.resume_session {
-        match client
-            .resume_session(session_id, cwd, mcp_servers.clone())
-            .await
-        {
-            Ok(response) => return Ok(response),
-            Err(error) => resume_error = Some(error.to_string()),
-        }
-    }
-    if caps.load_session {
-        replaying.store(true, Ordering::SeqCst);
-        let guard = ReplayGuard(replaying);
-        let loaded = client.load_session(session_id, cwd, mcp_servers).await;
-        drop(guard);
-        return loaded.map_err(|load_error| match resume_error {
-            Some(resume_error) => {
-                format!("session/resume failed: {resume_error}; session/load failed: {load_error}")
-            }
-            None => format!("session/load failed: {load_error}"),
-        });
-    }
-    Err(match resume_error {
-        Some(error) => format!("session/resume failed: {error}"),
-        None => "provider advertised no session restore capability".into(),
-    })
 }
 
 fn attach_host_mcp_servers(
@@ -1631,25 +1448,37 @@ fn with_auto_scene_routing(prompt: String, instructions: Option<String>) -> Stri
 
 /// Decode the adapter-owned idempotency key carried through the existing `NewSession` request id.
 /// JSON keeps arbitrary T3 thread/command identifiers unambiguous without widening the public Op.
-fn t3_session_create_receipt(request_id: Option<&str>) -> Option<(String, String)> {
-    let encoded = request_id?.strip_prefix("t3-create:")?;
+fn session_create_receipt(request_id: Option<&str>) -> Option<(&'static str, String, String)> {
+    let request_id = request_id?;
+    let (protocol, encoded) = if let Some(encoded) = request_id.strip_prefix("c2-assistant-create:")
+    {
+        ("c2-assistant-create", encoded)
+    } else {
+        ("t3-create", request_id.strip_prefix("t3-create:")?)
+    };
     let (command_id, public_thread_id): (String, String) = serde_json::from_str(encoded).ok()?;
     if command_id.trim().is_empty() || public_thread_id.trim().is_empty() {
         return None;
     }
-    Some((command_id, public_thread_id))
+    Some((protocol, command_id, public_thread_id))
 }
 
-fn t3_prompt_receipt(request_id: Option<&str>) -> Option<(String, Option<String>)> {
-    let encoded = request_id?.strip_prefix("t3-command:")?;
+fn prompt_receipt(request_id: Option<&str>) -> Option<(&'static str, String, Option<String>)> {
+    let request_id = request_id?;
+    let (protocol, encoded) = if let Some(encoded) = request_id.strip_prefix("c2-assistant-prompt:")
+    {
+        ("c2-assistant-prompt", encoded)
+    } else {
+        ("t3-prompt", request_id.strip_prefix("t3-command:")?)
+    };
     if let Ok((command_id, message_id)) = serde_json::from_str::<(String, String)>(encoded) {
         if !command_id.trim().is_empty() && !message_id.trim().is_empty() {
-            return Some((command_id, Some(message_id)));
+            return Some((protocol, command_id, Some(message_id)));
         }
         return None;
     }
     // Accept the pre-message-id encoding for in-flight migrations and non-T3 test callers.
-    (!encoded.trim().is_empty()).then(|| (encoded.to_string(), None))
+    (!encoded.trim().is_empty()).then(|| (protocol, encoded.to_string(), None))
 }
 
 fn normalized_native_command(name: &str) -> String {
@@ -2775,11 +2604,154 @@ impl ClientHandler for SessionHandler {
     }
 }
 
+/// Native connectors report through the provider-neutral [`RuntimeCallbacks`]. Engine's tool,
+/// permission and elicitation projection is still written against ACP-shaped DTOs, so this adapter
+/// lowers neutral facts into them and reuses that one projection instead of forking it. The ACP
+/// DTOs stay an Engine-internal detail: no native connector imports them.
+#[async_trait]
+impl RuntimeCallbacks for SessionHandler {
+    async fn event(&self, backend_session_id: &str, event: RuntimeEvent) {
+        use crate::acp::wire::{
+            AvailableCommand, ContentBlock, SessionNotification, SessionUpdate, ToolCall,
+            ToolCallUpdate,
+        };
+        let update = match event {
+            RuntimeEvent::AgentText(text) => SessionUpdate::AgentMessageChunk {
+                content: ContentBlock::Text { text },
+            },
+            RuntimeEvent::AgentThought(text) => SessionUpdate::AgentThoughtChunk {
+                content: ContentBlock::Text { text },
+            },
+            RuntimeEvent::ToolCall(call) => SessionUpdate::ToolCall(ToolCall {
+                tool_call_id: call.id,
+                title: call.title,
+                kind: call.kind,
+                status: call.status,
+                content: call.content,
+                raw_input: call.raw_input,
+                raw_output: call.raw_output,
+                meta: None,
+            }),
+            RuntimeEvent::ToolUpdate(call) => SessionUpdate::ToolCallUpdate(ToolCallUpdate {
+                tool_call_id: call.id,
+                title: call.title,
+                status: call.status,
+                content: call.content,
+                kind: call.kind,
+                raw_input: call.raw_input,
+                raw_output: call.raw_output,
+                meta: None,
+            }),
+            RuntimeEvent::ConfigOptions(options) => {
+                if !self.active.load(Ordering::Acquire)
+                    || self.replaying.load(Ordering::SeqCst)
+                {
+                    return;
+                }
+                self.liveness.advance();
+                self.emit(Event::ConfigOptions {
+                    session: self.session_id.clone(),
+                    options,
+                });
+                return;
+            }
+            RuntimeEvent::Commands(names) => SessionUpdate::AvailableCommandsUpdate {
+                available_commands: names
+                    .into_iter()
+                    .map(|name| AvailableCommand {
+                        name,
+                        description: String::new(),
+                        input: None,
+                    })
+                    .collect(),
+            },
+            RuntimeEvent::Usage {
+                used,
+                size,
+                cost_usd,
+            } => SessionUpdate::UsageUpdate {
+                used,
+                size,
+                cost: cost_usd.map(Value::from),
+            },
+        };
+        ClientHandler::session_update(
+            self,
+            SessionNotification {
+                session_id: backend_session_id.to_string(),
+                update,
+            },
+        )
+        .await;
+    }
+
+    async fn request_permission(
+        &self,
+        backend_session_id: &str,
+        request: RuntimePermissionRequest,
+    ) -> RuntimePermissionOutcome {
+        use crate::acp::wire::{PermissionOption, PermissionOutcome, RequestPermissionRequest};
+        let response = ClientHandler::request_permission(
+            self,
+            RequestPermissionRequest {
+                session_id: backend_session_id.to_string(),
+                tool_call: request.tool_call,
+                options: request
+                    .options
+                    .into_iter()
+                    .map(|option| PermissionOption {
+                        option_id: option.id,
+                        name: option.name,
+                        kind: option.kind,
+                    })
+                    .collect(),
+                meta: request.meta,
+            },
+        )
+        .await;
+        match response.outcome {
+            PermissionOutcome::Selected { option_id } => {
+                RuntimePermissionOutcome::Selected(option_id)
+            }
+            PermissionOutcome::Cancelled => RuntimePermissionOutcome::Cancelled,
+        }
+    }
+
+    async fn ask_question(
+        &self,
+        backend_session_id: &str,
+        request: RuntimeQuestionRequest,
+    ) -> RuntimeQuestionOutcome {
+        use crate::acp::wire::{CreateElicitationRequest, CreateElicitationResponse};
+        let response = ClientHandler::create_elicitation(
+            self,
+            CreateElicitationRequest {
+                mode: Some("form".into()),
+                session_id: Some(backend_session_id.to_string()),
+                tool_call_id: request.tool_call_id,
+                message: request.message,
+                requested_schema: Some(request.schema),
+                url: None,
+                elicitation_id: None,
+                meta: None,
+            },
+        )
+        .await;
+        match response {
+            CreateElicitationResponse::Accept { content } => {
+                RuntimeQuestionOutcome::Answered(content.unwrap_or_default())
+            }
+            CreateElicitationResponse::Decline => RuntimeQuestionOutcome::Declined,
+            CreateElicitationResponse::Cancel => RuntimeQuestionOutcome::Cancelled,
+        }
+    }
+}
+
 /// Negotiated ACP surface and content-free decode anomalies for one live provider process.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
 pub struct ProviderProtocolCompatibility {
     pub provider: ProviderId,
-    pub process: crate::acp::AcpProcessDiagnostics,
+    pub process: crate::provider_runtime::RuntimeProcessDiagnostics,
     pub protocol_version: i64,
     pub adapter_name: Option<String>,
     pub adapter_version: Option<String>,
@@ -2787,7 +2759,7 @@ pub struct ProviderProtocolCompatibility {
     pub resume_session: bool,
     pub mcp_http: bool,
     pub mcp_sse: bool,
-    pub diagnostics: crate::acp::AcpProtocolDiagnostics,
+    pub diagnostics: crate::provider_runtime::RuntimeProtocolDiagnostics,
 }
 
 /// Default-redacted support snapshot. Entries intentionally have no session identifier, title,
@@ -2820,7 +2792,7 @@ struct SessionRuntime {
     /// Memory item revisions already accepted by this live provider context. Recall remains
     /// query-driven, but only new or corrected items are sent on later turns.
     injected_memory_keys: HashSet<String>,
-    client: Arc<AcpClient>,
+    client: RuntimeHandle,
     /// `None` until the first prompt creates the ACP session (so MCP servers from the document
     /// attach at `session/new`).
     acp_session_id: Option<String>,
@@ -2829,12 +2801,8 @@ struct SessionRuntime {
     /// re-attaches to it — restoring the agent's conversation context — instead of running
     /// `session/new` with a blank memory. Cleared once consumed (either way).
     resume_acp_session_id: Option<String>,
-    /// What the agent advertised at `initialize`.
-    protocol_version: i64,
-    adapter_name: Option<String>,
-    adapter_version: Option<String>,
-    caps: AgentCaps,
-    interaction: crate::acp::wire::InteractionCapabilities,
+    /// Backend identity and capabilities fixed by this runtime's initialization.
+    negotiated: RuntimeInit,
     /// Full replacement set from ACP `available_commands_update`, shared with the handler so
     /// command actions can be authorized at the same boundary that advertises them.
     native_commands: Arc<RwLock<HashSet<String>>>,
@@ -2863,6 +2831,28 @@ struct SessionRuntime {
     /// `session/load` makes it redundant; otherwise it is appended exactly once to the first
     /// successful prompt on this device.
     handoff_context: Option<Value>,
+}
+
+/// Preserve whether a delivery may have reached the backend. Only the existing delivery
+/// reconciler commits a receipt; failures before sending are not uncertain transmissions.
+struct SteeringFailure {
+    message: String,
+    unknown: bool,
+}
+
+impl From<String> for SteeringFailure {
+    fn from(message: String) -> Self {
+        Self {
+            message,
+            unknown: false,
+        }
+    }
+}
+
+impl From<&str> for SteeringFailure {
+    fn from(message: &str) -> Self {
+        message.to_string().into()
+    }
 }
 
 #[derive(Debug, Clone, Default)]
@@ -2916,7 +2906,7 @@ struct EngineState {
     pending_creation_options: Mutex<HashMap<String, SessionCreationOptions>>,
     pending_parallel_tasks: Mutex<HashMap<String, PendingParallelTask>>,
     /// Provider processes that have spawned but are not yet a fully initialized session.
-    starting_clients: Mutex<Vec<Arc<AcpClient>>>,
+    starting_clients: Mutex<Vec<RuntimeHandle>>,
     shutting_down: AtomicBool,
     activity: ActivityTracker,
     router: PermissionRouter,
@@ -2930,17 +2920,25 @@ struct EngineState {
     /// Optional global parent for new session worktrees. `None` preserves the project-adjacent
     /// `.codetwo-worktrees` layout used by older versions.
     worktree_root: RwLock<Option<std::path::PathBuf>>,
+    native_backends: RwLock<crate::connectors::select::NativeBackends>,
+    /// Turn a user stopped before its prompt reached the backend, per session. A stop request sent
+    /// ahead of the prompt would otherwise be a no-op and the turn would then run unstoppable.
+    stopped_before_send: Mutex<HashMap<String, String>>,
     desktop_mcp: Option<DesktopMcpConfig>,
     /// Live host-backed special tools keyed by provider id. Each session snapshots its provider's
     /// entry on creation because ACP accepts MCP servers only at session creation/load.
     provider_tools: Arc<RwLock<HashMap<String, ProviderToolset>>>,
     turn_liveness_timeouts: RwLock<TurnLivenessTimeouts>,
+    delivery_gates: Mutex<HashMap<String, Arc<tokio::sync::Mutex<()>>>>,
+    coordination_bridge: RwLock<Option<crate::assistant_bridge::AssistantBridge>>,
+    assistant_creations: Mutex<HashMap<String, (Arc<AtomicBool>, Option<RuntimeHandle>)>>,
+    revivals: Mutex<HashMap<String, (Arc<AtomicBool>, Option<RuntimeHandle>)>>,
 }
 
 struct ProviderSwitchGuard {
     state: Arc<EngineState>,
     session: SessionId,
-    candidate: Option<Arc<AcpClient>>,
+    candidate: Option<RuntimeHandle>,
 }
 
 impl Drop for ProviderSwitchGuard {
@@ -3012,6 +3010,33 @@ impl DesktopMcpConfig {
 #[derive(Clone)]
 pub struct Engine {
     state: Arc<EngineState>,
+}
+
+// A revival has one live owner. Dropping a cancelled/failed future also disposes its
+// starting client; successful handoff removes it while holding the sessions lock.
+struct RevivalGuard {
+    engine: Engine,
+    session: String,
+    token: Arc<AtomicBool>,
+}
+impl Drop for RevivalGuard {
+    fn drop(&mut self) {
+        let entry = {
+            let mut revivals = self.engine.state.revivals.lock().unwrap();
+            if revivals
+                .get(&self.session)
+                .is_some_and(|(flag, _)| Arc::ptr_eq(flag, &self.token))
+            {
+                revivals.remove(&self.session)
+            } else {
+                None
+            }
+        };
+        if let Some((_, Some(client))) = entry {
+            client.terminate();
+            self.engine.untrack_starting_client(&client);
+        }
+    }
 }
 
 impl Engine {
@@ -3195,9 +3220,15 @@ impl Engine {
             canvas_gate,
             private_data_dir: RwLock::new(None),
             worktree_root: RwLock::new(None),
+            native_backends: RwLock::new(crate::connectors::select::NativeBackends::from_env()),
+            stopped_before_send: Mutex::new(HashMap::new()),
             desktop_mcp,
             provider_tools,
             turn_liveness_timeouts: RwLock::new(TurnLivenessTimeouts::default()),
+            delivery_gates: Mutex::new(HashMap::new()),
+            coordination_bridge: RwLock::new(None),
+            assistant_creations: Mutex::new(HashMap::new()),
+            revivals: Mutex::new(HashMap::new()),
         });
         (Engine { state }, rx)
     }
@@ -3317,7 +3348,7 @@ impl Engine {
             .install_durable_snapshot(session, prepared.session.activity.clone());
         if let Some(runtime) = self.state.sessions.lock().unwrap().remove(session) {
             if let Some(acp_session_id) = runtime.acp_session_id.as_deref() {
-                let _ = runtime.client.cancel(acp_session_id);
+                let _ = runtime.client.request_stop(acp_session_id);
             }
             runtime.client.terminate();
         }
@@ -3371,7 +3402,7 @@ impl Engine {
             .unwrap_or_default()
     }
 
-    fn track_starting_client(&self, client: &Arc<AcpClient>) -> bool {
+    fn track_starting_client(&self, client: &RuntimeHandle) -> bool {
         let mut starting = self.state.starting_clients.lock().unwrap();
         if self.state.shutting_down.load(Ordering::Acquire) {
             client.terminate();
@@ -3381,7 +3412,12 @@ impl Engine {
         true
     }
 
-    fn untrack_starting_client(&self, client: &Arc<AcpClient>) {
+    fn untrack_starting_client(&self, client: &RuntimeHandle) {
+        for (_, tracked) in self.state.assistant_creations.lock().unwrap().values_mut() {
+            if tracked.as_ref().is_some_and(|c| Arc::ptr_eq(c, client)) {
+                *tracked = None;
+            }
+        }
         self.state
             .starting_clients
             .lock()
@@ -3416,7 +3452,7 @@ impl Engine {
         for (session, client, acp_session_id) in sessions {
             self.state.activity.cancel_pending(&session);
             if let Some(acp_session_id) = acp_session_id {
-                let _ = client.cancel(&acp_session_id);
+                let _ = client.request_stop(&acp_session_id);
             }
             client.terminate();
         }
@@ -3492,6 +3528,45 @@ impl Engine {
     /// through this root, and non-desktop constructors leave it unavailable.
     pub fn set_private_data_dir(&self, data_dir: impl Into<std::path::PathBuf>) {
         *self.state.private_data_dir.write().unwrap() = Some(data_dir.into());
+    }
+
+    /// Replace the native-backend opt-in set and sidecar location. Affects sessions created or
+    /// provider-switched afterwards; a session keeps the backend it was bound to.
+    pub fn set_native_backends(&self, backends: crate::connectors::select::NativeBackends) {
+        *self.state.native_backends.write().unwrap() = backends;
+    }
+
+    /// Start the backend chosen for a session. A native backend that cannot start is returned as
+    /// an error: it is never replaced by ACP.
+    async fn launch_runtime(
+        &self,
+        kind: RuntimeBackendKind,
+        launch: &LaunchSpec,
+        handler: Arc<SessionHandler>,
+    ) -> Result<RuntimeHandle, crate::provider_runtime::RuntimeError> {
+        let backends = self.state.native_backends.read().unwrap().clone();
+        backends.launch(kind, launch, handler).await
+    }
+
+    fn backend_for_new_session(&self, provider: &ProviderId) -> RuntimeBackendKind {
+        self.state
+            .native_backends
+            .read()
+            .unwrap()
+            .select_for_new_session(provider)
+    }
+
+    /// Backend a persisted session was bound to. No row means the session predates native
+    /// backends: it is ACP.
+    fn backend_for_persisted_session(&self, id: &str) -> Result<RuntimeBackendKind, String> {
+        let Some(store) = &self.state.store else {
+            return Ok(RuntimeBackendKind::Acp);
+        };
+        match store.session_runtime_binding(id) {
+            Ok(Some((kind, _))) => Ok(kind),
+            Ok(None) => Ok(RuntimeBackendKind::Acp),
+            Err(error) => Err(format!("couldn't read session backend: {error}")),
+        }
     }
 
     pub fn set_worktree_root(&self, root: Option<std::path::PathBuf>) {
@@ -4227,17 +4302,18 @@ impl Engine {
     ) -> Option<ProviderProtocolCompatibility> {
         let sessions = self.state.sessions.lock().unwrap();
         let runtime = sessions.get(session)?;
+        let diagnostics = runtime.client.diagnostics();
         Some(ProviderProtocolCompatibility {
             provider: runtime.session.provider.clone(),
-            process: runtime.client.process_diagnostics(),
-            protocol_version: runtime.protocol_version,
-            adapter_name: runtime.adapter_name.clone(),
-            adapter_version: runtime.adapter_version.clone(),
-            load_session: runtime.caps.load_session,
-            resume_session: runtime.caps.resume_session,
-            mcp_http: runtime.caps.mcp_http,
-            mcp_sse: runtime.caps.mcp_sse,
-            diagnostics: runtime.client.protocol_diagnostics(),
+            process: diagnostics.process,
+            protocol_version: runtime.negotiated.identity.protocol_version,
+            adapter_name: runtime.negotiated.identity.adapter_name.clone(),
+            adapter_version: runtime.negotiated.identity.adapter_version.clone(),
+            load_session: runtime.negotiated.capabilities.resume.load,
+            resume_session: runtime.negotiated.capabilities.resume.resume,
+            mcp_http: runtime.negotiated.capabilities.mcp_http,
+            mcp_sse: runtime.negotiated.capabilities.mcp_sse,
+            diagnostics: diagnostics.protocol,
         })
     }
 
@@ -4291,7 +4367,26 @@ impl Engine {
             })
     }
 
-    fn cancel_turn(&self, session: &str) -> Result<(), AcpError> {
+    pub(crate) fn cancel_assistant_creation(&self, id: &str) {
+        let mut creates = self.state.assistant_creations.lock().unwrap();
+        let (cancelled, client) = creates
+            .entry(id.into())
+            .or_insert_with(|| (Arc::new(AtomicBool::new(false)), None));
+        cancelled.store(true, Ordering::Release);
+        if let Some(client) = client {
+            client.terminate();
+        }
+    }
+    pub(crate) fn assistant_creation_cancelled(&self, id: &str) -> bool {
+        self.state
+            .assistant_creations
+            .lock()
+            .unwrap()
+            .get(id)
+            .is_some_and(|(flag, _)| flag.load(Ordering::Acquire))
+    }
+
+    pub(crate) fn cancel_turn(&self, session: &str) -> Result<(), AcpError> {
         self.state.activity.cancel_pending(session);
         let active_turn = self
             .state
@@ -4309,24 +4404,59 @@ impl Engine {
                 } => Some((turn_id, prompt_request_id)),
                 SessionRunState::Idle | SessionRunState::Failed { .. } => None,
             });
-        let runtime = self
-            .state
-            .sessions
-            .lock()
-            .unwrap()
-            .get(session)
-            .and_then(|runtime| {
-                Some((
+        // Serialize cancellation with the short revival-to-live handoff, never with
+        // initialize/network waits. Before handoff the same cancel owns the starting client.
+        let runtime = {
+            let sessions = self.state.sessions.lock().unwrap();
+            let revivals = self.state.revivals.lock().unwrap();
+            if let Some((cancelled, client)) = revivals.get(session) {
+                cancelled.store(true, Ordering::Release);
+                if let Some(client) = client {
+                    client.terminate();
+                }
+            }
+            sessions.get(session).map(|runtime| {
+                (
                     runtime.client.clone(),
-                    runtime.acp_session_id.clone()?,
+                    runtime.acp_session_id.clone(),
                     runtime.liveness.clone(),
-                ))
-            });
+                )
+            })
+        };
         let Some((client, acp_session_id, liveness)) = runtime else {
+            // With no live provider there can be no accepted writer after a cancelled
+            // revival: its fence is checked before registration and its client is killed.
+            if let Some((turn_id, _)) = active_turn {
+                self.state.activity.fail_provider_turn(
+                    session,
+                    &turn_id,
+                    "Stopped during provider recovery",
+                );
+            }
+            return Ok(());
+        };
+        let Some(acp_session_id) = acp_session_id else {
+            // No session/new receipt yet: terminate this provider before recording terminal state.
+            // Its pending request fails, so it cannot later start the cancelled prompt.
+            client.terminate();
+            if let Some((turn_id, _)) = active_turn {
+                self.state.activity.fail_provider_turn(
+                    session,
+                    &turn_id,
+                    "Stopped during provider session initialization",
+                );
+            }
             return Ok(());
         };
         liveness.advance();
-        if let Err(error) = client.cancel(&acp_session_id) {
+        if let Some((turn_id, _)) = &active_turn {
+            self.state
+                .stopped_before_send
+                .lock()
+                .unwrap()
+                .insert(session.to_string(), turn_id.clone());
+        }
+        if let Err(error) = client.request_stop(&acp_session_id) {
             if let Some((turn_id, request_id)) = active_turn {
                 let message = format!(
                     "Cancel failed: {error}. C2 stopped the provider so the turn cannot remain active."
@@ -4354,7 +4484,7 @@ impl Engine {
                     });
                 }
             }
-            return Err(error);
+            return Err(error.into());
         }
         Ok(())
     }
@@ -4380,7 +4510,7 @@ impl Engine {
         self.state.activity.cancel_pending(session);
         if let Some(runtime) = self.state.sessions.lock().unwrap().remove(session) {
             if let Some(acp_session_id) = runtime.acp_session_id.as_deref() {
-                let _ = runtime.client.cancel(acp_session_id);
+                let _ = runtime.client.request_stop(acp_session_id);
             }
             runtime.client.terminate();
         }
@@ -4393,10 +4523,41 @@ impl Engine {
     /// Initialize (or revive) the provider early so provider-owned interaction modes are visible
     /// in the composer. Deliberately defer `session/new`: document/plugin MCP servers can only be
     /// attached there and are not known until the first prompt is compiled.
+    pub(crate) async fn restore_initial_reasoning_effort(
+        &self,
+        session: &str,
+        effort: String,
+        assignment: &str,
+    ) -> Result<(), String> {
+        let request = format!(
+            "c2-assistant-prompt:{}",
+            serde_json::json!([assignment, assignment])
+        );
+        self.prepare_session_authorized(session, Some(&request))
+            .await?;
+        let mut sessions = self.state.sessions.lock().unwrap();
+        let runtime = sessions.get_mut(session).ok_or("session missing")?;
+        if runtime.acp_session_id.is_some() || runtime.resume_acp_session_id.is_some() {
+            return Err(
+                "Managed first prompt already has provider context; inspect before retrying".into(),
+            );
+        }
+        runtime.initial_reasoning_effort = Some(effort);
+        Ok(())
+    }
+
     pub async fn prepare_session(&self, session: &str) -> Result<(), String> {
+        self.prepare_session_authorized(session, None).await
+    }
+
+    async fn prepare_session_authorized(
+        &self,
+        session: &str,
+        request: Option<&str>,
+    ) -> Result<(), String> {
         self.assert_session_active(session)?;
         if !self.state.sessions.lock().unwrap().contains_key(session) {
-            self.revive_session(session).await?;
+            self.revive_session(session, request, None).await?;
         }
         let (interaction, compact_context, options, models, current) = {
             let sessions = self.state.sessions.lock().unwrap();
@@ -4404,7 +4565,7 @@ impl Engine {
                 .get(session)
                 .ok_or_else(|| "no such session".to_string())?;
             (
-                runtime.interaction.clone(),
+                runtime.negotiated.capabilities.steering,
                 compact_context_supported(&runtime.native_commands),
                 runtime.config_options.clone(),
                 runtime.models.clone(),
@@ -4413,7 +4574,7 @@ impl Engine {
         };
         self.emit(Event::SessionCapabilities {
             session: session.to_string(),
-            steering: interaction.steering,
+            steering: interaction == SteerSupport::Native,
             compact_context,
         });
         if !models.is_empty() {
@@ -4523,16 +4684,16 @@ impl Engine {
         let callback_active = handler.activity_flag();
         let native_commands = handler.native_commands();
         let liveness = handler.liveness();
-        let client = Arc::new(
-            acp::spawn(&launch, handler.clone())
-                .await
-                .map_err(|error| format!("couldn't start {}: {error}", target.display_name))?,
-        );
+        let backend = self.backend_for_new_session(&provider);
+        let client: RuntimeHandle = self
+            .launch_runtime(backend, &launch, handler.clone())
+            .await
+            .map_err(|error| format!("couldn't start {}: {error}", target.display_name))?;
         if !self.track_starting_client(&client) {
             return Err("engine is shutting down".into());
         }
         switch.candidate = Some(client.clone());
-        let init = match client.initialize(client_capabilities()).await {
+        let init = match client.initialize().await {
             Ok(init) => init,
             Err(error) => {
                 return Err(format!(
@@ -4541,8 +4702,10 @@ impl Engine {
                 ));
             }
         };
-        let interaction = init.interaction_capabilities();
-        handler.set_interaction_capabilities(interaction.clone());
+        let interaction = init.capabilities.steering;
+        handler.set_interaction_capabilities(crate::acp::wire::InteractionCapabilities {
+            steering: interaction == SteerSupport::Native,
+        });
         let models = available_models(&target).await;
 
         let mut live_sessions = self.state.sessions.lock().unwrap();
@@ -4587,12 +4750,13 @@ impl Engine {
             replacement_policy.sandbox = updated.sandbox_policy;
         }
         if let Some(store) = &self.state.store {
-            match store.switch_session_provider(
+            match store.switch_session_provider_with_runtime(
                 session,
                 &original.provider,
                 &provider,
                 model.as_deref(),
                 &continuation,
+                backend.is_native().then_some(backend),
             ) {
                 Ok(true) => {}
                 Ok(false) => {
@@ -4628,19 +4792,7 @@ impl Engine {
                 client: client.clone(),
                 acp_session_id: None,
                 resume_acp_session_id: None,
-                protocol_version: init.protocol_version,
-                adapter_name: init
-                    .agent_info
-                    .as_ref()
-                    .map(|info| info.name.clone())
-                    .filter(|name| !name.is_empty()),
-                adapter_version: init
-                    .agent_info
-                    .as_ref()
-                    .map(|info| info.version.clone())
-                    .filter(|version| !version.is_empty()),
-                caps: init.caps(),
-                interaction: interaction.clone(),
+                negotiated: init.clone(),
                 native_commands: native_commands.clone(),
                 liveness,
                 mcp_servers: Vec::new(),
@@ -4671,7 +4823,7 @@ impl Engine {
         });
         self.emit(Event::SessionCapabilities {
             session: session.to_string(),
-            steering: interaction.steering,
+            steering: interaction == SteerSupport::Native,
             compact_context: compact_context_supported(&native_commands),
         });
         self.emit(Event::Models {
@@ -4682,12 +4834,252 @@ impl Engine {
         Ok(updated)
     }
 
-    pub async fn steer_prompt(
+    pub fn emit_assistant_alert(&self, alert: &crate::assistant::AssistantNotification) {
+        self.emit(Event::AssistantAlert {
+            session: alert.session_id.clone(),
+            id: alert.id.clone(),
+            goal_id: alert.goal_id.clone(),
+            title: alert.title.clone(),
+            body: alert.body.clone(),
+        });
+    }
+    pub fn set_coordination_bridge(
+        &self,
+        bridge: Option<crate::assistant_bridge::AssistantBridge>,
+    ) {
+        *self.state.coordination_bridge.write().unwrap() = bridge;
+    }
+
+    /// One persistent path for ordinary queued input and managed communication.
+    pub fn enqueue_prompt(
+        &self,
+        session: &str,
+        doc: Vec<DocBlock>,
+        mode: &str,
+        request_id: Option<String>,
+        fence: Option<(String, u64, String, Option<String>)>,
+    ) -> Result<crate::prompt_delivery::PromptDelivery, String> {
+        self.assert_session_active(session)?;
+        if self.session_is_switching_provider(session) {
+            return Err("the provider is still switching".into());
+        }
+        let store = self
+            .state
+            .store
+            .as_ref()
+            .ok_or("durable delivery needs a Store")?;
+        let id = request_id.unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+        let (goal_id, contract_revision, assignment_id, turn) = fence
+            .map(|(id, rev, assignment, turn)| (Some(id), Some(rev), Some(assignment), turn))
+            .unwrap_or_default();
+        let expected_turn = if mode == "steer" {
+            if let Some(turn) = turn {
+                Some(turn)
+            } else if let Some(previous) = store.prompt_delivery(&id).map_err(|e| e.to_string())? {
+                previous.expected_turn
+            } else {
+                self.current_turn(session)
+            }
+        } else {
+            None
+        };
+        let delivery = store
+            .enqueue_delivery(&crate::prompt_delivery::PromptDelivery {
+                id: id.clone(),
+                session_id: session.into(),
+                mode: mode.into(),
+                doc,
+                state: "queued".into(),
+                outcome: String::new(),
+                goal_id,
+                contract_revision,
+                assignment_id,
+                expected_turn,
+            })
+            .map_err(|e| e.to_string())?;
+        if delivery.state == "queued" {
+            self.emit(Event::PromptQueued {
+                session: session.into(),
+                request_id: Some(id.clone()),
+                position: store.delivery_position(&id).map_err(|e| e.to_string())?,
+            });
+        }
+        Ok(delivery)
+    }
+
+    pub async fn deliver_prompt(
+        &self,
+        session: &str,
+        doc: Vec<DocBlock>,
+        mode: &str,
+        request_id: Option<String>,
+        fence: Option<(String, u64, String, Option<String>)>,
+    ) -> Result<crate::prompt_delivery::PromptDelivery, String> {
+        let delivery = self.enqueue_prompt(session, doc, mode, request_id, fence)?;
+        self.drain_prompt_deliveries().await?;
+        Ok(delivery)
+    }
+
+    pub fn cancel_pending_prompts(&self, session: &str) -> Result<(), String> {
+        self.state
+            .store
+            .as_ref()
+            .ok_or("delivery needs a Store")?
+            .cancel_session_deliveries(session)
+            .map_err(|e| e.to_string())
+    }
+    pub fn delivery_position(&self, id: &str) -> Result<usize, String> {
+        self.state
+            .store
+            .as_ref()
+            .ok_or("delivery needs a Store")?
+            .delivery_position(id)
+            .map_err(|e| e.to_string())
+    }
+    pub fn current_turn(&self, session: &str) -> Option<String> {
+        self.session_activity(session).and_then(|a| match a.state {
+            SessionRunState::Running { turn_id, .. }
+            | SessionRunState::AwaitingInput { turn_id, .. } => Some(turn_id),
+            _ => None,
+        })
+    }
+    pub fn session_can_steer(&self, session: &str) -> bool {
+        self.state
+            .sessions
+            .lock()
+            .unwrap()
+            .get(session)
+            .is_some_and(|s| s.negotiated.capabilities.steering == SteerSupport::Native)
+    }
+
+    pub async fn drain_prompt_deliveries(&self) -> Result<(), String> {
+        let Some(store) = &self.state.store else {
+            return Ok(());
+        };
+        for delivery in store.pending_deliveries().map_err(|e| e.to_string())? {
+            let lane = self
+                .state
+                .delivery_gates
+                .lock()
+                .unwrap()
+                .entry(delivery.session_id.clone())
+                .or_default()
+                .clone();
+            let Ok(guard) = lane.try_lock_owned() else {
+                continue;
+            };
+            if delivery.state == "submitting" {
+                // The Engine prompt receipt is in the prompt/activity transaction. Native steering
+                // has no provider dedupe guarantee: a crashed attempt remains unknown.
+                let accepted = delivery.mode == "queue"
+                    && store
+                        .command_receipt("c2-delivery-prompt", &delivery.id)
+                        .map_err(|e| e.to_string())?
+                        .is_some();
+                store
+                    .finish_delivery(
+                        &delivery.id,
+                        if accepted { "accepted" } else { "unknown" },
+                        if accepted {
+                            "Engine accepted the prompt"
+                        } else {
+                            "Delivery outcome unknown; inspect the original session before retrying"
+                        },
+                    )
+                    .map_err(|e| e.to_string())?;
+                continue;
+            }
+            if self.session_is_busy(&delivery.session_id) && delivery.mode == "queue" {
+                continue;
+            }
+            if delivery.mode == "steer"
+                && (self.current_turn(&delivery.session_id) != delivery.expected_turn
+                    || !self.session_is_busy(&delivery.session_id)
+                    || !self.session_can_steer(&delivery.session_id))
+            {
+                store
+                    .finish_delivery(
+                        &delivery.id,
+                        "failed",
+                        "Native steering is no longer available; the message was not sent",
+                    )
+                    .map_err(|e| e.to_string())?;
+                continue;
+            }
+            if !store
+                .claim_delivery(&delivery.id)
+                .map_err(|e| e.to_string())?
+            {
+                continue;
+            }
+            let engine = self.clone();
+            let store = store.clone();
+            tokio::spawn(async move {
+                let _guard = guard;
+                let result: Result<(), String> = async {
+                    if delivery.mode == "steer" {
+                        match engine
+                            .steer_prompt(
+                                &delivery.session_id,
+                                delivery.doc.clone(),
+                                Some(delivery.id.clone()),
+                            )
+                            .await
+                        {
+                            Ok(outcome) => {
+                                store.finish_delivery(&delivery.id, "accepted", &outcome)
+                            }
+                            Err(error) => store.finish_delivery(
+                                &delivery.id,
+                                if error.unknown { "unknown" } else { "failed" },
+                                &error.message,
+                            ),
+                        }
+                        .map_err(|e| e.to_string())?;
+                    } else {
+                        let result = engine
+                            .submit(Op::Prompt {
+                                session: delivery.session_id.clone(),
+                                doc: delivery.doc.clone(),
+                                request_id: Some(delivery.id.clone()),
+                            })
+                            .await;
+                        let accepted = store
+                            .command_receipt("c2-delivery-prompt", &delivery.id)
+                            .map_err(|e| e.to_string())?
+                            .is_some();
+                        let outcome = result.err().map(|e| e.to_string()).unwrap_or_else(|| {
+                            if accepted {
+                                "Engine accepted the prompt".into()
+                            } else {
+                                "Engine rejected the prompt; inspect the session error".into()
+                            }
+                        });
+                        store
+                            .finish_delivery(
+                                &delivery.id,
+                                if accepted { "accepted" } else { "failed" },
+                                &outcome,
+                            )
+                            .map_err(|e| e.to_string())?;
+                    }
+                    Ok(())
+                }
+                .await;
+                if let Err(error) = result {
+                    tracing::warn!(%error, "prompt delivery reconciliation failed");
+                }
+            });
+        }
+        Ok(())
+    }
+
+    async fn steer_prompt(
         &self,
         session: &str,
         doc: Vec<DocBlock>,
         request_id: Option<String>,
-    ) -> Result<String, String> {
+    ) -> Result<String, SteeringFailure> {
         self.assert_session_active(session)?;
         if !self.session_is_busy(session) {
             return Err("there is no running turn to steer".into());
@@ -4708,53 +5100,73 @@ impl Engine {
                     .clone()
                     .ok_or_else(|| "ACP session is unavailable".to_string())?,
                 runtime.cwd.clone(),
-                runtime.interaction.clone(),
+                runtime.negotiated.capabilities.steering,
                 runtime.session.provider.clone(),
                 runtime.liveness.clone(),
             )
         };
-        if !interaction.steering {
+        if interaction != SteerSupport::Native {
             return Err("the provider did not advertise native steering".into());
         }
         let compiled = self.compile_prompt_document(&doc, &cwd)?;
         ensure_native_subagents(&provider, &compiled)?;
-        let mut blocks = vec![ContentBlock::text(compiled.prompt)];
+        let mut blocks = vec![RuntimeContent::text(compiled.prompt)];
         for path in &compiled.images {
             if let Ok((mime_type, data)) =
                 crate::workspace::read_image_base64(std::path::Path::new(&cwd), path)
             {
-                blocks.push(ContentBlock::Image { data, mime_type });
+                blocks.push(RuntimeContent::Image { data, mime_type });
             }
         }
         for appshot in &compiled.appshots {
-            blocks.push(ContentBlock::Image {
+            blocks.push(RuntimeContent::Image {
                 data: appshot.data.clone(),
                 mime_type: appshot.mime_type.clone(),
             });
         }
         for attachment in &compiled.attachments {
-            blocks.push(ContentBlock::Image {
+            blocks.push(RuntimeContent::Image {
                 data: attachment.data.clone(),
                 mime_type: attachment.mime_type.clone(),
             });
         }
-        liveness.advance();
-        let response: serde_json::Value = client
-            .connection()
-            .request(
-                "_session/steering",
-                serde_json::json!({ "sessionId": acp_session_id, "prompt": blocks }),
-            )
-            .await
-            .map_err(|error| error.to_string())?;
-        liveness.advance();
-        let outcome = response
-            .get("outcome")
-            .and_then(Value::as_str)
-            .unwrap_or("failed");
-        if !matches!(outcome, "injected" | "startedNewTurn") {
-            return Err("the provider could not apply this steering message".into());
+        // Recheck after the lane was scheduled and after compilation, immediately before RPC.
+        // A claimed command can be revoked before this task first gets polled.
+        if let (Some(store), Some(id)) = (&self.state.store, request_id.as_deref()) {
+            if store
+                .prompt_delivery(id)
+                .map_err(|e| e.to_string())?
+                .is_some()
+                && !store
+                    .delivery_send_authorized(id)
+                    .map_err(|e| e.to_string())?
+            {
+                store
+                    .finish_delivery(
+                        id,
+                        "cancelled",
+                        "Authority or turn changed before steering send",
+                    )
+                    .map_err(|e| e.to_string())?;
+                return Err("Steering was revoked before send".into());
+            }
         }
+        liveness.advance();
+        let response = client.steer(&acp_session_id, blocks).await;
+        liveness.advance();
+        let outcome = match response {
+            SteerOutcome::Delivered { outcome } => outcome,
+            SteerOutcome::Declined { outcome } => return Err(outcome.into()),
+            SteerOutcome::NotSent(error) | SteerOutcome::Rejected(error) => {
+                return Err(error.to_string().into());
+            }
+            SteerOutcome::Unknown(error) => {
+                return Err(SteeringFailure {
+                    message: error.to_string(),
+                    unknown: true,
+                })
+            }
+        };
         let prompt = Part::Prompt {
             text: canonical.clone(),
             display: canonical.chars().take(400).collect(),
@@ -4765,7 +5177,10 @@ impl Engine {
             .as_ref()
             .map(|store| store.append_part(session, Role::User, &prompt))
             .transpose()
-            .map_err(|error| error.to_string())?;
+            .map_err(|error| SteeringFailure {
+                message: error.to_string(),
+                unknown: true,
+            })?;
         self.emit(Event::SteerAccepted {
             session: session.to_string(),
             request_id,
@@ -4807,10 +5222,47 @@ impl Engine {
     /// history, but the agent starts with a clean memory — and the UI is told so, rather than
     /// silently degrading. Without this, every session in the rail is stranded the moment the app
     /// restarts.
+    fn require_prompt_send(&self, session: &str, request: Option<&str>) -> Result<(), String> {
+        let (Some(store), Some(request)) = (&self.state.store, request) else {
+            return Ok(());
+        };
+        if let Some(("c2-assistant-prompt", id, _)) = prompt_receipt(Some(request)) {
+            store
+                .require_assistant_prompt(&id, session)
+                .map_err(|e| e.to_string())?;
+        } else {
+            store
+                .require_delivery_send(request)
+                .map_err(|e| e.to_string())?;
+        }
+        Ok(())
+    }
+
     async fn revive_session(
         &self,
         id: &str,
-    ) -> Result<(Arc<AcpClient>, Option<String>, String), String> {
+        request: Option<&str>,
+        expected_turn: Option<&str>,
+    ) -> Result<(RuntimeHandle, Option<String>, String), String> {
+        let cancelled = Arc::new(AtomicBool::new(false));
+        {
+            let mut revivals = self.state.revivals.lock().unwrap();
+            if revivals.contains_key(id) {
+                return Err("session recovery already in progress".into());
+            }
+            revivals.insert(id.into(), (cancelled.clone(), None));
+        }
+        let _revival = RevivalGuard {
+            engine: self.clone(),
+            session: id.into(),
+            token: cancelled.clone(),
+        };
+        // Registration precedes validation: an earlier stop is in durable authority/turn
+        // state, and a later stop sees this token even before the client exists.
+        self.require_prompt_send(id, request)?;
+        if expected_turn.is_some_and(|turn| self.current_turn(id).as_deref() != Some(turn)) {
+            return Err("turn stopped before provider recovery".into());
+        }
         let store = self
             .state
             .store
@@ -4868,23 +5320,32 @@ impl Engine {
         let callback_active = handler.activity_flag();
         let native_commands = handler.native_commands();
         let liveness = handler.liveness();
-        let client = Arc::new(
-            acp::spawn(&launch, handler.clone())
-                .await
-                .map_err(|e| format!("couldn't relaunch {}: {e}", prov.display_name))?,
-        );
+        let backend = self.backend_for_persisted_session(id)?;
+        let client: RuntimeHandle = self
+            .launch_runtime(backend, &launch, handler.clone())
+            .await
+            .map_err(|error| format!("couldn't relaunch {}: {error}", prov.display_name))?;
         if !self.track_starting_client(&client) {
             return Err("engine is shutting down".into());
         }
-        let init = match client.initialize(client_capabilities()).await {
+        {
+            let mut revivals = self.state.revivals.lock().unwrap();
+            revivals.get_mut(id).expect("revival owns registration").1 = Some(client.clone());
+        }
+        if cancelled.load(Ordering::Acquire) {
+            return Err("session recovery was stopped".into());
+        }
+        let init = match client.initialize().await {
             Ok(init) => init,
             Err(error) => {
                 self.untrack_starting_client(&client);
                 return Err(format!("couldn't relaunch {}: {error}", prov.display_name));
             }
         };
-        let interaction = init.interaction_capabilities();
-        handler.set_interaction_capabilities(interaction.clone());
+        let interaction = init.capabilities.steering;
+        handler.set_interaction_capabilities(crate::acp::wire::InteractionCapabilities {
+            steering: interaction == SteerSupport::Native,
+        });
 
         // The stored ACP session id becomes the resume cursor; the live id stays unset until the
         // next prompt either re-attaches (`session/load`) or starts over (`session/new`).
@@ -4893,6 +5354,9 @@ impl Engine {
         let models = available_models(&prov).await;
         let current = sess.model.clone().unwrap_or_default();
         let mut sessions = self.state.sessions.lock().unwrap();
+        if cancelled.load(Ordering::Acquire) {
+            return Err("session recovery was stopped".into());
+        }
         if self.state.shutting_down.load(Ordering::Acquire) {
             drop(sessions);
             self.untrack_starting_client(&client);
@@ -4910,19 +5374,7 @@ impl Engine {
                 client: client.clone(),
                 acp_session_id: None,
                 resume_acp_session_id: resume,
-                protocol_version: init.protocol_version,
-                adapter_name: init
-                    .agent_info
-                    .as_ref()
-                    .map(|info| info.name.clone())
-                    .filter(|name| !name.is_empty()),
-                adapter_version: init
-                    .agent_info
-                    .as_ref()
-                    .map(|info| info.version.clone())
-                    .filter(|version| !version.is_empty()),
-                caps: init.caps(),
-                interaction: interaction.clone(),
+                negotiated: init.clone(),
                 native_commands: native_commands.clone(),
                 liveness,
                 mcp_servers: Vec::new(),
@@ -4937,10 +5389,11 @@ impl Engine {
                 handoff_context,
             },
         );
+        self.state.revivals.lock().unwrap().remove(id);
         drop(sessions);
         self.emit(Event::SessionCapabilities {
             session: id.to_string(),
-            steering: interaction.steering,
+            steering: interaction == SteerSupport::Native,
             compact_context: compact_context_supported(&native_commands),
         });
         if !models.is_empty() {
@@ -5005,6 +5458,10 @@ impl Engine {
         if let Some(runtime) = sessions.get_mut(session) {
             runtime.session.permission_mode = next.mode;
             runtime.session.sandbox_policy = next.sandbox;
+            // Native backends enforce their own ceiling on later turns; ACP ignores this.
+            if let Some(backend_session) = &runtime.acp_session_id {
+                runtime.client.set_execution_policy(backend_session, next);
+            }
         }
         Ok(Some(next))
     }
@@ -5212,11 +5669,11 @@ impl Engine {
                         .unwrap()
                         .remove(request_id)
                 });
-                let creation_receipt = t3_session_create_receipt(request_id.as_deref());
-                if let (Some(store), Some((command_id, public_thread_id))) =
+                let creation_receipt = session_create_receipt(request_id.as_deref());
+                if let (Some(store), Some((protocol, command_id, public_thread_id))) =
                     (&self.state.store, creation_receipt.as_ref())
                 {
-                    match store.command_receipt("t3-create", command_id) {
+                    match store.command_receipt(protocol, command_id) {
                         Ok(Some((session_id, subject_id, _)))
                             if subject_id.as_deref() == Some(public_thread_id.as_str()) =>
                         {
@@ -5342,22 +5799,73 @@ impl Engine {
                 let callback_active = handler.activity_flag();
                 let native_commands = handler.native_commands();
                 let liveness = handler.liveness();
-                let client = Arc::new(acp::spawn(&launch, handler.clone()).await?);
+                let backend = self.backend_for_new_session(&sess.provider);
+                let client: RuntimeHandle = self
+                    .launch_runtime(backend, &launch, handler.clone())
+                    .await
+                    .map_err(AcpError::from)?;
                 if !self.track_starting_client(&client) {
                     return Err(AcpError::Closed);
                 }
-                let init = match client.initialize(client_capabilities()).await {
+                let creation_cancelled =
+                    if let Some(("c2-assistant-create", id, _)) = creation_receipt.as_ref() {
+                        let mut creates = self.state.assistant_creations.lock().unwrap();
+                        let (flag, tracked) = creates
+                            .entry(id.clone())
+                            .or_insert_with(|| (Arc::new(AtomicBool::new(false)), None));
+                        *tracked = Some(client.clone());
+                        Some(flag.clone())
+                    } else {
+                        None
+                    };
+                if creation_cancelled
+                    .as_ref()
+                    .is_some_and(|f| f.load(Ordering::Acquire))
+                {
+                    client.terminate();
+                    self.untrack_starting_client(&client);
+                    return Err(AcpError::Closed);
+                }
+                let init = match client.initialize().await {
                     Ok(init) => init,
                     Err(error) => {
                         self.untrack_starting_client(&client);
-                        return Err(error);
+                        return Err(error.into());
                     }
                 };
-                let interaction = init.interaction_capabilities();
-                handler.set_interaction_capabilities(interaction.clone());
+                if backend.is_native() {
+                    // Bind before the first provider session exists, so a restart can only ever
+                    // resume this session through the backend that created it.
+                    if let Some(store) = &self.state.store {
+                        if let Err(error) = store.bind_session_runtime(
+                            &sess.id,
+                            backend,
+                            crate::provider_runtime::RUNTIME_CONTRACT_VERSION,
+                        ) {
+                            self.untrack_starting_client(&client);
+                            client.terminate();
+                            return Err(AcpError::Rpc(crate::error::RpcError::new(
+                                -32603,
+                                format!("couldn't record the session backend: {error}"),
+                            )));
+                        }
+                    }
+                }
+                let interaction = init.capabilities.steering;
+                handler.set_interaction_capabilities(crate::acp::wire::InteractionCapabilities {
+                    steering: interaction == SteerSupport::Native,
+                });
                 // Note: `session/new` is deferred to the first prompt (see Op::Prompt) so the
                 // document's MCP servers are attached then.
 
+                if creation_cancelled
+                    .as_ref()
+                    .is_some_and(|f| f.load(Ordering::Acquire))
+                {
+                    client.terminate();
+                    self.untrack_starting_client(&client);
+                    return Err(AcpError::Closed);
+                }
                 // Provider startup is verified before mutating Git. A worktree is durable session
                 // state: archive/restart must keep using the same isolated checkout, so the source
                 // project, working subdirectory, and checkout root are persisted independently;
@@ -5400,7 +5908,11 @@ impl Engine {
                 // shutdown sets the flag before taking this same lock, so it either sees the new
                 // session or this path refuses to persist/insert it.
                 let mut live_sessions = self.state.sessions.lock().unwrap();
-                if self.state.shutting_down.load(Ordering::Acquire) {
+                if self.state.shutting_down.load(Ordering::Acquire)
+                    || creation_cancelled
+                        .as_ref()
+                        .is_some_and(|f| f.load(Ordering::Acquire))
+                {
                     drop(live_sessions);
                     self.untrack_starting_client(&client);
                     if let (Some((repo, worktree)), Some(baseline)) =
@@ -5480,9 +5992,9 @@ impl Engine {
                             }
                         }
                         None => match creation_receipt.as_ref() {
-                            Some((command_id, public_thread_id)) => store
+                            Some((protocol, command_id, public_thread_id)) => store
                                 .upsert_session_with_command_receipt(
-                                    "t3-create",
+                                    protocol,
                                     command_id,
                                     public_thread_id,
                                     &sess,
@@ -5535,19 +6047,7 @@ impl Engine {
                         client: client.clone(),
                         acp_session_id: None,
                         resume_acp_session_id: None,
-                        protocol_version: init.protocol_version,
-                        adapter_name: init
-                            .agent_info
-                            .as_ref()
-                            .map(|info| info.name.clone())
-                            .filter(|name| !name.is_empty()),
-                        adapter_version: init
-                            .agent_info
-                            .as_ref()
-                            .map(|info| info.version.clone())
-                            .filter(|version| !version.is_empty()),
-                        caps: init.caps(),
-                        interaction: interaction.clone(),
+                        negotiated: init.clone(),
                         native_commands: native_commands.clone(),
                         liveness,
                         mcp_servers: Vec::new(),
@@ -5573,7 +6073,7 @@ impl Engine {
                 });
                 self.emit(Event::SessionCapabilities {
                     session: session_id.clone(),
-                    steering: interaction.steering,
+                    steering: interaction == SteerSupport::Native,
                     compact_context: compact_context_supported(&native_commands),
                 });
                 for (hook, error) in hook_errors {
@@ -5750,11 +6250,15 @@ impl Engine {
                 // Acceptance is one transaction when persistence is configured: the canonical
                 // prompt and Running activity either both commit or neither does.
                 let (transcript_seq, replayed) = if let Some(store) = &self.state.store {
-                    let persisted = if let Some((command_id, message_id)) =
-                        t3_prompt_receipt(request_id.as_deref())
-                    {
+                    let persisted = if let Some((protocol, command_id, message_id)) =
+                        prompt_receipt(request_id.as_deref()).or_else(|| {
+                            let id = request_id.as_ref()?;
+                            let delivery = store.prompt_delivery(id).ok()??;
+                            (delivery.session_id == session)
+                                .then(|| ("c2-delivery-prompt", id.clone(), Some(id.clone())))
+                        }) {
                         store.append_prompt_activity_and_receipt(
-                            "t3-prompt",
+                            protocol,
                             &command_id,
                             message_id.as_deref(),
                             &session,
@@ -5825,7 +6329,10 @@ impl Engine {
                 // app, the store doesn't. Revive it instead of stranding it.
                 let (client, mut acp_sid, cwd) = match looked {
                     Some(l) => l,
-                    None => match self.revive_session(&session).await {
+                    None => match self
+                        .revive_session(&session, request_id.as_deref(), Some(turn_lease.turn_id()))
+                        .await
+                    {
                         Ok(l) => l,
                         Err(message) => {
                             turn_lease.fail_provider(message.clone());
@@ -5934,6 +6441,23 @@ impl Engine {
                     // file as visible user text while preserving C2's provider-neutral rules.
                     compiled.prompt = without_codex_native_project_rules(compiled.prompt, &cwd);
                 }
+                if let Some(store) = &self.state.store {
+                    let managed = store.assistant_state().ok().is_some_and(|state| {
+                        state.goals.iter().any(|g| {
+                            g.assignments.last().is_some_and(|a| {
+                                a.session_id.as_deref() == Some(&session)
+                                    && a.owned
+                                    && !a.taken_over
+                            })
+                        })
+                    });
+                    if managed {
+                        let bridge = self.state.coordination_bridge.read().unwrap().clone();
+                        if let Some(bridge) = bridge {
+                            compiled.mcp_servers.push(bridge.server(&session));
+                        }
+                    }
+                }
                 attach_host_mcp_servers(
                     &mut compiled.mcp_servers,
                     provider_toolset.mcp_servers.iter().cloned(),
@@ -6032,12 +6556,12 @@ impl Engine {
                     map.get(&session)
                         .map(|runtime| {
                             (
-                                runtime.caps,
+                                runtime.negotiated.capabilities,
                                 runtime.mcp_servers.clone(),
                                 !runtime.provider_context_injected,
                             )
                         })
-                        .unwrap_or((AgentCaps::default(), Vec::new(), true))
+                        .unwrap_or((RuntimeCapabilities::default(), Vec::new(), true))
                 };
                 let provider_prompt = if native_command.is_some() {
                     provider_prompt
@@ -6097,8 +6621,8 @@ impl Engine {
                         return Ok(());
                     }
                 }
-                let mcp = match encode_mcp_servers(&compiled.mcp_servers, caps) {
-                    Ok(mcp) => mcp,
+                match caps.validate_mcp(&compiled.mcp_servers) {
+                    Ok(()) => {}
                     Err(message) => {
                         turn_lease.fail_provider(message.clone());
                         self.emit(Event::Error {
@@ -6146,42 +6670,43 @@ impl Engine {
                 // so the agent's own context survives the restart — the t3code-style resume
                 // cursor. Prefer native resume and fall back to load when advertised; anything
                 // else falls through to `session/new` below.
+                let execution = {
+                    let map = self.state.sessions.lock().unwrap();
+                    map.get(&session)
+                        .map(|r| ExecutionPolicy {
+                            mode: r.session.permission_mode,
+                            sandbox: r.session.sandbox_policy,
+                        })
+                        .unwrap_or_default()
+                };
                 if acp_sid.is_none() {
                     let resume = {
                         let map = self.state.sessions.lock().unwrap();
                         map.get(&session).and_then(|r| {
-                            (r.caps.resume_session || r.caps.load_session)
+                            r.negotiated
+                                .capabilities
+                                .resume
+                                .any()
                                 .then(|| r.resume_acp_session_id.clone())
                                 .flatten()
                                 .map(|id| (id, r.replaying.clone()))
                         })
                     };
                     if let Some((resume_id, replaying)) = resume {
-                        let loaded = restore_provider_session(
-                            &client,
-                            caps,
-                            &resume_id,
-                            &cwd,
-                            mcp.clone(),
-                            &replaying,
-                        )
-                        .await;
+                        let loaded = client
+                            .restore_session(
+                                RuntimeSessionRestore {
+                                    backend_session_id: resume_id.clone(),
+                                    cwd: cwd.clone(),
+                                    mcp_servers: compiled.mcp_servers.clone(),
+                                    execution,
+                                },
+                                &replaying,
+                            )
+                            .await;
                         match loaded {
                             Ok(resp) => {
-                                let mut restored_options = resp
-                                    .config_options
-                                    .as_deref()
-                                    .map(|options| config_option_infos(options))
-                                    .unwrap_or_default();
-                                if !restored_options.iter().any(|option| {
-                                    option.category.as_deref() == Some("thought_level")
-                                }) {
-                                    if let Some(option) =
-                                        reasoning_option_from_models(resp.models.as_ref())
-                                    {
-                                        restored_options.push(option);
-                                    }
-                                }
+                                let restored_options = resp.config_options;
                                 let (models, current, options) = {
                                     let mut map = self.state.sessions.lock().unwrap();
                                     let mut models = Vec::new();
@@ -6192,17 +6717,9 @@ impl Engine {
                                         r.resume_acp_session_id = None;
                                         r.mcp_servers = compiled.mcp_servers.clone();
                                         if let Some(m) = &resp.models {
-                                            r.models = m
-                                                .available_models
-                                                .iter()
-                                                .map(|x| ModelChoice {
-                                                    id: x.model_id.clone(),
-                                                    name: x.name.clone(),
-                                                    description: x.description.clone(),
-                                                })
-                                                .collect();
+                                            r.models = m.available.clone();
                                             r.models_reported = true;
-                                            current = m.current_model_id.clone();
+                                            current = m.current.clone();
                                         }
                                         models = r.models.clone();
                                         r.config_options = restored_options.clone();
@@ -6256,47 +6773,27 @@ impl Engine {
                 // Lazily create the ACP session on the first prompt, attaching the document's MCP
                 // servers at `session/new`.
                 if acp_sid.is_none() {
-                    match client.new_session_full(cwd, mcp).await {
+                    match client
+                        .start_session(RuntimeSessionStart {
+                            cwd,
+                            mcp_servers: compiled.mcp_servers.clone(),
+                            execution,
+                        })
+                        .await
+                    {
                         Ok(resp) => {
-                            let id = resp.session_id;
-                            // Models are optional in ACP and reported only here, so this is the one
-                            // chance to learn them.
-                            let reported: Vec<ModelChoice> = resp
+                            let id = resp.backend_session_id;
+                            let reported = resp
                                 .models
                                 .as_ref()
-                                .map(|m| {
-                                    m.available_models
-                                        .iter()
-                                        .map(|x| ModelChoice {
-                                            id: x.model_id.clone(),
-                                            name: x.name.clone(),
-                                            description: x.description.clone(),
-                                        })
-                                        .collect()
-                                })
+                                .map(|m| m.available.clone())
                                 .unwrap_or_default();
                             let mut current = resp
                                 .models
                                 .as_ref()
-                                .map(|m| m.current_model_id.clone())
+                                .map(|m| m.current.clone())
                                 .unwrap_or_default();
-
-                            // The newer config-options surface: model selector + thought level.
-                            let mut options = resp
-                                .config_options
-                                .as_deref()
-                                .map(|options| config_option_infos(options))
-                                .unwrap_or_default();
-                            if !options
-                                .iter()
-                                .any(|option| option.category.as_deref() == Some("thought_level"))
-                            {
-                                if let Some(option) =
-                                    reasoning_option_from_models(resp.models.as_ref())
-                                {
-                                    options.push(option);
-                                }
-                            }
+                            let mut options = resp.config_options;
                             let option_model = current_model_from_options(&options);
 
                             // A model chosen before this point had no ACP session to be sent to,
@@ -6335,7 +6832,11 @@ impl Engine {
                             // catalogue even though it also reports split model/effort selectors.
                             // Preserve a deliberate pre-session choice there; retain the old
                             // provider-owned-selector behavior for adapters we have not verified.
-                            let pending = pending.filter(|_| option_model.is_none() || is_codex);
+                            let strict_config = request_id
+                                .as_deref()
+                                .is_some_and(|id| id.starts_with("c2-assistant-prompt:"));
+                            let pending = pending
+                                .filter(|_| strict_config || option_model.is_none() || is_codex);
                             if let Some(want) = pending.filter(|m| *m != current) {
                                 match client.set_model(&id, &want).await {
                                     Ok(()) => {
@@ -6358,12 +6859,19 @@ impl Engine {
                                                 (!current.is_empty()).then(|| current.clone());
                                         }
                                         drop(map);
+                                        let message = format!("{want} wasn't accepted: {e}");
+                                        if strict_config {
+                                            turn_lease.fail_provider(message.clone());
+                                        }
                                         self.emit(Event::Error {
                                             session: Some(session.clone()),
-                                            message: format!("{want} wasn't accepted: {e}"),
-                                            terminal: false,
+                                            message,
+                                            terminal: strict_config,
                                             request_id: request_id.clone(),
                                         });
+                                        if strict_config {
+                                            return Ok(());
+                                        }
                                     }
                                 }
                             }
@@ -6390,22 +6898,38 @@ impl Engine {
                                             next
                                         })
                                     } else {
-                                        client
-                                            .set_config_option(&id, &option.id, &want)
-                                            .await
-                                            .map(|options| config_option_infos(&options))
+                                        client.set_config_option(&id, &option.id, &want).await
                                     };
                                     match changed {
                                         Ok(updated) => options = updated,
-                                        Err(error) => self.emit(Event::Error {
-                                            session: Some(session.clone()),
-                                            message: format!(
+                                        Err(error) => {
+                                            let message = format!(
                                                 "reasoning effort {want} wasn't accepted: {error}"
-                                            ),
-                                            terminal: false,
-                                            request_id: request_id.clone(),
-                                        }),
+                                            );
+                                            if strict_config {
+                                                turn_lease.fail_provider(message.clone());
+                                            }
+                                            self.emit(Event::Error {
+                                                session: Some(session.clone()),
+                                                message,
+                                                terminal: strict_config,
+                                                request_id: request_id.clone(),
+                                            });
+                                            if strict_config {
+                                                return Ok(());
+                                            }
+                                        }
                                     }
+                                } else if strict_config {
+                                    let message = format!("Provider does not expose requested reasoning effort {want}");
+                                    turn_lease.fail_provider(message.clone());
+                                    self.emit(Event::Error {
+                                        session: Some(session.clone()),
+                                        message,
+                                        terminal: true,
+                                        request_id: request_id.clone(),
+                                    });
+                                    return Ok(());
                                 }
                             }
 
@@ -6541,24 +7065,24 @@ impl Engine {
                     }
                 }
                 tokio::spawn(async move {
-                    let mut blocks = vec![ContentBlock::text(provider_prompt)];
+                    let mut blocks = vec![RuntimeContent::text(provider_prompt)];
                     // Attached images ride along as ACP image content blocks.
                     for path in &compiled.images {
                         if let Ok((mime_type, data)) = crate::workspace::read_image_base64(
                             std::path::Path::new(&images_cwd),
                             path,
                         ) {
-                            blocks.push(ContentBlock::Image { data, mime_type });
+                            blocks.push(RuntimeContent::Image { data, mime_type });
                         }
                     }
                     for appshot in &compiled.appshots {
-                        blocks.push(ContentBlock::Image {
+                        blocks.push(RuntimeContent::Image {
                             data: appshot.data.clone(),
                             mime_type: appshot.mime_type.clone(),
                         });
                     }
                     for attachment in &compiled.attachments {
-                        blocks.push(ContentBlock::Image {
+                        blocks.push(RuntimeContent::Image {
                             data: attachment.data.clone(),
                             mime_type: attachment.mime_type.clone(),
                         });
@@ -6567,8 +7091,33 @@ impl Engine {
                     // capability intentionally attempted every image above; any provider failure
                     // remains visible through the ACP error path.
                     blocks.extend(canvas_image_blocks);
+                    if turn_engine.current_turn(&sess_for_task).as_deref()
+                        != Some(turn_lease.turn_id())
+                    {
+                        liveness.end_turn();
+                        return;
+                    }
+                    if let Err(error) =
+                        turn_engine.require_prompt_send(&sess_for_task, request_id.as_deref())
+                    {
+                        turn_lease.fail_provider(error);
+                        liveness.end_turn();
+                        return;
+                    }
+                    {
+                        let mut stopped = turn_engine.state.stopped_before_send.lock().unwrap();
+                        if stopped.get(&sess_for_task).map(String::as_str)
+                            == Some(turn_lease.turn_id())
+                        {
+                            stopped.remove(&sess_for_task);
+                            drop(stopped);
+                            turn_lease.fail_provider("Stopped before the prompt was sent");
+                            liveness.end_turn();
+                            return;
+                        }
+                    }
                     let outcome = await_provider_prompt(
-                        client.prompt(&acp_sid, blocks),
+                        client.send_turn(&acp_sid, blocks),
                         progress,
                         turn_engine.state.activity.clone(),
                         &sess_for_task,
@@ -6577,7 +7126,7 @@ impl Engine {
                     .await;
                     liveness.end_turn();
                     match outcome {
-                        ProviderPromptOutcome::Completed(Ok(stop)) => {
+                        ProviderPromptOutcome::Completed(TurnOutcome::Terminal(stop)) => {
                             if native_command.is_none() {
                                 let mut sessions = turn_engine.state.sessions.lock().unwrap();
                                 if let Some(runtime) = sessions.get_mut(&sess_for_task) {
@@ -6589,7 +7138,7 @@ impl Engine {
                                     }
                                 }
                             }
-                            if clear_handoff_after_prompt && stop != StopReason::Cancelled {
+                            if clear_handoff_after_prompt && !stop.is_cancelled() {
                                 if let Err(error) =
                                     turn_engine.clear_handoff_context(&sess_for_task)
                                 {
@@ -6602,7 +7151,7 @@ impl Engine {
                             // partial outcome or index it as a completed answer. Other terminal stop
                             // reasons still describe a completed provider response, even when it was
                             // bounded or refused.
-                            if stop != StopReason::Cancelled {
+                            if !stop.is_cancelled() {
                                 if let Some(store) = turn_store {
                                     if let Err(error) = store.finalize_agent_search(&sess_for_task)
                                     {
@@ -6682,11 +7231,16 @@ impl Engine {
                             if turn_lease.finish_success() {
                                 let _ = events.send(Event::TurnEnded {
                                     session: sess_for_task,
-                                    stop_reason: format!("{stop:?}"),
+                                    stop_reason: stop.label().into(),
                                 });
                             }
                         }
-                        ProviderPromptOutcome::Completed(Err(e)) => {
+                        ProviderPromptOutcome::Completed(
+                            TurnOutcome::NotSent(e)
+                            | TurnOutcome::Rejected(e)
+                            | TurnOutcome::Failed(e)
+                            | TurnOutcome::Unknown(e),
+                        ) => {
                             let message = e.to_string();
                             if turn_lease.fail_provider(message.clone()) {
                                 let _ = events.send(Event::Error {
@@ -6701,7 +7255,7 @@ impl Engine {
                             active_tools,
                             timeout,
                         } => {
-                            let _ = client.cancel(&acp_sid);
+                            let _ = client.request_stop(&acp_sid);
                             client.terminate();
                             {
                                 let mut sessions = turn_engine.state.sessions.lock().unwrap();
@@ -6977,7 +7531,6 @@ impl Engine {
 
                 match client.set_config_option(&acp_sid, &config_id, &value).await {
                     Ok(options) => {
-                        let options = config_option_infos(&options);
                         {
                             let mut map = self.state.sessions.lock().unwrap();
                             if let Some(rt) = map.get_mut(&session) {
@@ -8174,7 +8727,7 @@ for line in sys.stdin:
         assert_eq!(restored.worktree_identity, session.worktree_identity);
         let (engine, _events) =
             Engine::with_store(Vec::new(), SkillLibrary::default(), store.clone());
-        let error = match engine.revive_session(&session.id).await {
+        let error = match engine.revive_session(&session.id, None, None).await {
             Ok(_) => panic!("replacement checkout must not revive"),
             Err(error) => error,
         };
@@ -8695,7 +9248,7 @@ mod session_management_tests {
 
         let list_error = engine.list_sessions().unwrap_err().to_string();
         assert!(!list_error.is_empty());
-        let revive_error = match engine.revive_session(&session.id).await {
+        let revive_error = match engine.revive_session(&session.id, None, None).await {
             Ok(_) => panic!("corrupt session must not revive"),
             Err(error) => error,
         };
@@ -9424,7 +9977,7 @@ mod cancel_recovery_tests {
             FailingWriter,
             Arc::new(RecordingHandler::default()),
         );
-        let client = Arc::new(AcpClient::new(connection, None));
+        let client = AcpClient::new(connection, None);
         client
             .connection()
             .notify("test/warmup", serde_json::json!({}))
@@ -9451,14 +10004,10 @@ mod cancel_recovery_tests {
                 provider_toolset: ProviderToolset::default(),
                 provider_context_injected: false,
                 injected_memory_keys: HashSet::new(),
-                client,
+                client: Arc::new(crate::connectors::acp::AcpRuntime::new(client)),
                 acp_session_id: Some("provider-session".into()),
                 resume_acp_session_id: None,
-                protocol_version: crate::acp::wire::PROTOCOL_VERSION,
-                adapter_name: None,
-                adapter_version: None,
-                caps: AgentCaps::default(),
-                interaction: Default::default(),
+                negotiated: RuntimeInit::default(),
                 native_commands: Arc::new(RwLock::new(HashSet::new())),
                 liveness: ProviderLiveness::default(),
                 mcp_servers: Vec::new(),

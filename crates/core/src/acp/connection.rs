@@ -7,13 +7,13 @@
 
 use std::collections::{BTreeMap, HashMap, VecDeque};
 use std::sync::atomic::{AtomicI64, AtomicU64, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, Weak};
 
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use serde_json::{json, Value};
 use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncWrite, AsyncWriteExt, BufReader};
-use tokio::sync::{mpsc, oneshot};
+use tokio::sync::{mpsc, oneshot, watch};
 
 use super::handler::ClientHandler;
 use super::wire::{SessionNotification, SessionUpdate};
@@ -67,11 +67,26 @@ struct AcpProtocolDiagnosticState {
     ignored_notification_methods: BTreeMap<String, u64>,
 }
 
+/// Why a request produced no usable response, with the transmission phase preserved.
+#[derive(Debug)]
+pub enum RequestFault {
+    /// The writer was already gone, so the request was never queued and nothing was transmitted.
+    NotQueued,
+    /// The request was queued for the writer but no response arrived (the connection closed).
+    /// Whether the peer saw it is unknown.
+    Unresolved,
+    /// The peer answered with a JSON-RPC error: definite evidence that it received the request.
+    Provider(RpcError),
+    /// The peer answered, but the result could not be decoded.
+    Decode(serde_json::Error),
+}
+
 pub struct Connection {
     tx_out: mpsc::UnboundedSender<String>,
     pending: Mutex<HashMap<u64, oneshot::Sender<Result<Value, RpcError>>>>,
     next_id: AtomicU64,
     closed_at_unix_ms: AtomicI64,
+    closed: watch::Sender<bool>,
     diagnostics: Mutex<AcpProtocolDiagnosticState>,
 }
 
@@ -89,9 +104,15 @@ impl Connection {
             pending: Mutex::new(HashMap::new()),
             next_id: AtomicU64::new(1),
             closed_at_unix_ms: AtomicI64::new(0),
+            closed: watch::channel(false).0,
             diagnostics: Mutex::new(AcpProtocolDiagnosticState::default()),
         });
-        tokio::spawn(writer_task(writer, rx_out));
+        tokio::spawn(writer_task(
+            writer,
+            rx_out,
+            Arc::downgrade(&conn),
+            conn.closed.subscribe(),
+        ));
         tokio::spawn(reader_task(reader, conn.clone(), handler));
         conn
     }
@@ -102,19 +123,44 @@ impl Connection {
         P: Serialize,
         R: DeserializeOwned,
     {
+        self.request_phased(method, params)
+            .await
+            .map_err(|fault| match fault {
+                RequestFault::NotQueued | RequestFault::Unresolved => AcpError::Closed,
+                RequestFault::Provider(error) => AcpError::Rpc(error),
+                RequestFault::Decode(error) => AcpError::Decode(error),
+            })
+    }
+
+    /// Like [`Connection::request`], but keeps the transmission phase of a failure. A request that
+    /// was never queued for the writer is provably unsent; a queued request whose response channel
+    /// closed may or may not have reached the peer and must not be replayed blindly.
+    pub async fn request_phased<P, R>(&self, method: &str, params: P) -> Result<R, RequestFault>
+    where
+        P: Serialize,
+        R: DeserializeOwned,
+    {
         self.record_outbound_request(method);
         let id = self.next_id.fetch_add(1, Ordering::Relaxed);
         let (tx, rx) = oneshot::channel();
-        self.pending.lock().unwrap().insert(id, tx);
         let msg = json!({"jsonrpc": "2.0", "id": id, "method": method, "params": params});
-        self.tx_out
-            .send(msg.to_string())
-            .map_err(|_| AcpError::Closed)?;
-        match rx.await.map_err(|_| AcpError::Closed)? {
-            Ok(v) => serde_json::from_value(v).map_err(AcpError::Decode),
+        {
+            // Serialize claiming/queueing with transport closure, never with network I/O.
+            let mut pending = self.pending.lock().unwrap();
+            if self.closed_at_unix_ms.load(Ordering::Acquire) != 0 {
+                return Err(RequestFault::NotQueued);
+            }
+            pending.insert(id, tx);
+            if self.tx_out.send(msg.to_string()).is_err() {
+                pending.remove(&id);
+                return Err(RequestFault::NotQueued);
+            }
+        }
+        match rx.await.map_err(|_| RequestFault::Unresolved)? {
+            Ok(v) => serde_json::from_value(v).map_err(RequestFault::Decode),
             Err(e) => {
                 self.record_outbound_rpc_error(e.code);
-                Err(AcpError::Rpc(e))
+                Err(RequestFault::Provider(e))
             }
         }
     }
@@ -123,6 +169,10 @@ impl Connection {
     pub fn notify<P: Serialize>(&self, method: &str, params: P) -> Result<(), AcpError> {
         self.record_outbound_notification(method);
         let msg = json!({"jsonrpc": "2.0", "method": method, "params": params});
+        let _pending = self.pending.lock().unwrap();
+        if self.closed_at_unix_ms.load(Ordering::Acquire) != 0 {
+            return Err(AcpError::Closed);
+        }
         self.tx_out
             .send(msg.to_string())
             .map_err(|_| AcpError::Closed)
@@ -207,12 +257,21 @@ impl Connection {
     }
 
     fn mark_closed(&self) {
-        let _ = self.closed_at_unix_ms.compare_exchange(
-            0,
-            unix_time_millis(),
-            Ordering::AcqRel,
-            Ordering::Acquire,
-        );
+        let mut pending = self.pending.lock().unwrap();
+        if self
+            .closed_at_unix_ms
+            .compare_exchange(
+                0,
+                unix_time_millis().max(1),
+                Ordering::AcqRel,
+                Ordering::Acquire,
+            )
+            .is_ok()
+        {
+            // Drop response channels: local transport loss is not a provider RPC rejection.
+            pending.clear();
+            self.closed.send_replace(true);
+        }
     }
 }
 
@@ -265,18 +324,40 @@ fn anomaly_snapshot(categories: &BTreeMap<String, u64>) -> Vec<AcpProtocolAnomal
         .collect()
 }
 
-async fn writer_task<W>(mut writer: W, mut rx: mpsc::UnboundedReceiver<String>)
-where
+async fn writer_task<W>(
+    mut writer: W,
+    mut rx: mpsc::UnboundedReceiver<String>,
+    connection: Weak<Connection>,
+    mut closed: watch::Receiver<bool>,
+) where
     W: AsyncWrite + Unpin + Send + 'static,
 {
-    while let Some(mut line) = rx.recv().await {
+    loop {
+        if *closed.borrow() {
+            break;
+        }
+        let line = tokio::select! {
+            _ = closed.changed() => break,
+            line = rx.recv() => line,
+        };
+        let Some(mut line) = line else {
+            break;
+        };
         line.push('\n');
-        if writer.write_all(line.as_bytes()).await.is_err() {
+        let written = tokio::select! {
+            _ = closed.changed() => break,
+            result = async {
+                writer.write_all(line.as_bytes()).await?;
+                writer.flush().await
+            } => result,
+        };
+        if written.is_err() {
             break;
         }
-        if writer.flush().await.is_err() {
-            break;
-        }
+    }
+    rx.close();
+    if let Some(connection) = connection.upgrade() {
+        connection.mark_closed();
     }
 }
 
@@ -285,8 +366,16 @@ where
     R: AsyncRead + Unpin + Send + 'static,
 {
     let mut lines = BufReader::new(reader).lines();
+    let mut closed = conn.closed.subscribe();
     loop {
-        match lines.next_line().await {
+        if *closed.borrow() {
+            break;
+        }
+        let line = tokio::select! {
+            _ = closed.changed() => break,
+            line = lines.next_line() => line,
+        };
+        match line {
             Ok(Some(line)) => {
                 if line.trim().is_empty() {
                     continue;
@@ -309,11 +398,6 @@ where
         }
     }
     conn.mark_closed();
-    // Stream closed: fail every outstanding request so callers don't hang forever.
-    let mut pending = conn.pending.lock().unwrap();
-    for (_, tx) in pending.drain() {
-        let _ = tx.send(Err(RpcError::new(-1, "connection closed")));
-    }
 }
 
 /// Route one decoded message. Responses resolve pending requests; notifications are handled inline
@@ -480,6 +564,7 @@ mod tests {
             pending: Mutex::new(HashMap::new()),
             next_id: AtomicU64::new(1),
             closed_at_unix_ms: AtomicI64::new(0),
+            closed: watch::channel(false).0,
             diagnostics: Mutex::new(AcpProtocolDiagnosticState::default()),
         })
     }
@@ -602,6 +687,7 @@ mod cursor_tests {
             pending: Mutex::new(HashMap::new()),
             next_id: AtomicU64::new(1),
             closed_at_unix_ms: AtomicI64::new(0),
+            closed: watch::channel(false).0,
             diagnostics: Mutex::new(AcpProtocolDiagnosticState::default()),
         };
         let handler = Arc::new(Handler::default());

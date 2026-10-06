@@ -225,7 +225,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 | Event::SessionCapabilities { .. }
                 | Event::PromptQueued { .. }
                 | Event::SteerAccepted { .. }
-                | Event::WorktreeDiscarded { .. } => {}
+                | Event::WorktreeDiscarded { .. }
+                | Event::AssistantAlert { .. } => {}
             }
         }
     };

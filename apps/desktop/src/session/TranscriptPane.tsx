@@ -18,21 +18,33 @@ import { useTranscriptScroll } from "./useTranscriptScroll";
 interface TranscriptPaneProps {
   variant: "main" | "side";
   turns: readonly Turn[];
-  loading: boolean;
-  hasEarlier: boolean;
-  loadingEarlier: boolean;
-  onLoadEarlier: (scroll: TranscriptScrollController) => void;
+  loading?: boolean;
+  hasEarlier?: boolean;
+  loadingEarlier?: boolean;
+  onLoadEarlier?: (scroll: TranscriptScrollController) => void;
   /** R2 "Save as template…" in each turn's prompt menu. Absent → the menu stays hidden. */
   onSaveTemplate?: (promptText: string) => void;
   linkActions?: BuiltinLinkActions;
   /** Durable source session used for scroll restoration. */
   sessionId?: string | null;
   onForkTurn?: (turn: Turn) => void;
-  onAddSelection: (text: string) => void;
-  onExplainSelection: (text: string) => void;
-  onAskSelectionInSideChat: (text: string) => void;
+  /** Selection actions render only when the host supplies all three. */
+  onAddSelection?: (text: string) => void;
+  onExplainSelection?: (text: string) => void;
+  onAskSelectionInSideChat?: (text: string) => void;
   /** Host-rendered declarative plugin actions above the transcript. */
   before?: ReactNode;
+  /** Conversation mode: unfinished replies are not shown as running work. */
+  quiet?: boolean;
+  /** Records attached under one turn (questions, deliveries, …). */
+  renderAfter?: (turn: Turn) => ReactNode;
+  /** Live records after the last turn, inside the same scroll viewport. */
+  after?: ReactNode;
+  /** Shown instead of the list while there are no turns. */
+  empty?: ReactNode;
+  /** False while a hosting view is hidden; the scroll offset is restored on return. */
+  active?: boolean;
+  label?: string;
 }
 
 /** One transcript renderer shared by the main column and document-mode side panel. */
@@ -40,9 +52,9 @@ export function TranscriptPane({
   sessionId,
   variant,
   turns,
-  loading,
-  hasEarlier,
-  loadingEarlier,
+  loading = false,
+  hasEarlier = false,
+  loadingEarlier = false,
   onLoadEarlier,
   onSaveTemplate,
   linkActions,
@@ -51,15 +63,21 @@ export function TranscriptPane({
   onExplainSelection,
   onAskSelectionInSideChat,
   before,
+  quiet = false,
+  renderAfter,
+  after,
+  empty,
+  active = true,
+  label,
 }: TranscriptPaneProps) {
   const t = useT();
-  const scroll = useTranscriptScroll(sessionId ?? null, turns);
+  const scroll = useTranscriptScroll(sessionId ?? null, turns, active);
   const Root = variant === "side" ? "aside" : "section";
   const selectionScopeRef = useRef<HTMLDivElement | null>(null);
 
   return (
     <Root
-      aria-label={t("transcript.label")}
+      aria-label={label ?? t("transcript.label")}
       className={cn(
         "relative min-h-0",
         variant === "side"
@@ -102,7 +120,7 @@ export function TranscriptPane({
                     size="sm"
                     variant="ghost"
                     disabled={loadingEarlier}
-                    onClick={() => onLoadEarlier(scroll)}
+                    onClick={() => onLoadEarlier?.(scroll)}
                   >
                     {loadingEarlier ? (
                       <Spinner data-icon="inline-start" />
@@ -113,6 +131,7 @@ export function TranscriptPane({
                   </Button>
                 </div>
               ) : null}
+              {turns.length === 0 ? empty : null}
               <ol className="m-0 list-none p-0">
                 {turns.map((turn) => (
                   <li
@@ -124,21 +143,26 @@ export function TranscriptPane({
                       onSaveTemplate={onSaveTemplate}
                       linkActions={linkActions}
                       onFork={onForkTurn}
+                      quiet={quiet}
+                      after={renderAfter?.(turn)}
                     />
                   </li>
                 ))}
               </ol>
+              {after}
             </>
           )}
         </div>
       </div>
 
-      <SelectionActions
-        scopeRef={selectionScopeRef}
-        onAdd={onAddSelection}
-        onDetails={onExplainSelection}
-        onAskInSideChat={onAskSelectionInSideChat}
-      />
+      {onAddSelection && onExplainSelection && onAskSelectionInSideChat ? (
+        <SelectionActions
+          scopeRef={selectionScopeRef}
+          onAdd={onAddSelection}
+          onDetails={onExplainSelection}
+          onAskInSideChat={onAskSelectionInSideChat}
+        />
+      ) : null}
 
       {scroll.showJumpToLatest ? (
         <Button

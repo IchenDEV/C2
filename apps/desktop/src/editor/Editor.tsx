@@ -48,22 +48,33 @@ import {
 } from "./slotCard";
 
 interface EditorProps {
-  skills: SkillInfo[];
+  /**
+   * Plain-conversation mode: text and basic formatting only. Hides skills, `@` mentions, Canvas,
+   * and media/table menu entries so nothing can be inserted that a text-only consumer would drop.
+   */
+  textOnly?: boolean;
+  /** Overrides the localized placeholder (conversation hosts supply their own prompt). */
+  placeholder?: string;
+  /** Overrides the localized accessible name of the textbox. */
+  inputLabel?: string;
+  skills?: SkillInfo[];
   /// Working directory used to resolve `@`-file mentions.
-  cwd: string;
+  cwd?: string;
   /// The session this document sends to — kept out of the `@` chat picker (it's already context).
   sessionId: string | null;
   // App reads the composed document out of the editor on Run.
   getBlocksRef: MutableRefObject<(() => DocBlock[]) | null>;
+  /** Text consumers use BlockNote's Markdown export; unsupported embedded blocks return null. */
+  getMarkdownRef?: MutableRefObject<(() => Promise<string | null>) | null>;
   // App appends plain text (voice, terminal sends) through this.
-  insertTextRef: MutableRefObject<((text: string) => void) | null>;
+  insertTextRef?: MutableRefObject<((text: string) => void) | null>;
   // App appends browser annotations through this — as dedicated cards, not markdown paragraphs.
   // `context` is the compiled markdown the block serializes back into.
-  insertAnnotationRef: MutableRefObject<
+  insertAnnotationRef?: MutableRefObject<
     ((a: Annotation, context: string) => void) | null
   >;
   // App inserts `@file` mentions (from the file browser) through this.
-  insertFileRef: MutableRefObject<((path: string) => void) | null>;
+  insertFileRef?: MutableRefObject<((path: string) => void) | null>;
   // A transcript branch prepends a bounded past-chat mention to the new task draft.
   insertSessionRef?: MutableRefObject<
     | ((session: { id: string; title: string; throughSeq: number }) => void)
@@ -78,12 +89,12 @@ interface EditorProps {
   insertMarkdownRef?: MutableRefObject<
     ((markdown: string, mode: "replace" | "append") => Promise<void>) | null
   >;
-  openSkillPickerRef: MutableRefObject<(() => void) | null>;
+  openSkillPickerRef?: MutableRefObject<(() => void) | null>;
   // Active scene's skill palette: pinned skills lead the `/` picker; with suppress_unpinned the
   // rest hide behind a "show all" row (always reachable, per docs/reference/scenes.md).
   sceneSkills?: { pinned: string[]; suppressUnpinned: boolean } | null;
   // Plugin Hub inserts a specific component directly instead of reopening the slash picker.
-  insertSkillRef: MutableRefObject<((skill: SkillInfo) => void) | null>;
+  insertSkillRef?: MutableRefObject<((skill: SkillInfo) => void) | null>;
   // Composer inserts the active scene's brief as a slot card at the document top (R5); R11 may
   // pass model-structured values to pre-fill the fields.
   insertBriefRef?: MutableRefObject<
@@ -95,14 +106,14 @@ interface EditorProps {
     ((issue: Issue, context: string, delegatedScene?: string) => void) | null
   >;
   /** Composer-owned Canvas insertion/freeze seams. Canvas authoring is hidden when the gate is off. */
-  canvasEnabled: boolean;
-  canvasRuntime: CanvasBlockRuntime | null;
-  createCanvas: () => Promise<CanvasDraft>;
-  insertCanvasRef: MutableRefObject<(() => Promise<void>) | null>;
-  insertCanvasDraftRef: MutableRefObject<
+  canvasEnabled?: boolean;
+  canvasRuntime?: CanvasBlockRuntime | null;
+  createCanvas?: () => Promise<CanvasDraft>;
+  insertCanvasRef?: MutableRefObject<(() => Promise<void>) | null>;
+  insertCanvasDraftRef?: MutableRefObject<
     ((draft: CanvasDraft, options?: CanvasInsertOptions) => void) | null
   >;
-  restoreCanvasDocumentRef: MutableRefObject<
+  restoreCanvasDocumentRef?: MutableRefObject<
     | ((
         doc: readonly DocBlock[],
         drafts: ReadonlyMap<string, CanvasDraft>,
@@ -110,7 +121,7 @@ interface EditorProps {
       ) => void)
     | null
   >;
-  freezeCanvasesRef: MutableRefObject<
+  freezeCanvasesRef?: MutableRefObject<
     ((doc: readonly DocBlock[]) => Promise<DocBlock[]>) | null
   >;
   /**
@@ -332,45 +343,70 @@ async function chatMenuItems(
     }));
 }
 
+const EMPTY_SKILLS: SkillInfo[] = [];
+const noCanvas = async (): Promise<CanvasDraft> => {
+  throw new Error("Canvas is unavailable in this editor");
+};
+
+function useEditorRef<T>(external: MutableRefObject<T | null> | undefined) {
+  const local = useRef<T | null>(null);
+  return external ?? local;
+}
+
 export function DocEditor({
-  skills,
-  cwd,
+  skills = EMPTY_SKILLS,
+  cwd = "",
   sessionId,
   getBlocksRef,
-  insertTextRef,
-  insertAnnotationRef,
-  insertFileRef,
+  getMarkdownRef,
+  insertTextRef: insertTextRefProp,
+  insertAnnotationRef: insertAnnotationRefProp,
+  insertFileRef: insertFileRefProp,
   insertSessionRef,
   focusRef,
   clearRef,
   insertMarkdownRef,
-  openSkillPickerRef,
+  openSkillPickerRef: openSkillPickerRefProp,
   sceneSkills = null,
-  insertSkillRef,
+  insertSkillRef: insertSkillRefProp,
   insertBriefRef,
   insertIssueRef,
-  canvasEnabled,
-  canvasRuntime,
-  createCanvas,
-  insertCanvasRef,
-  insertCanvasDraftRef,
-  restoreCanvasDocumentRef,
-  freezeCanvasesRef,
+  canvasEnabled: canvasEnabledProp = false,
+  canvasRuntime = null,
+  createCanvas = noCanvas,
+  insertCanvasRef: insertCanvasRefProp,
+  insertCanvasDraftRef: insertCanvasDraftRefProp,
+  restoreCanvasDocumentRef: restoreCanvasDocumentRefProp,
+  freezeCanvasesRef: freezeCanvasesRefProp,
   canvasDeliveryErrorRef,
   onPasteImages,
   onEmptyChange,
   onDocumentChange,
+  textOnly = false,
+  placeholder: placeholderOverride,
+  inputLabel,
 }: EditorProps) {
   // Sticky within the session: once expanded, the picker stays un-suppressed.
   const showAllSkillsRef = useRef(false);
   const t = useT();
+  // Optional commands retain distinct handles; registrations must never overwrite one another.
+  const insertTextRef = useEditorRef(insertTextRefProp);
+  const insertAnnotationRef = useEditorRef(insertAnnotationRefProp);
+  const insertFileRef = useEditorRef(insertFileRefProp);
+  const openSkillPickerRef = useEditorRef(openSkillPickerRefProp);
+  const insertSkillRef = useEditorRef(insertSkillRefProp);
+  const insertCanvasRef = useEditorRef(insertCanvasRefProp);
+  const insertCanvasDraftRef = useEditorRef(insertCanvasDraftRefProp);
+  const restoreCanvasDocumentRef = useEditorRef(restoreCanvasDocumentRefProp);
+  const freezeCanvasesRef = useEditorRef(freezeCanvasesRefProp);
+  const canvasEnabled = canvasEnabledProp && !textOnly;
   const editorRootRef = useRef<HTMLDivElement>(null);
   // The Composer's color scheme is transient UI state. Keep it outside the Canvas envelope so a
   // live theme change updates mounted editable blocks without rewriting readonly/history data.
   const scheme = useColorScheme();
   // Read once: BlockNote bakes its dictionary in at creation, so a language change needs a remount
   // rather than a re-render. The `key` in App does that.
-  const placeholder = t("composer.placeholder");
+  const placeholder = placeholderOverride ?? t("composer.placeholder");
   // Start empty. A pre-filled sample used to be the first thing every session showed, which meant
   // the user's first act was deleting our text; the placeholder carries the same hint for free.
   const editor = useCreateBlockNote({
@@ -390,9 +426,12 @@ export function DocEditor({
       editorRootRef.current?.querySelector<HTMLElement>(".ProseMirror");
     if (!editable) return;
     editable.setAttribute("role", "textbox");
-    editable.setAttribute("aria-label", t("composer.documentInput"));
+    editable.setAttribute(
+      "aria-label",
+      inputLabel ?? t("composer.documentInput")
+    );
     editable.setAttribute("aria-multiline", "true");
-  }, [t]);
+  }, [t, inputLabel]);
 
   const insertCanvasDraft = (
     draft: CanvasDraft,
@@ -688,6 +727,37 @@ export function DocEditor({
 
   useEffect(() => {
     getBlocksRef.current = () => docToBlocks(editor);
+    if (getMarkdownRef) {
+      getMarkdownRef.current = async () => {
+        const document = editor.document;
+        // Validate the actual tree before the lossy exporter can drop a card, table or mention.
+        const textBlocks = new Set([
+          "paragraph",
+          "heading",
+          "bulletListItem",
+          "numberedListItem",
+          "checkListItem",
+          "quote",
+          "codeBlock",
+        ]);
+        const validInline = (content: unknown): boolean =>
+          Array.isArray(content) &&
+          content.every(
+            (inline) =>
+              inline.type === "text" ||
+              (inline.type === "link" && validInline(inline.content))
+          );
+        const validBlocks = (blocks: typeof document): boolean =>
+          blocks.every(
+            (block) =>
+              textBlocks.has(block.type) &&
+              validInline(block.content) &&
+              validBlocks(block.children)
+          );
+        if (!validBlocks(document)) return null;
+        return (await editor.blocksToMarkdownLossy(document)).trim();
+      };
+    }
     insertTextRef.current = (text: string) => {
       const doc = editor.document;
       const last = doc.at(-1)!;
@@ -892,6 +962,7 @@ export function DocEditor({
         );
       }
       getBlocksRef.current = null;
+      if (getMarkdownRef) getMarkdownRef.current = null;
       insertTextRef.current = null;
       insertAnnotationRef.current = null;
       insertFileRef.current = null;
@@ -915,6 +986,7 @@ export function DocEditor({
     editorCanvasRuntime,
     freezeCanvasesRef,
     getBlocksRef,
+    getMarkdownRef,
     insertAnnotationRef,
     insertBriefRef,
     insertCanvasDraft,
@@ -991,12 +1063,14 @@ export function DocEditor({
             getItems={async (query) =>
               filterSuggestionItems(
                 [
-                  ...sceneSkillItems(
-                    editor,
-                    skills,
-                    sceneSkills,
-                    showAllSkillsRef
-                  ),
+                  ...(textOnly
+                    ? []
+                    : sceneSkillItems(
+                        editor,
+                        skills,
+                        sceneSkills,
+                        showAllSkillsRef
+                      )),
                   ...(canvasEnabled
                     ? [
                         canvasSlashItem(
@@ -1010,7 +1084,13 @@ export function DocEditor({
                   // unrelated media placeholders out of the slash menu; use `@` for workspace files.
                   ...getDefaultReactSlashMenuItems(editor).filter(
                     (i) =>
-                      !["Image", "Video", "Audio", "File"].includes(i.title)
+                      ![
+                        "Image",
+                        "Video",
+                        "Audio",
+                        "File",
+                        ...(textOnly ? ["Table"] : []),
+                      ].includes(i.title)
                   ),
                 ],
                 query
@@ -1021,35 +1101,37 @@ export function DocEditor({
             inlined into the compiled prompt. */}
           {/* The type argument is explicit because the controller infers its item type from `getItems`,
             and an inline lambda lets it fall back to BlockNote's default item instead. */}
-          <SuggestionMenuController<typeof getAtItems>
-            triggerCharacter="@"
-            getItems={getAtItems}
-            suggestionMenuComponent={FileMenu}
-            onItemClick={(item) => {
-              editor.insertInlineContent([
-                item.kind === "chat"
-                  ? {
-                      type: "sessionMention",
-                      props: {
-                        sessionId: item.id,
-                        title: item.title,
-                        throughSeq: 0,
-                      },
-                    }
-                  : item.kind === "artifact"
+          {!textOnly && (
+            <SuggestionMenuController<typeof getAtItems>
+              triggerCharacter="@"
+              getItems={getAtItems}
+              suggestionMenuComponent={FileMenu}
+              onItemClick={(item) => {
+                editor.insertInlineContent([
+                  item.kind === "chat"
                     ? {
-                        type: "artifactMention",
+                        type: "sessionMention",
                         props: {
-                          artifactId: String(item.recordId),
+                          sessionId: item.id,
                           title: item.title,
-                          kind: item.artifactKind,
+                          throughSeq: 0,
                         },
                       }
-                    : { type: "fileMention", props: { path: item.path } },
-                " ",
-              ]);
-            }}
-          />
+                    : item.kind === "artifact"
+                      ? {
+                          type: "artifactMention",
+                          props: {
+                            artifactId: String(item.recordId),
+                            title: item.title,
+                            kind: item.artifactKind,
+                          },
+                        }
+                      : { type: "fileMention", props: { path: item.path } },
+                  " ",
+                ]);
+              }}
+            />
+          )}
         </BlockNoteView>
       </CanvasBlockRuntimeContext.Provider>
     </div>

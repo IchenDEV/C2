@@ -1,0 +1,1429 @@
+{
+ "schema": "native-provider-capability-probe/1",
+ "generatedAt": "2026-10-06T03:15:35.347Z",
+ "honesty": "Package type signatures, protos, generated schemas and minified-source reading are static evidence. They are NOT runtime end-to-end compatibility proof; no model turn, auth, key or paid request was made. Verdict 'supported' means the official surface exists, not that it was exercised.",
+ "environment": {
+  "os": "darwin-arm64",
+  "bun": "1.4.2",
+  "node": "v26.9.0",
+  "clis": {
+   "codex": "codex-cli 0.160.1",
+   "claude": "2.1.288 (Claude Code)",
+   "opencode": "opencode v2.0.23",
+   "cursor-agent": "2026.09.10-fd3934a"
+  },
+  "scriptSha256": "989a4d05f27cb603da78bbc882bd133a06ecc57e6ac6ca6594f06804c9a983a6",
+  "subprocessEnvKeys": [
+   "PATH",
+   "HOME",
+   "TMPDIR",
+   "LANG"
+  ],
+  "npmUserconfig": "empty"
+ },
+ "artifacts": [
+  {
+   "kind": "npm",
+   "spec": "@cursor/sdk@1.0.36",
+   "integrity": "sha512-1Fpd644iTGNEoH5nEp5oYVlWgxSObL0VZfTZcCXhOB5MSJLc34vIvP6yx1udqSnpN+Rbpejvmxd9yoyjxhFVuw==",
+   "verifiedAgainstRegistry": true
+  },
+  {
+   "kind": "npm",
+   "spec": "@anthropic-ai/claude-agent-sdk@0.3.290",
+   "integrity": "sha512-Rf2zz1kU3nyK9UCWhlZGYrCUi+0FuNmZFmzflZFKJKajuU+fsQrNht+jeUb2jyTszF/yMGobHhe3HfY4gB41Xg==",
+   "verifiedAgainstRegistry": true
+  },
+  {
+   "kind": "npm",
+   "spec": "@opencode-ai/sdk@1.18.34",
+   "integrity": "sha512-R9QWUpcngtdQ6FCixz7NC6n1WsSho6CEuRUzYHz/CzZcp3miSklDzXkm0oDwXVCnuEu+ANoeM0f6RDp51kOMzQ==",
+   "verifiedAgainstRegistry": true
+  },
+  {
+   "kind": "npm",
+   "spec": "@opencode/sdk@2.0.23",
+   "integrity": "sha512-GemPht2xkcgWAe22/A/9eN0+cncx8bh+7pUBk3bMz7U6NtUNwud0m/XM7q8Dw0zKioA7Us80FPz60bkGx/pz6A==",
+   "verifiedAgainstRegistry": true
+  },
+  {
+   "kind": "npm",
+   "spec": "@opencode/client@2.0.23",
+   "integrity": "sha512-tHfYu7sKNxFu2dZ7Pu5vZG4T8GHqU71ZCsXHZ/RoI0LLdG7t2zwePHWR9aNbcSP+jDUGyaQlzr5utC9Uduczvg==",
+   "verifiedAgainstRegistry": true
+  },
+  {
+   "kind": "npm",
+   "spec": "@opencode/schema@2.0.23",
+   "integrity": "sha512-DglA+CCNmCaiAJ8FqAKo2EKIkCOF9/EmMEYowcXhTrQcoJ7eaTx7ytGjPgis6VHQuU4aaAgwZYw96ypS3ojsIw==",
+   "verifiedAgainstRegistry": true
+  },
+  {
+   "kind": "github-raw",
+   "repo": "cursor/sdk-bridge",
+   "tag": "v1.0.36",
+   "file": "proto/manifest.json",
+   "sha256": "abca0ea710c91b010859d777ffd9d8d04298ba9926287cf2910e70ffbab4590f"
+  },
+  {
+   "kind": "github-raw",
+   "repo": "cursor/sdk-bridge",
+   "tag": "v1.0.36",
+   "file": "proto/sdk/v1/sdk_agent_service.proto",
+   "sha256": "0f4da463f1c95d6627a3cb5131b1926d5abd21d978f560b9c50376f06b460a15"
+  },
+  {
+   "kind": "github-raw",
+   "repo": "cursor/sdk-bridge",
+   "tag": "v1.0.36",
+   "file": "proto/sdk/v1/sdk_bridge_control_service.proto",
+   "sha256": "a8fbb2303f2286095ec6fb5aa4f179284d43a06d33731ab2b6c3c37eeb53993f"
+  },
+  {
+   "kind": "github-raw",
+   "repo": "cursor/sdk-bridge",
+   "tag": "v1.0.36",
+   "file": "proto/sdk/v1/sdk_cursor_service.proto",
+   "sha256": "f925cb88412ef0223c9fb968fb86d119c4942c651a50e844f54469031a59beb3"
+  },
+  {
+   "kind": "github-raw",
+   "repo": "cursor/sdk-bridge",
+   "tag": "v1.0.36",
+   "file": "proto/sdk/v1/sdk_custom_tool_callback_service.proto",
+   "sha256": "29063b363db382827b547b928637ee5c064d5d43ecb6531a7b5aba8086948ecf"
+  },
+  {
+   "kind": "github-raw",
+   "repo": "cursor/sdk-bridge",
+   "tag": "v1.0.36",
+   "file": "proto/sdk/v1/sdk_messages.proto",
+   "sha256": "71e571171c3582d24df3169b0c19f194d13d51dbbe8e6508a5a720bc363a4b9d"
+  },
+  {
+   "kind": "github-raw",
+   "repo": "cursor/sdk-bridge",
+   "tag": "v1.0.36",
+   "file": "docs/services.md",
+   "sha256": "d608cd5f521c80af31ce41fc181eedac6466fc61f13a23f7aebcb0a121421c22"
+  },
+  {
+   "kind": "github-raw",
+   "repo": "cursor/sdk-bridge",
+   "tag": "v1.0.36",
+   "file": "docs/streaming.md",
+   "sha256": "346f918d8fe6b368c25bdf30f760e880bbd190e243d99b0df31b64240f66a16f"
+  },
+  {
+   "kind": "local-cli-schema",
+   "cli": "codex-cli 0.160.1",
+   "bin": "/Users/chenli/.local/bin/codex",
+   "schemaSha256": "81a88c04ae4984b16d73080f4109d0477682bc76c8adbe483e371175ce54c054"
+  }
+ ],
+ "summary": {
+  "approval pause/reply/deny": {
+   "cursor": [
+    "unsupported:cursor.approval.no-host-reply-channel",
+    "unsupported:cursor.approval.request-event-is-observation"
+   ],
+   "claude": [
+    "supported:claude.approval.canUseTool"
+   ],
+   "codex": [
+    "supported:codex.approval.server-requests"
+   ],
+   "opencode-v1": [
+    "supported:opencode1.approval.permission-respond"
+   ],
+   "opencode-v2": [
+    "supported:opencode2.approval.permission-reply-and-forms"
+   ]
+  },
+  "tool restriction": {
+   "cursor": [
+    "partial:cursor.customtools.bypass-approval",
+    "partial:cursor.tools.allow-deny-options",
+    "partial:cursor.tools.not-persisted-on-resume",
+    "partial:cursor.tools.task-subagents-not-restricted",
+    "partial:cursor.tools.mcp-group-couples-custom-tools",
+    "partial:cursor.tools.init-message-lists-tools",
+    "unsupported:cursor.mode.plan-is-not-readonly-guarantee"
+   ],
+   "claude": [
+    "supported:claude.tools.restriction"
+   ],
+   "codex": [
+    "supported:codex.tools.sandbox-and-policy"
+   ],
+   "opencode-v1": [],
+   "opencode-v2": []
+  },
+  "model options|300k/high model options": {
+   "cursor": [
+    "unverified:cursor.model.selection-is-free-form",
+    "partial:cursor.model.local-validation-id-only"
+   ],
+   "claude": [
+    "partial:claude.model.effort-and-context"
+   ],
+   "codex": [
+    "partial:codex.model.effort-no-context-window"
+   ],
+   "opencode-v1": [],
+   "opencode-v2": []
+  },
+  "steering": {
+   "cursor": [
+    "partial:cursor.steer.ack-types",
+    "unsupported:cursor.steer.bridge-has-no-rpc",
+    "partial:cursor.steer.ack-mapping",
+    "partial:cursor.steer.revert-is-ambiguous",
+    "unsupported:cursor.steer.stub-handles-never-steer",
+    "partial:cursor.steer.between-turns-aborts-turn"
+   ],
+   "claude": [
+    "partial:claude.steer.stream-input-priority"
+   ],
+   "codex": [
+    "supported:codex.steer.accepted-turn-id"
+   ],
+   "opencode-v1": [
+    "unsupported:opencode1.steer.none"
+   ],
+   "opencode-v2": [
+    "partial:opencode2.steer.delivery-and-inbox"
+   ]
+  },
+  "abort terminal": {
+   "cursor": [
+    "partial:cursor.abort.local-cancel-is-optimistic",
+    "supported:cursor.abort.bridge-terminal-is-stream-result",
+    "unsupported:cursor.abort.stub-cancel-is-store-only"
+   ],
+   "claude": [
+    "partial:claude.abort.terminal-is-result-message"
+   ],
+   "codex": [
+    "supported:codex.abort.interrupt-terminal-status"
+   ],
+   "opencode-v1": [
+    "partial:opencode1.abort.bool-then-idle"
+   ],
+   "opencode-v2": [
+    "partial:opencode2.abort.interrupt-boolean"
+   ]
+  }
+ },
+ "notProbed": [
+  "Any real send/steer/cancel/approval against a live backend (needs credentials and model turns).",
+  "Cursor model catalog (Cursor.models.list / ListModels) and therefore exact 300k/high ids, params and values.",
+  "Server-side enforcement of Cursor tools/disallowedTools headers.",
+  "Runtime import of @cursor/sdk (needs its dependency tree + native optional package; an auto-install Bun import attempt resolved wrong @bufbuild/protobuf and proves nothing).",
+  "OpenCode V1 HTTP server behaviour (installed CLI is V2) and OpenCode V2 runtime semantics of delivery:'steer'.",
+  "Claude SDK runtime against the installed Claude Code CLI 2.1.288 and its advertised capabilities."
+ ],
+ "implications": [
+  "Cursor approval-required: UNAVAILABLE (SDK/Bridge expose no reply channel; default is auto-approve, sandbox/autoReview is auto-deny). Report the mode unavailable; never switch to full-access, ACP or another provider silently.",
+  "Cursor coordinator: only allowed with tools/disallowedTools passed on EVERY create/resume (not persisted), `task` disallowed, settingSources/mcpServers pinned, custom tools gated by the host Tool Broker per C2 session, init-message `tools` compared to the allowlist, and one credentialed enforcement check; otherwise fail closed. `mode: plan` and sandbox are not guards.",
+  "Cursor model: send only an id+params pair copied verbatim from the account catalog; the SDK checks only the id (rewrites aliases) and passes params unvalidated. Offline types cannot prove a 300k/high variant exists.",
+  "Cursor steering needs the TypeScript SDK sidecar (Bridge has no steer RPC), only on the live Run handle. complete_delivered = delivered. revert_to_followup also means 15s ack timeout or submit failure, so treat it as 'not confirmed' and reconcile before any follow-up; a rejected promise/disconnect stays unknown.",
+  "Cursor stop: terminal proof is `await run.wait()` (SDK) or stream `result: CANCELLED` + `done` (Bridge), never cancel()'s return or run.status; a reattached store-only handle cannot prove the writer stopped.",
+  "Claude/Codex/OpenCode-V1/V2 have first-class approval replies; their steering/stop receipts differ (Codex turn/steer->turnId, Claude streamInput->void, OpenCode V2 prompt->inbox entry with delivery steer|queue) so map each to accepted/unknown separately, never to a shared 'delivered'.",
+  "OpenCode V1 SDK (@opencode-ai/sdk, incl. its own /v2 subpath) and OpenCode V2 (@opencode/sdk, embedded host) are different provider identities; the installed CLI is V2."
+ ],
+ "checks": [
+  {
+   "id": "cursor.approval.no-host-reply-channel",
+   "provider": "cursor",
+   "topic": "approval pause/reply/deny",
+   "verdict": "unsupported",
+   "level": "mixed",
+   "claim": "No public SDK type or Bridge RPC lets the host pause, approve or deny a tool call. Approval is auto-approve (default) or auto-deny (sandbox/autoReview).",
+   "note": "Hooks look like the same path (hook-forced prompts go to the same decision store; read, not executed), not a reply channel. approval-required mode must be reported UNAVAILABLE for Cursor; never silently run full-access or switch to ACP.",
+   "evidenceOk": true,
+   "evidence": [
+    {
+     "root": "cursor",
+     "file": "dist/esm/**/*.d.ts",
+     "kind": "absent",
+     "ok": true,
+     "detail": "absent in 73 file(s) (dist/esm/**/*.d.ts)"
+    },
+    {
+     "root": "bridge",
+     "file": "proto/sdk/v1/*.proto",
+     "kind": "absent",
+     "ok": true,
+     "detail": "absent in 5 file(s) (proto/sdk/v1/*.proto)"
+    },
+    {
+     "root": "cursor",
+     "file": "dist/esm/867.js",
+     "kind": "has",
+     "ok": true,
+     "line": 1,
+     "detail": "ly{await(t.lifecycle?.dispose())}})))}}}class ux{async requestApproval(e){return{approved:!0}}}"
+    },
+    {
+     "root": "cursor",
+     "file": "dist/esm/867.js",
+     "kind": "has",
+     "ok": true,
+     "line": 1,
+     "detail": "tApproval(e){return{approved:!1,reason:`Local SDK runs cannot request interactive approval"
+    },
+    {
+     "root": "cursor",
+     "file": "dist/esm/867.js",
+     "kind": "has",
+     "ok": true,
+     "line": 1,
+     "detail": "ces:C,approvalMode:x?\"allowlist\":void 0,pendingDecisionProvider:x||!0===r.autoReview?new g_:void 0"
+    },
+    {
+     "root": "cursor",
+     "file": "dist/esm/867.js",
+     "kind": "has",
+     "ok": true,
+     "line": 1,
+     "detail": "equestId:t.smartModeApproval?.requestId,hookApprovalRequirement:gr(t)}"
+    }
+   ]
+  },
+  {
+   "id": "cursor.approval.request-event-is-observation",
+   "provider": "cursor",
+   "topic": "approval pause/reply/deny",
+   "verdict": "unsupported",
+   "level": "package-types",
+   "claim": "The only `request` stream message carries agent/run/request IDs and nothing else, so it cannot represent a tool approval.",
+   "evidenceOk": true,
+   "evidence": [
+    {
+     "root": "cursor",
+     "file": "dist/esm/messages.d.ts",
+     "kind": "has",
+     "ok": true,
+     "line": 70,
+     "detail": "XPIRED\"; message?: string; } export interface SDKRequestMessage { type: \"request\"; agent_id: string; run_id: string; request_id: string; }"
+    }
+   ]
+  },
+  {
+   "id": "cursor.customtools.bypass-approval",
+   "provider": "cursor",
+   "topic": "tool restriction",
+   "verdict": "partial",
+   "level": "package-types",
+   "claim": "Custom (host callback) tools never require interactive approval; the host callback is the only gate, so the host Tool Broker must authorize by C2 session.",
+   "evidenceOk": true,
+   "evidence": [
+    {
+     "root": "cursor",
+     "file": "dist/esm/options.d.ts",
+     "kind": "has",
+     "ok": true,
+     "line": 193,
+     "detail": "d callbacks in the host process, * they never require interactive approval"
+    }
+   ]
+  },
+  {
+   "id": "cursor.tools.allow-deny-options",
+   "provider": "cursor",
+   "topic": "tool restriction",
+   "verdict": "partial",
+   "level": "mixed",
+   "claim": "`tools` (allowlist, [] = none) and `disallowedTools` (deny wins) exist in SDK and Bridge (AgentOptions.tools/disallowed_tools), local agents only. They are sent as x-cursor-agent-allowed-tools / x-cursor-agent-exclude-tools headers and applied by the Cursor backend (server-side enforcement; NOT verified offline).",
+   "note": "Server-side enforcement can only be confirmed by a credentialed run (any send is a model turn, so it was not done here). Fail closed: no coordinator runs on Cursor until a parent-authorized check shows a disallowed tool is neither offered nor executed.",
+   "evidenceOk": true,
+   "evidence": [
+    {
+     "root": "cursor",
+     "file": "dist/esm/options.d.ts",
+     "kind": "has",
+     "ok": true,
+     "line": 410,
+     "detail": "me} for the accepted names. */ tools?: ToolName[];"
+    },
+    {
+     "root": "cursor",
+     "file": "dist/esm/options.d.ts",
+     "kind": "has",
+     "ok": true,
+     "line": 436,
+     "detail": "ows a `ConfigurationError`. */ disallowedTools?: ToolName[];"
+    },
+    {
+     "root": "cursor",
+     "file": "dist/esm/tools-option.d.ts",
+     "kind": "has",
+     "ok": true,
+     "line": 2,
+     "detail": "he run's built-in tool restriction. The backend restricts * the session's toolset"
+    },
+    {
+     "root": "bridge",
+     "file": "proto/sdk/v1/sdk_messages.proto",
+     "kind": "has",
+     "ok": true,
+     "line": 194,
+     "detail": "gent. Local agents // only for now. ToolList tools = 10;"
+    },
+    {
+     "root": "bridge",
+     "file": "proto/sdk/v1/sdk_messages.proto",
+     "kind": "has",
+     "ok": true,
+     "line": 198,
+     "detail": "// no-op. Local agents only for now. repeated string disallowed_tools = 11;"
+    }
+   ]
+  },
+  {
+   "id": "cursor.tools.not-persisted-on-resume",
+   "provider": "cursor",
+   "topic": "tool restriction",
+   "verdict": "partial",
+   "level": "package-types",
+   "claim": "`tools`/`disallowedTools` are not persisted on the agent: they must be passed again on every Agent.create/resume or the restriction silently vanishes.",
+   "evidenceOk": true,
+   "evidence": [
+    {
+     "root": "cursor",
+     "file": "dist/esm/options.d.ts",
+     "kind": "has",
+     "ok": true,
+     "line": 402,
+     "detail": "pplies to the main agent loop. * - Not persisted on the agent: pass `tools` again"
+    },
+    {
+     "root": "cursor",
+     "file": "dist/esm/options.d.ts",
+     "kind": "has",
+     "ok": true,
+     "line": 430,
+     "detail": "to prevent subagents entirely. * - Not persisted on the agent: pass `disallowedTools` again"
+    }
+   ]
+  },
+  {
+   "id": "cursor.tools.task-subagents-not-restricted",
+   "provider": "cursor",
+   "topic": "tool restriction",
+   "verdict": "partial",
+   "level": "package-types",
+   "claim": "Restriction applies only to the main agent loop; `task` subagents keep their own toolsets and, without subagentInherit, get no allowlist headers. A coordinator must omit/disallow `task`.",
+   "evidenceOk": true,
+   "evidence": [
+    {
+     "root": "cursor",
+     "file": "dist/esm/options.d.ts",
+     "kind": "has",
+     "ok": true,
+     "line": 400,
+     "detail": "ely. * - `\"task\"` gates subagents. Subagents launched through it keep their own * curated toolsets"
+    },
+    {
+     "root": "cursor",
+     "file": "dist/esm/options.d.ts",
+     "kind": "has",
+     "ok": true,
+     "line": 205,
+     "detail": "sions. Unset keeps today's child * behavior: host workspace path, host executors, and no tool-allowlist * headers"
+    }
+   ]
+  },
+  {
+   "id": "cursor.tools.mcp-group-couples-custom-tools",
+   "provider": "cursor",
+   "topic": "tool restriction",
+   "verdict": "partial",
+   "level": "package-types",
+   "claim": "Custom tools ride the `mcp` capability group: `tools: []` removes them too, while allowing `mcp` also admits configured MCP servers; settingSources/mcpServers must be pinned empty for a coordinator.",
+   "evidenceOk": true,
+   "evidence": [
+    {
+     "root": "cursor",
+     "file": "dist/esm/options.d.ts",
+     "kind": "has",
+     "ok": true,
+     "line": 398,
+     "detail": "{@link LocalAgentOptions.customTools}); omitting `\"mcp\"` * disables MCP entirely"
+    }
+   ]
+  },
+  {
+   "id": "cursor.tools.init-message-lists-tools",
+   "provider": "cursor",
+   "topic": "tool restriction",
+   "verdict": "partial",
+   "level": "package-types",
+   "claim": "The run `system` init message has optional `tools: string[]`; a host can compare it to the expected allowlist and cancel on mismatch (defence in depth, type-level only).",
+   "evidenceOk": true,
+   "evidence": [
+    {
+     "root": "cursor",
+     "file": "dist/esm/messages.d.ts",
+     "kind": "has",
+     "ok": true,
+     "line": 16,
+     "detail": "e: string; input: unknown; } export interface SDKSystemMessage { type: \"system\"; subtype?: \"init\"; agent_id: string; run_id: string; model?: ModelSelection; tools?: string[];"
+    }
+   ]
+  },
+  {
+   "id": "cursor.mode.plan-is-not-readonly-guarantee",
+   "provider": "cursor",
+   "topic": "tool restriction",
+   "verdict": "unsupported",
+   "level": "protocol-proto",
+   "claim": "`mode: plan` is documented as 'produce a plan before (or instead of) making edits', not as an enforced read-only sandbox; sandboxOptions only toggles `enabled`. Neither may be the sole coordinator guard.",
+   "evidenceOk": true,
+   "evidence": [
+    {
+     "root": "bridge",
+     "file": "proto/sdk/v1/sdk_messages.proto",
+     "kind": "has",
+     "ok": true,
+     "line": 83,
+     "detail": "de. AGENT_MODE_OPTION_AGENT = 1; // Plan mode: produce a plan before (or instead of) making edits"
+    },
+    {
+     "root": "bridge",
+     "file": "proto/sdk/v1/sdk_messages.proto",
+     "kind": "has",
+     "ok": true,
+     "line": 267,
+     "detail": "y entry. repeated string dirs = 7; } message SandboxOptions { optional bool enabled = 1; }"
+    }
+   ]
+  },
+  {
+   "id": "cursor.model.selection-is-free-form",
+   "provider": "cursor",
+   "topic": "300k/high model options",
+   "verdict": "unverified",
+   "level": "package-types",
+   "claim": "ModelSelection is {id, params:[{id,value}]} with free strings; valid ids/params/values (including any 300k context or high effort variant) exist only in the account catalog (Cursor.models.list / SdkCursorService.ListModels, needs an API key). Offline types cannot confirm exact 300k/high.",
+   "note": "Host must read the catalog (non-turn call, needs credential), match definition id + value + variant exactly, and reject otherwise; never map to a nearby model.",
+   "evidenceOk": true,
+   "evidence": [
+    {
+     "root": "cursor",
+     "file": "dist/esm/options.d.ts",
+     "kind": "has",
+     "ok": true,
+     "line": 112,
+     "detail": "id: string; value: string; } export interface ModelSelection { id: string; params?: ModelParameterValue[];"
+    },
+    {
+     "root": "cursor",
+     "file": "dist/esm/options.d.ts",
+     "kind": "has",
+     "ok": true,
+     "line": 108,
+     "detail": "ptions { enabled: boolean; } export interface ModelParameterValue { id: string; value: string;"
+    },
+    {
+     "root": "bridge",
+     "file": "proto/sdk/v1/sdk_cursor_service.proto",
+     "kind": "has",
+     "ok": true,
+     "line": 22,
+     "detail": "ailable to the authenticated account. rpc ListModels(ListModelsRequest)"
+    }
+   ]
+  },
+  {
+   "id": "cursor.model.local-validation-id-only",
+   "provider": "cursor",
+   "topic": "300k/high model options",
+   "verdict": "partial",
+   "level": "bundled-source-read",
+   "claim": "Local `resolveLocalModelSelection` checks only id/alias against the catalog, rewrites an alias to the canonical id, passes `params` through unvalidated, and skips validation entirely when no API key is configured.",
+   "evidenceOk": true,
+   "evidence": [
+    {
+     "root": "cursor",
+     "file": "dist/esm/index.js",
+     "kind": "has",
+     "ok": true,
+     "line": 1,
+     "detail": ")?.trim();return async function(t,r={}){if(void 0===r.listModels)return t"
+    },
+    {
+     "root": "cursor",
+     "file": "dist/esm/index.js",
+     "kind": "has",
+     "ok": true,
+     "line": 1,
+     "detail": "els(),n=function(t,r){return r.find((r=>r.id===t.id||!0===r.aliases?.includes(t.id)"
+    },
+    {
+     "root": "cursor",
+     "file": "dist/esm/index.js",
+     "kind": "has",
+     "ok": true,
+     "line": 1,
+     "detail": "er valid selections.`,{isRetryable:!1});return{...t,id:n.id}"
+    }
+   ]
+  },
+  {
+   "id": "cursor.steer.ack-types",
+   "provider": "cursor",
+   "topic": "steering",
+   "verdict": "partial",
+   "level": "package-types",
+   "claim": "`Run.steer?(text)` is optional and resolves only complete_delivered | revert_to_followup (confirm_steering is consumed internally). RunOperation has no 'steer', so `supports()` cannot feature-detect it.",
+   "evidenceOk": true,
+   "evidence": [
+    {
+     "root": "cursor",
+     "file": "dist/esm/run.d.ts",
+     "kind": "has",
+     "ok": true,
+     "line": 61,
+     "detail": "sult>; cancel(): Promise<void>; steer?(text: string): Promise<SteerAckOutcome>;"
+    },
+    {
+     "root": "cursor",
+     "file": "dist/esm/run.d.ts",
+     "kind": "has",
+     "ok": true,
+     "line": 22,
+     "detail": "can never be observed here. */ export type SteerAckOutcome = \"complete_delivered\" | \"revert_to_followup\";"
+    },
+    {
+     "root": "cursor",
+     "file": "dist/esm/run.d.ts",
+     "kind": "has",
+     "ok": true,
+     "line": 8,
+     "detail": "= Exclude<RunStatus, \"running\">; export type RunOperation = \"stream\" | \"wait\" | \"cancel\" | \"conversation\";"
+    }
+   ]
+  },
+  {
+   "id": "cursor.steer.bridge-has-no-rpc",
+   "provider": "cursor",
+   "topic": "steering",
+   "verdict": "unsupported",
+   "level": "protocol-proto",
+   "claim": "sdk.v1 Bridge protos and docs contain no steer RPC/message; steering requires the TypeScript SDK sidecar, not the Bridge.",
+   "evidenceOk": true,
+   "evidence": [
+    {
+     "root": "bridge",
+     "file": "proto/sdk/v1/*.proto",
+     "kind": "absent",
+     "ok": true,
+     "detail": "absent in 5 file(s) (proto/sdk/v1/*.proto)"
+    },
+    {
+     "root": "bridge",
+     "file": "docs/*.md",
+     "kind": "absent",
+     "ok": true,
+     "detail": "absent in 2 file(s) (docs/*.md)"
+    }
+   ]
+  },
+  {
+   "id": "cursor.steer.ack-mapping",
+   "provider": "cursor",
+   "topic": "steering",
+   "verdict": "partial",
+   "level": "bundled-source-read",
+   "claim": "Server steer states map: delivered -> complete_delivered; queued -> keep waiting; queued_for_next_turn/cancelled/rejected/other -> revert_to_followup.",
+   "evidenceOk": true,
+   "evidence": [
+    {
+     "root": "cursor",
+     "file": "dist/esm/867.js",
+     "kind": "has",
+     "ok": true,
+     "line": 1,
+     "detail": "id 0!==t){const e=function(e){switch(e){case\"queued\":return\"confirm_steering\";case\"delivered\":return\"complete_delivered\";case\"queued_for_next_turn\":case\"cancelled\":case\"rejected\":return\"revert_to_followup\""
+    }
+   ]
+  },
+  {
+   "id": "cursor.steer.revert-is-ambiguous",
+   "provider": "cursor",
+   "topic": "steering",
+   "verdict": "partial",
+   "level": "bundled-source-read",
+   "claim": "revert_to_followup is ALSO returned on a 15s ack timeout and on ANY submit exception (e.g. connection lost after the request left), so it does not prove non-delivery. Only complete_delivered is a positive receipt; revert_to_followup must not be blindly resent (duplicate risk). Empty text also returns it.",
+   "note": "Design hint (unverified): before any follow-up, reconcile against run.conversation(); keep unknown on rejected promise/disconnect.",
+   "evidenceOk": true,
+   "evidence": [
+    {
+     "root": "cursor",
+     "file": "dist/esm/867.js",
+     "kind": "has",
+     "ok": true,
+     "line": 1,
+     "detail": "r=(0,ao.C)(),o=new Promise((e=>{const t=setTimeout((()=>{l(r,\"revert_to_followup\")}),15e3)"
+    },
+    {
+     "root": "cursor",
+     "file": "dist/esm/867.js",
+     "kind": "has",
+     "ok": true,
+     "line": 1,
+     "detail": "Id:(0,ao.C)(),text:e})})}})}})),await o}catch(e){return l(r,\"revert_to_followup\"),nk.warn(\"[agent-session-runner] context injection failed:\""
+    }
+   ]
+  },
+  {
+   "id": "cursor.steer.stub-handles-never-steer",
+   "provider": "cursor",
+   "topic": "steering",
+   "verdict": "unsupported",
+   "level": "bundled-source-read",
+   "claim": "Run handles rebuilt from the store / cloud / reattach return revert_to_followup unconditionally; only the live handle returned by agent.send in the owning process can really steer. Function presence is not capability.",
+   "evidenceOk": true,
+   "evidence": [
+    {
+     "root": "cursor",
+     "file": "dist/esm/index.js",
+     "kind": "has",
+     "ok": true,
+     "line": 1,
+     "detail": "hrow(0,V.Nt)(t,{operation:\"run.wait\"})}}async steer(t){return\"revert_to_followup\"}"
+    }
+   ]
+  },
+  {
+   "id": "cursor.steer.between-turns-aborts-turn",
+   "provider": "cursor",
+   "topic": "steering",
+   "verdict": "partial",
+   "level": "bundled-source-read",
+   "claim": "With no injectable active turn but a live turn controller, steer aborts that turn and queues the text as the next one (interrupt-and-redirect, not an in-turn append).",
+   "evidenceOk": true,
+   "evidence": [
+    {
+     "root": "cursor",
+     "file": "dist/esm/867.js",
+     "kind": "has",
+     "ok": true,
+     "line": 1,
+     "detail": "t_to_followup\";const r=new Promise((t=>{d.push({text:e,resolve:t})}));return t.abort(),await r}"
+    }
+   ]
+  },
+  {
+   "id": "cursor.abort.local-cancel-is-optimistic",
+   "provider": "cursor",
+   "topic": "abort terminal",
+   "verdict": "partial",
+   "level": "bundled-source-read",
+   "claim": "Local Run.cancel() flips status to 'cancelled' and emits CANCELLED BEFORE awaiting the abort, then awaits only store.cancelRun. cancel()'s return or run.status is not proof the writer stopped; run.wait() (awaits controller.done) is.",
+   "evidenceOk": true,
+   "evidence": [
+    {
+     "root": "cursor",
+     "file": "dist/esm/index.js",
+     "kind": "has",
+     "ok": true,
+     "line": 1,
+     "detail": "f(\"running\"!==this.currentStatus)return;this.cancellationState.cancelled=!0,this.setStatus(\"cancelled\"),await this.emitStatus(\"CANCELLED\"),this.controller.abort(),await this.store.cancelRun("
+    },
+    {
+     "root": "cursor",
+     "file": "dist/esm/index.js",
+     "kind": "has",
+     "ok": true,
+     "line": 1,
+     "detail": "this._usage?{usage:this._usage}:{}});if(\"running\"!==this.currentStatus)return await this.controller.done.catch"
+    }
+   ]
+  },
+  {
+   "id": "cursor.abort.bridge-terminal-is-stream-result",
+   "provider": "cursor",
+   "topic": "abort terminal",
+   "verdict": "supported",
+   "level": "protocol-proto",
+   "claim": "Bridge CancelRun returns an empty ack; the terminal proof is the stream's `result` (CANCELLED) then `done`. Dropping the Send stream does not cancel; a failed stream means the run may still be executing (recover with ObserveRun/WaitLiveRun/GetRun).",
+   "evidenceOk": true,
+   "evidence": [
+    {
+     "root": "bridge",
+     "file": "proto/sdk/v1/sdk_agent_service.proto",
+     "kind": "has",
+     "ok": true,
+     "line": 150,
+     "detail": "ing. optional string agent_id = 2; } message CancelRunResponse {}"
+    },
+    {
+     "root": "bridge",
+     "file": "docs/streaming.md",
+     "kind": "has",
+     "ok": true,
+     "line": 91,
+     "detail": "CancelRun`. The stream still delivers a terminal `result` (status `CANCELLED`) followed by `done`"
+    },
+    {
+     "root": "bridge",
+     "file": "docs/streaming.md",
+     "kind": "has",
+     "ok": true,
+     "line": 93,
+     "detail": "ed by `done`. - **Client disconnect** — dropping the `Send` stream does *not* cancel"
+    }
+   ]
+  },
+  {
+   "id": "cursor.abort.stub-cancel-is-store-only",
+   "provider": "cursor",
+   "topic": "abort terminal",
+   "verdict": "unsupported",
+   "level": "bundled-source-read",
+   "claim": "Store-backed (reattached) Run.cancel() only marks the store and sets status 'cancelled'; it cannot prove a remote/other-process writer stopped.",
+   "evidenceOk": true,
+   "evidence": [
+    {
+     "root": "cursor",
+     "file": "dist/esm/index.js",
+     "kind": "has",
+     "ok": true,
+     "line": 1,
+     "detail": "ync steer(t){return\"revert_to_followup\"}async cancel(){try{if(\"running\"!==this.currentStatus)return;await this.store.cancelRun(this.agentId,this.id),this.currentStatus=\"cancelled\"}"
+    }
+   ]
+  },
+  {
+   "id": "claude.approval.canUseTool",
+   "provider": "claude",
+   "topic": "approval pause/reply/deny",
+   "verdict": "supported",
+   "level": "package-types",
+   "claim": "Host callback `canUseTool` returns allow/deny per tool call (deny may interrupt); permissionMode 'default' keeps manual approval; `permissionPrompts:'none'` denies instead of prompting; bypassPermissions needs allowDangerouslySkipPermissions.",
+   "evidenceOk": true,
+   "evidence": [
+    {
+     "root": "claude",
+     "file": "sdk.d.ts",
+     "kind": "has",
+     "ok": true,
+     "line": 1589,
+     "detail": "nied, or prompt the user. */ canUseTool?: CanUseTool;"
+    },
+    {
+     "root": "claude",
+     "file": "sdk.d.ts",
+     "kind": "has",
+     "ok": true,
+     "line": 2514,
+     "detail": "sionDecisionClassification; } | { behavior: 'deny'; message: string; interrupt?: boolean;"
+    },
+    {
+     "root": "claude",
+     "file": "sdk.d.ts",
+     "kind": "has",
+     "ok": true,
+     "line": 2020,
+     "detail": "UseTool` is never called. */ permissionPrompts?: 'host' | 'none';"
+    },
+    {
+     "root": "claude",
+     "file": "sdk.d.ts",
+     "kind": "has",
+     "ok": true,
+     "line": 2484,
+     "detail": "ermission prompts. */ export declare type PermissionMode = 'default' | 'acceptEdits' | 'bypassPermissions' | 'plan' | 'dontAsk' | 'auto';"
+    },
+    {
+     "root": "claude",
+     "file": "sdk.d.ts",
+     "kind": "has",
+     "ok": true,
+     "line": 2006,
+     "detail": "bypassing of permissions. */ allowDangerouslySkipPermissions?: boolean;"
+    }
+   ]
+  },
+  {
+   "id": "claude.tools.restriction",
+   "provider": "claude",
+   "topic": "tool restriction",
+   "verdict": "supported",
+   "level": "package-types",
+   "claim": "`tools` (base set; [] disables all built-ins) and `disallowedTools` remove tools from the model's context; `dontAsk` denies anything not pre-approved. Enforced by the Claude Code harness, not by prompt.",
+   "evidenceOk": true,
+   "evidence": [
+    {
+     "root": "claude",
+     "file": "sdk.d.ts",
+     "kind": "has",
+     "ok": true,
+     "line": 1640,
+     "detail": "llowedTools` to get them. */ tools?: string[] | { type: 'preset'; preset: 'claude_code';"
+    },
+    {
+     "root": "claude",
+     "file": "sdk.d.ts",
+     "kind": "has",
+     "ok": true,
+     "line": 50,
+     "detail": "erver (or all MCP tools). */ disallowedTools?: string[];"
+    },
+    {
+     "root": "claude",
+     "file": "sdk.d.ts",
+     "kind": "has",
+     "ok": true,
+     "line": 1634,
+     "detail": ", `['Bash', 'Read', 'Edit']`) * - `[]` (empty array) - Disable all built-in tools"
+    }
+   ]
+  },
+  {
+   "id": "claude.model.effort-and-context",
+   "provider": "claude",
+   "topic": "model options",
+   "verdict": "partial",
+   "level": "package-types",
+   "claim": "Effort low|medium|high|xhigh|max and supportedModels()/ModelInfo.supportedEffortLevels exist; the only context option is the 1M beta flag. There is no 300k setting.",
+   "evidenceOk": true,
+   "evidence": [
+    {
+     "root": "claude",
+     "file": "sdk.d.ts",
+     "kind": "has",
+     "ok": true,
+     "line": 691,
+     "detail": "with-claude/effort */ export declare type EffortLevel = 'low' | 'medium' | 'high' | 'xhigh' | 'max';"
+    },
+    {
+     "root": "claude",
+     "file": "sdk.d.ts",
+     "kind": "has",
+     "ok": true,
+     "line": 3013,
+     "detail": "ay names and descriptions */ supportedModels(): Promise<ModelInfo[]>;"
+    },
+    {
+     "root": "claude",
+     "file": "sdk.d.ts",
+     "kind": "has",
+     "ok": true,
+     "line": 1415,
+     "detail": "ort levels for this model */ supportedEffortLevels?: ('low' | 'medium' | 'high' | 'xhigh' | 'max')[];"
+    },
+    {
+     "root": "claude",
+     "file": "sdk.d.ts",
+     "kind": "has",
+     "ok": true,
+     "line": 3726,
+     "detail": "ssion_id: string; }; export declare type SdkBeta = 'context-1m-2025-08-07';"
+    }
+   ]
+  },
+  {
+   "id": "claude.steer.stream-input-priority",
+   "provider": "claude",
+   "topic": "steering",
+   "verdict": "partial",
+   "level": "package-types",
+   "claim": "streamInput(AsyncIterable<SDKUserMessage>) with message priority now|next|later gives live input, but streamInput resolves void (no per-message delivered receipt); interrupt() may return a still_queued receipt only if the CLI advertises interrupt_receipt_v1.",
+   "evidenceOk": true,
+   "evidence": [
+    {
+     "root": "claude",
+     "file": "sdk.d.ts",
+     "kind": "has",
+     "ok": true,
+     "line": 3214,
+     "detail": "of user messages to send */ streamInput(stream: AsyncIterable<SDKUserMessage>): Promise<void>;"
+    },
+    {
+     "root": "claude",
+     "file": "sdk.d.ts",
+     "kind": "has",
+     "ok": true,
+     "line": 6242,
+     "detail": "*/ tool_use_result?: unknown; priority?: 'now' | 'next' | 'later';"
+    },
+    {
+     "root": "claude",
+     "file": "sdk.d.ts",
+     "kind": "has",
+     "ok": true,
+     "line": 2860,
+     "detail": "* resolve to `undefined`. */ interrupt(): Promise<SDKControlInterruptResponse | undefined>;"
+    },
+    {
+     "root": "claude",
+     "file": "sdk.d.ts",
+     "kind": "has",
+     "ok": true,
+     "line": 4620,
+     "detail": "queued turn immediately. */ still_queued: string[];"
+    }
+   ]
+  },
+  {
+   "id": "claude.abort.terminal-is-result-message",
+   "provider": "claude",
+   "topic": "abort terminal",
+   "verdict": "partial",
+   "level": "package-types",
+   "claim": "interrupt() resolves with a receipt written before the interrupted turn's result; terminal proof is the SDKResultMessage (terminal_reason aborted_streaming|aborted_tools), not the interrupt promise.",
+   "evidenceOk": true,
+   "evidence": [
+    {
+     "root": "claude",
+     "file": "sdk.d.ts",
+     "kind": "has",
+     "ok": true,
+     "line": 9697,
+     "detail": "al slash command). */ export declare type TerminalReason = 'blocking_limit' | 'rapid_refill_breaker' | 'prompt_too_long' | 'image_error' | 'model_error' | 'api_error' | 'malformed_tool_use_exhausted' | 'aborted_streaming' | 'aborted_tools'"
+    },
+    {
+     "root": "claude",
+     "file": "sdk.d.ts",
+     "kind": "has",
+     "ok": true,
+     "line": 4618,
+     "detail": "an treating them as an error. Ordering: on a clean interrupt this receipt is written before the interrupted turn result"
+    }
+   ]
+  },
+  {
+   "id": "codex.approval.server-requests",
+   "provider": "codex",
+   "topic": "approval pause/reply/deny",
+   "verdict": "supported",
+   "level": "schema",
+   "claim": "Server-initiated JSON-RPC requests pause the turn for command/file/permission approval, user input and MCP elicitation; the client answers with a decision (accept/acceptForSession/decline/cancel...). requestId resolution is notified (ServerRequestResolvedNotification).",
+   "evidenceOk": true,
+   "evidence": [
+    {
+     "root": "codex",
+     "file": "ServerRequest.json",
+     "kind": "json",
+     "ok": true,
+     "detail": "methods => [\"item/commandExecution/requestApproval\",\"item/fileChange/requestApproval\",\"item/tool/requestUserInput\",\"mcpServer/elicitation/request\",\"item/permissions/requestApproval\",\"item/tool/call\",\"account/chatgptAuthTokens/refresh\",\"attestation/generate\",\"applyPatchAp"
+    },
+    {
+     "root": "codex",
+     "file": "CommandExecutionRequestApprovalResponse.json",
+     "kind": "has",
+     "ok": true,
+     "line": 16,
+     "detail": "ting.\", \"enum\": [ \"acceptForSession\""
+    },
+    {
+     "root": "codex",
+     "file": "codex_app_server_protocol.v2.schemas.json",
+     "kind": "json",
+     "ok": true,
+     "detail": "ServerRequestResolvedNotification.required => [\"requestId\",\"threadId\"]"
+    }
+   ]
+  },
+  {
+   "id": "codex.tools.sandbox-and-policy",
+   "provider": "codex",
+   "topic": "tool restriction",
+   "verdict": "supported",
+   "level": "schema",
+   "claim": "Per-turn sandboxPolicy includes readOnly (also workspaceWrite/dangerFullAccess/externalSandbox) and approvalPolicy untrusted|on-request|never|granular, set at thread/start and turn/start.",
+   "evidenceOk": true,
+   "evidence": [
+    {
+     "root": "codex",
+     "file": "codex_app_server_protocol.v2.schemas.json",
+     "kind": "json",
+     "ok": true,
+     "detail": "SandboxPolicy types => \"dangerFullAccess,externalSandbox,readOnly,workspaceWrite\""
+    },
+    {
+     "root": "codex",
+     "file": "codex_app_server_protocol.v2.schemas.json",
+     "kind": "json",
+     "ok": true,
+     "detail": "AskForApproval enum => [\"untrusted\",\"on-request\",\"never\"]"
+    },
+    {
+     "root": "codex",
+     "file": "codex_app_server_protocol.v2.schemas.json",
+     "kind": "json",
+     "ok": true,
+     "detail": "TurnStartParams has sandboxPolicy,approvalPolicy,effort => true"
+    }
+   ]
+  },
+  {
+   "id": "codex.model.effort-no-context-window",
+   "provider": "codex",
+   "topic": "model options",
+   "verdict": "partial",
+   "level": "schema",
+   "claim": "model/list advertises supportedReasoningEfforts and defaultReasoningEffort; the Model schema has no context-window field, so 300k cannot be asserted from the schema.",
+   "evidenceOk": true,
+   "evidence": [
+    {
+     "root": "codex",
+     "file": "codex_app_server_protocol.v2.schemas.json",
+     "kind": "json",
+     "ok": true,
+     "detail": "Model has efforts, no contextWindow => true"
+    }
+   ]
+  },
+  {
+   "id": "codex.steer.accepted-turn-id",
+   "provider": "codex",
+   "topic": "steering",
+   "verdict": "supported",
+   "level": "schema",
+   "claim": "turn/steer requires expectedTurnId (precondition) and answers {turnId} = acceptance; failure is a JSON-RPC error. Acceptance is not a model-consumed receipt beyond the turn id; a lost response is unknown.",
+   "evidenceOk": true,
+   "evidence": [
+    {
+     "root": "codex",
+     "file": "codex_app_server_protocol.v2.schemas.json",
+     "kind": "json",
+     "ok": true,
+     "detail": "TurnSteerParams.required => [\"expectedTurnId\",\"input\",\"threadId\"]"
+    },
+    {
+     "root": "codex",
+     "file": "codex_app_server_protocol.v2.schemas.json",
+     "kind": "json",
+     "ok": true,
+     "detail": "TurnSteerResponse.required => [\"turnId\"]"
+    }
+   ]
+  },
+  {
+   "id": "codex.abort.interrupt-terminal-status",
+   "provider": "codex",
+   "topic": "abort terminal",
+   "verdict": "supported",
+   "level": "schema",
+   "claim": "turn/interrupt returns an empty response (ack only); terminal proof is turn/completed with Turn.status 'interrupted' (TurnStatus: completed|interrupted|failed|inProgress).",
+   "evidenceOk": true,
+   "evidence": [
+    {
+     "root": "codex",
+     "file": "codex_app_server_protocol.v2.schemas.json",
+     "kind": "json",
+     "ok": true,
+     "detail": "TurnInterruptResponse properties => \"{}\""
+    },
+    {
+     "root": "codex",
+     "file": "codex_app_server_protocol.v2.schemas.json",
+     "kind": "json",
+     "ok": true,
+     "detail": "TurnStatus => [\"completed\",\"interrupted\",\"failed\",\"inProgress\"]"
+    },
+    {
+     "root": "codex",
+     "file": "codex_app_server_protocol.v2.schemas.json",
+     "kind": "json",
+     "ok": true,
+     "detail": "TurnCompletedNotification exists => true"
+    }
+   ]
+  },
+  {
+   "id": "opencode1.approval.permission-respond",
+   "provider": "opencode-v1",
+   "topic": "approval pause/reply/deny",
+   "verdict": "supported",
+   "level": "package-types",
+   "claim": "Permission requests arrive as `permission.updated` events and are answered with POST /session/{id}/permissions/{permissionID} {response: once|always|reject}; `permission.replied` confirms. Questions are NOT in the V1 root API.",
+   "evidenceOk": true,
+   "evidence": [
+    {
+     "root": "oc1",
+     "file": "dist/gen/types.gen.d.ts",
+     "kind": "has",
+     "ok": true,
+     "line": 385,
+     "detail": "ort type EventPermissionUpdated = { type: \"permission.updated\";"
+    },
+    {
+     "root": "oc1",
+     "file": "dist/gen/types.gen.d.ts",
+     "kind": "has",
+     "ok": true,
+     "line": 2512,
+     "detail": "rmissionIdData = { body?: { response: \"once\" | \"always\" | \"reject\";"
+    },
+    {
+     "root": "oc1",
+     "file": "dist/gen/sdk.gen.js",
+     "kind": "absent",
+     "ok": true,
+     "detail": "absent in 1 file(s) (dist/gen/sdk.gen.js)"
+    }
+   ]
+  },
+  {
+   "id": "opencode1.steer.none",
+   "provider": "opencode-v1",
+   "topic": "steering",
+   "verdict": "unsupported",
+   "level": "package-types",
+   "claim": "V1 prompt/prompt_async bodies have no delivery/steer/queue control; busy-session behaviour is server-defined and unprobed. Per-prompt `tools` boolean map and `agent` exist.",
+   "evidenceOk": true,
+   "evidence": [
+    {
+     "root": "oc1",
+     "file": "dist/gen/types.gen.d.ts",
+     "kind": "absent",
+     "ok": true,
+     "detail": "absent in 1 file(s) (dist/gen/types.gen.d.ts)"
+    },
+    {
+     "root": "oc1",
+     "file": "dist/gen/types.gen.d.ts",
+     "kind": "has",
+     "ok": true,
+     "line": 2252,
+     "detail": "}; agent?: string; noReply?: boolean; system?: string; tools?: {"
+    }
+   ]
+  },
+  {
+   "id": "opencode1.abort.bool-then-idle",
+   "provider": "opencode-v1",
+   "topic": "abort terminal",
+   "verdict": "partial",
+   "level": "package-types",
+   "claim": "POST /session/{id}/abort answers a boolean only; terminal evidence must come from session.idle / session.status idle / session.error(MessageAbortedError) events.",
+   "evidenceOk": true,
+   "evidence": [
+    {
+     "root": "oc1",
+     "file": "dist/gen/types.gen.d.ts",
+     "kind": "has",
+     "ok": true,
+     "line": 2080,
+     "detail": "rrors[keyof SessionAbortErrors]; export type SessionAbortResponses = { /** * Aborted session */ 200: boolean;"
+    },
+    {
+     "root": "oc1",
+     "file": "dist/gen/types.gen.d.ts",
+     "kind": "has",
+     "ok": true,
+     "line": 414,
+     "detail": "}; export type EventSessionIdle = { type: \"session.idle\";"
+    },
+    {
+     "root": "oc1",
+     "file": "dist/gen/types.gen.d.ts",
+     "kind": "has",
+     "ok": true,
+     "line": 106,
+     "detail": "completed?: number; }; error?: ProviderAuthError | UnknownError | MessageOutputLengthError | MessageAbortedError | ApiError;"
+    }
+   ]
+  },
+  {
+   "id": "opencode1.v2-subpath-is-not-opencode-v2",
+   "provider": "opencode-v1",
+   "topic": "naming",
+   "verdict": "partial",
+   "level": "package-types",
+   "claim": "The V1 package's own `/v2` subpath (generated client with /question/{requestID}/reply, /permission/{requestID}/reply) is still the V1-line HTTP API (version 1.18.34), NOT the OpenCode V2 SDK; keep it out of the OpenCode2 provider.",
+   "evidenceOk": true,
+   "evidence": [
+    {
+     "root": "oc1",
+     "file": "package.json",
+     "kind": "has",
+     "ok": true,
+     "line": 25,
+     "detail": "types\": \"./dist/server.d.ts\" }, \"./v2\": {"
+    },
+    {
+     "root": "oc1",
+     "file": "dist/v2/gen/sdk.gen.js",
+     "kind": "has",
+     "ok": true,
+     "line": 1749,
+     "detail": "ient ?? this.client).post({ url: \"/question/{requestID}/reply\""
+    }
+   ]
+  },
+  {
+   "id": "opencode2.host.embedded",
+   "provider": "opencode-v2",
+   "topic": "transport",
+   "verdict": "partial",
+   "level": "package-types",
+   "claim": "@opencode/sdk create() builds an EMBEDDED host (no HTTP listener assumed); its Interface is the @opencode/client API plus close/asyncDispose. Different package family from @opencode-ai/sdk.",
+   "evidenceOk": true,
+   "evidence": [
+    {
+     "root": "oc2sdk",
+     "file": "dist/promise.d.ts",
+     "kind": "has",
+     "ok": true,
+     "line": 15,
+     "detail": "romise<InstanceConfiguration>; } export interface CreateOptions extends Omit<EmbeddedHost.CreateOptions"
+    },
+    {
+     "root": "oc2sdk",
+     "file": "dist/promise.d.ts",
+     "kind": "has",
+     "ok": true,
+     "line": 19,
+     "detail": "y instances?: InstanceOptions; } export type Interface = Omit<OpenCodeClient, \"plugin\">"
+    }
+   ]
+  },
+  {
+   "id": "opencode2.approval.permission-reply-and-forms",
+   "provider": "opencode-v2",
+   "topic": "approval pause/reply/deny",
+   "verdict": "supported",
+   "level": "package-types",
+   "claim": "permission.reply({sessionID, requestID, decision: once|always|reject, message?}) and permission.request.list; question/elicitation is the session.form.{list,create,get,reply,cancel} API.",
+   "evidenceOk": true,
+   "evidence": [
+    {
+     "root": "oc2client",
+     "file": "dist/effect/api/api.d.ts",
+     "kind": "has",
+     "ok": true,
+     "line": 2106,
+     "detail": ".Effect<PermissionGetOutput, E>; export type PermissionReplyInput = { readonly sessionID: Session.ID; readonly requestID: Permission.ID; readonly decision: Permission.Reply; readonly message?: string"
+    },
+    {
+     "root": "oc2schema",
+     "file": "dist/permission.d.ts",
+     "kind": "has",
+     "ok": true,
+     "line": 38,
+     "detail": "ypeof Request> { } export declare const Reply: Schema.Literals<readonly [\"once\", \"always\", \"reject\"]>"
+    },
+    {
+     "root": "oc2client",
+     "file": "dist/effect/generated/client.d.ts",
+     "kind": "has",
+     "ok": true,
+     "line": 78,
+     "detail": "or.HttpClientError, never>; reply: (input: SessionFormReplyInput)"
+    },
+    {
+     "root": "oc2client",
+     "file": "dist/effect/generated/client.d.ts",
+     "kind": "has",
+     "ok": true,
+     "line": 79,
+     "detail": "or.HttpClientError, never>; cancel: (input: SessionFormCancelInput)"
+    }
+   ]
+  },
+  {
+   "id": "opencode2.steer.delivery-and-inbox",
+   "provider": "opencode-v2",
+   "topic": "steering",
+   "verdict": "partial",
+   "level": "package-types",
+   "claim": "session.prompt takes `delivery: steer|queue` and returns the SessionInbox.User entry; inbox.list/cancel/update(delivery) allow reconciling or reverting queued input. Whether 'steer' is applied mid-turn is runtime behaviour, unprobed.",
+   "evidenceOk": true,
+   "evidence": [
+    {
+     "root": "oc2client",
+     "file": "dist/effect/api/api.d.ts",
+     "kind": "has",
+     "ok": true,
+     "line": 321,
+     "detail": "tring]: unknown; } | undefined; readonly delivery?: SessionInbox.Delivery | undefined; readonly resume?: boolean"
+    },
+    {
+     "root": "oc2schema",
+     "file": "dist/session-inbox.d.ts",
+     "kind": "has",
+     "ok": true,
+     "line": 3,
+     "detail": "a } from \"effect\"; export declare const Delivery: Schema.Literals<readonly [\"steer\", \"queue\"]>"
+    },
+    {
+     "root": "oc2client",
+     "file": "dist/effect/api/api.d.ts",
+     "kind": "has",
+     "ok": true,
+     "line": 411,
+     "detail": "fect<SessionInboxListOutput, E>; export type SessionInboxCancelInput = { readonly sessionID: Session.ID; readonly inboxID"
+    },
+    {
+     "root": "oc2client",
+     "file": "dist/effect/api/api.d.ts",
+     "kind": "has",
+     "ok": true,
+     "line": 417,
+     "detail": "ct<SessionInboxCancelOutput, E>; export type SessionInboxUpdateInput = { readonly sessionID: Session.ID; readonly inboxID: SessionMessage.ID; readonly delivery: SessionInbox.Delivery"
+    }
+   ]
+  },
+  {
+   "id": "opencode2.abort.interrupt-boolean",
+   "provider": "opencode-v2",
+   "topic": "abort terminal",
+   "verdict": "partial",
+   "level": "package-types",
+   "claim": "session.interrupt returns only {interrupted: boolean}; session.wait / session.log events are the way to observe the terminal state, which still needs a runtime probe.",
+   "evidenceOk": true,
+   "evidence": [
+    {
+     "root": "oc2client",
+     "file": "dist/effect/api/api.d.ts",
+     "kind": "has",
+     "ok": true,
+     "line": 1595,
+     "detail": "resume?: boolean | undefined; }; export type SessionInterruptOutput = { readonly interrupted: boolean;"
+    },
+    {
+     "root": "oc2client",
+     "file": "dist/effect/generated/client.d.ts",
+     "kind": "has",
+     "ok": true,
+     "line": 47,
+     "detail": "tError.HttpClientError, never>; wait: (input: SessionWaitInput)"
+    }
+   ]
+  },
+  {
+   "id": "opencode2.installed-cli-is-v2",
+   "provider": "opencode-v2",
+   "topic": "installed contract",
+   "verdict": "partial",
+   "level": "cli-help",
+   "claim": "Installed `opencode` is 2.0.23 and its `serve` is 'the v2 API and web server' with a background `service`; the installed binary is not evidence for the V1 HTTP server contract.",
+   "evidenceOk": true,
+   "evidence": [
+    {
+     "root": "cli",
+     "file": "opencode-help.txt",
+     "kind": "has",
+     "ok": true,
+     "line": 43,
+     "detail": "ime links to connect a browser or app serve Start the v2 API and web server"
+    },
+    {
+     "root": "cli",
+     "file": "opencode-help.txt",
+     "kind": "has",
+     "ok": true,
+     "line": 40,
+     "detail": "session Manage sessions service Manage the background server"
+    }
+   ]
+  }
+ ]
+}

@@ -22,11 +22,46 @@ if (typeof dom.Element.prototype.getAnimations !== "function") {
   });
 }
 
+export const canvas2dStub = {
+  filter: "none",
+  canvas: {},
+  drawImage: () => {},
+  getImageData: () => ({ data: [] }),
+  putImageData: () => {},
+  createImageData: () => ({ data: [] }),
+  setTransform: () => {},
+  resetTransform: () => {},
+  save: () => {},
+  restore: () => {},
+  beginPath: () => {},
+  closePath: () => {},
+  moveTo: () => {},
+  lineTo: () => {},
+  stroke: () => {},
+  fill: () => {},
+  arc: () => {},
+  rect: () => {},
+  fillRect: () => {},
+  strokeRect: () => {},
+  clearRect: () => {},
+  measureText: () => ({ width: 0 }),
+  transform: () => {},
+  scale: () => {},
+  translate: () => {},
+  rotate: () => {},
+};
+
+dom.HTMLCanvasElement.prototype.getContext = function () {
+  return canvas2dStub as any;
+};
+
 const DOM_KEYS = [
   "window",
   "document",
   "DocumentFragment",
   "DOMRect",
+  "Range",
+  "Selection",
   "Node",
   "NodeFilter",
   "ShadowRoot",
@@ -57,6 +92,14 @@ function installDom(): void {
     (globalThis as Record<string, unknown>)[key] = (
       dom as unknown as Record<string, unknown>
     )[key];
+  }
+  dom.HTMLCanvasElement.prototype.getContext = function () {
+    return canvas2dStub as any;
+  };
+  if (dom.window?.HTMLCanvasElement?.prototype) {
+    dom.window.HTMLCanvasElement.prototype.getContext = function () {
+      return canvas2dStub as any;
+    };
   }
   globalThis.getComputedStyle = dom.getComputedStyle.bind(dom);
   // Preserve frame pacing so floating-position effects cannot spin on zero-delay timers.

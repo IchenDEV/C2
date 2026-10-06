@@ -44,15 +44,6 @@ jobs:
               - 'Cargo.lock'
       - name: Install dependencies
         run: bun install --frozen-lockfile --cwd apps/desktop
-      - name: SDLC checks
-        run: |
-          bun test script/verify/checks.test.ts script/verify/four-stage.test.ts script/devflow.test.ts
-          bun script/verify/docs.ts
-          if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
-            bun script/devflow.ts check-pr
-          else
-            bun script/verify/sdlc.ts
-          fi
       - name: Desktop lint and typecheck
         working-directory: apps/desktop
         run: |

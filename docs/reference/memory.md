@@ -58,6 +58,11 @@ L1, L2, L0, and L3 use weights `1.00`, `0.92`, `0.85`, and `0.75`. A small pin b
 after fusion. Automatic recall excludes current-session L0/L2 records and is kept separate from the
 persisted transcript, preventing direct self-recapture as user-authored input.
 
+Long-term candidates are matched in the full project scope before applying the candidate cap.
+SQL uses bound terms and separate L1/L2/L3 budgets (400/150/50); unrelated new records no longer
+hide old relevant notes. Ranking remains lexical and can miss paraphrases without word overlap.
+No embeddings or remote memory provider is added.
+
 Every turn retains provenance flags for MCP, files, images, referenced chats, browser context,
 provider tool calls, and recalled memory. **Learn from external context** can exclude any such turn
 from L1/L2/L3 generation while leaving its canonical transcript intact.
@@ -97,3 +102,105 @@ block is never persisted as a user-authored message.
   frontends, but the remote UI does not yet have a memory manager.
 - Disabling recall leaves stored rows untouched. **Forget** deactivates an editable derived row;
   **Undo** reactivates it. Raw transcripts and the L3 profile are inspection-only.
+
+## Chief of staff workspace
+
+Chief recall uses a bounded core pocket plus query recall. Alongside pinned L1 notes, each scope
+carries up to four active, conflict-free, manually confirmed or user-corrected preference/constraint
+notes even for a greeting with no shared keywords. All L1 input remains capped at twelve per scope;
+settings and session read denial take precedence. Global and selected-project scopes stay separate.
+Other categories remain query-driven unless pinned. Corrections and forgetting change the next
+recall, including this pocket. Unconfirmed proposals and automatic candidates never enter the core;
+the existing query/profile path still contains derived notes labeled as untrusted context.
+
+This borrows compact durable context from [OpenClaw memory](https://docs.openclaw.ai/concepts/memory)
+and bounded always-present context from [Letta memory blocks](https://docs.letta.com/v1-sdk/memory/memory-blocks).
+C2 retains its Store, receipts and confirmation boundary. It does not install those systems or add
+Markdown writers, paid consolidation, or a second facts database.
+
+The global **Chief of staff / 幕僚** entry is one persistent conversation with a personal project agent.
+Discussion and progress questions do not create work. Explicit assignments can route to several
+authorized projects; goals, execution, delivery and acceptance retain their original records.
+The default view shows the conversation and relevant decisions, with project scope, other work,
+execution and memory available on demand. The notebook
+uses this same Memory Store: shared notes use the reserved scope `codetwo://chief-of-staff`, and
+project notes retain their registered project path. It exposes active L1 notes, source sessions,
+manual corrections and forgetting. Existing capture/recall policies still apply. Forgetting excludes
+a note from subsequent reviews; it cannot retract text already sent to a provider.
+
+Confirmed suggestions write their exact trimmed text through the same manual-memory operation.
+Manual notes reinforce only identical text; automatic capture retains similarity deduplication.
+The note and derived profile commit in one transaction. Confirmation alone means waiting to save;
+the conversation shows saved only after the durable memory id is recorded. An unknown write outcome
+requires inspection and is never automatically repeated.
+
+Coordination is off until the user selects projects and enables follow-up. The Core persists goals,
+priorities, acceptance criteria, next steps, blockers and assignment receipts separately from the
+canonical Engine execution state. It recalls the selected scopes with source receipts at the start
+of each fresh review. Review sessions deny memory capture so their combined context does not become
+new project knowledge. Editing a note or policy while a review is running invalidates that decision.
+
+The coordinator returns a bounded structured proposal. Core validates its scope, revision and
+allowance before creating ordinary Engine sessions. Git projects use isolated worktrees; assignments
+refer to the actual execution workspace. Linked existing sessions grant observation only. Users can
+pause, resume, open or take over an execution. Disabling follow-up preserves records and stops new
+assignments; already submitted workers retain their existing permissions and remain visible.
+
+An idle session is not an accepted goal. Acceptance must reference the latest assigned idle session,
+its activity revision, evidence and 1–16 actual workspace files with matching SHA-256 hashes. The
+verifier rejects escaped paths, special files and excessive file sizes. Later session or file changes
+invalidate the verdict. Model/effort rejection stops managed prompts instead of silently selecting a
+fallback. Missing prompt receipts surface an attention item; recovery does not blindly resend them.
+
+Follow-up requires the owning Core to be online. Startup and low-frequency reconciliation use durable
+state, without calling a model when no relevant facts changed. Review, assignment, retry and parallel
+limits bound progression; they are not a monetary budget. Provider permissions remain the execution
+boundary; the coordinator instruction alone does not provide an OS sandbox. The first release does
+not provide a cloud daemon, automatic publishing, or a separate memory database.
+
+Workers use a host-bound `codetwo_coordination` MCP server with six tools: `context`, `progress`,
+`ask`, `propose_change`, `confirm`, and `submit`. Core supplies their session identity and validates
+the current assignment, requirement version and selected project scope. Context includes bounded
+project/shared recall and explicit accepted dependency artifacts. Mutations require stable command
+ids; repeating an id with different content is rejected. The coordinator cannot grant worker tools
+access to an unrelated project or answer a concrete permission request by inference.
+
+Messages, questions, changes, reviews and notifications belong to persistent work records. They do
+not become memory automatically. A user can choose to remember an applied change as a project
+decision; Core writes it only after the worker confirms the current requirement. The memory content
+retains the change id, acceptance and reason. It remains editable/forgettable through this notebook.
+Correction/forgetting lists potentially affected active assignments and offers a separate correction
+message. It does not claim that a provider has forgotten earlier content.
+
+The conversation projects blocking questions, proposals and submitted results from their original
+records. It does not infer permission approval from ordinary discussion. Explicit task stop, priority
+changes and requirement changes reuse the existing control and version paths; priority orders ready
+work without preempting a running worker. Engine owns one durable
+queue/steering path for ordinary inputs and coordinator messages. Delivery receipt, worker
+confirmation, submission, acceptance and notification read state remain distinct. Changing a goal
+invalidates old acceptance, stops affected execution and requires confirmation of the new version.
+An upstream file/session/version change blocks downstream acceptance; an explicit resume authorizes
+the new accepted input snapshot until the same worker confirms it. Unknown delivery stays visible
+and is never blindly retried. Desktop reminders have no guaranteed display/read acknowledgement;
+the durable coordination records remain authoritative.
+
+This bounded first version supports 200 goals, 20 attempts/dependencies per goal, 1000 messages,
+500 questions/changes and 200 natural-language requests per workspace. Hitting a history limit
+returns an explicit error rather than deleting work records. Read notifications may be pruned after
+500 entries; unresolved notifications remain. There is no deadline scheduler or automatic history
+archive in this version. Follow-up budgets count planning rounds and assignments, not money.
+
+Persistent messages use stable client turn ids: identical retries are idempotent; a different payload
+with the same id is rejected. Recorded, analysing, handled, failed and unknown describe message
+intake, separately from provider delivery or worker adoption. Independent bounded intake runs do not
+consume the goal-review allowance. Actions compare the affected goal versions and user control
+generations; unrelated goal changes do not discard a valid decision. Unknown creation or prompt
+outcomes remain visible and are not automatically sent again.
+
+A proposed memory shows its exact content, category and project scope before confirmation. Confirmation
+is bound to a content hash and original message; the same Memory Store owns the eventual note.
+Unconfirmed suggestions are not factual recall. Memory write attempts are durable: an unknown write
+is inspected rather than replayed. Forgetting a confirmed note excludes it from future recall and
+does not recreate it from conversation history. The conversation is bounded to 400 entries, with at
+most 20 outstanding user messages and 200 memory proposals; a full history rejects new input and
+retains existing records. It has no automatic archive or hidden summarisation call.

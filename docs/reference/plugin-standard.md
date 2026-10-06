@@ -178,7 +178,7 @@ ship renderer code or cause an unrelated provider to be rendered by an existing 
 ships the `feishu` provider adapter and a generic issue-tracker surface selected by the `issues` capability.
 
 The supported capabilities are `connection`, `conversations`, `documents`, `tables`, `messaging`,
-and `turn_notifications`, and `issues`. Add another capability only when a host adapter and a bundle implement its
+`turn_notifications`, `issues`, and `observations`. Add another capability only when a host adapter and a bundle implement its
 operation namespace.
 
 The host invokes the connector command with `{ operation, input }`. `operation` is a stable dotted
@@ -205,10 +205,20 @@ The capability declaration bounds the operation namespaces the host may invoke:
 | `messaging` | `message.*` |
 | `turn_notifications` | `notification.*` |
 | `issues` | `issues.*` |
+| `observations` | Host-only `observation/record` callback; no generic command operation namespace |
 
 The provider adapter defines the exact operation names and input/output shapes within those
 namespaces. Unknown namespaces and operations outside the declared capabilities fail closed before
 the plugin command runs.
+
+`observations` lets a trusted, enabled connector submit bounded external feedback to the existing
+Store. It grants neither user identity nor execution authority. The host binds the raw runtime
+name (including `bundle:`), realm and declared connector id; a user separately pins the adapter's
+reported provider/account and allowed projects/goals. Unbound traffic retains bounded metadata
+only. Mail, Feishu, webhook and MCP adapters use the same callback and durable receipt contract,
+described in [Observation record](plugin-protocol.md#observation-record). Actual platform
+subscriptions, authentication and history coverage remain adapter responsibilities; the capability
+alone does not connect an account. Existing messaging capabilities and Engine delivery are unchanged.
 
 The `languageServers` array contains stdio server descriptors:
 

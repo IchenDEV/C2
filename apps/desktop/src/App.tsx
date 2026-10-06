@@ -446,7 +446,7 @@ import type { TranscriptScrollController } from "./session/useTranscriptScroll";
 import { SettingsPage } from "./settings/SettingsPage";
 import type { SettingsTab } from "./settings/SettingsPage";
 import { needsMeCount } from "./sidebar/missionControl.ts";
-import { MissionControlDialog } from "./sidebar/MissionControl.tsx";
+import { MissionControlPage } from "./sidebar/MissionControl.tsx";
 import { APP_NAV_WIDTH, SessionRail } from "./sidebar/SessionRail";
 import type { CanvasBlockRuntime } from "./skillInline";
 import {
@@ -7762,6 +7762,7 @@ export default function App() {
               openPluginManager();
             }}
             onOpenAutomations={openAutomations}
+            onOpenAssistant={() => setShowMissionControl(true)}
             deviceConnectionsAvailable={componentEnabled("remote.modal")}
             deviceConnectionsOpen={showRemote}
             onOpenDeviceConnections={() => {
@@ -9236,7 +9237,7 @@ export default function App() {
         <PreviewModal preview={preview} onClose={() => setPreview(null)} />
       )}
       {showMissionControl && (
-        <MissionControlDialog
+        <MissionControlPage
           sessions={sessions}
           runningSessions={runningSessions}
           contextWindows={contextWindows}

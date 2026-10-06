@@ -1,0 +1,11 @@
+{
+  "name": "@codetwo/sidecar-cursor",
+  "private": true,
+  "type": "module",
+  "version": "0.0.0",
+  "description": "C2 sidecar for the Cursor TypeScript SDK (local runtime). Pinned exactly; upgrade only through the compatibility canary.",
+  "engines": { "node": ">=22.13" },
+  "dependencies": {
+    "@cursor/sdk": "1.0.36"
+  }
+}
