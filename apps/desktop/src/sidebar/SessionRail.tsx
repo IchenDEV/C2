@@ -73,6 +73,7 @@ import {
   Pencil,
   Pin,
   Plus,
+  Server,
   Settings,
   SquareKanban,
   SquarePen,
@@ -102,8 +103,10 @@ import {
   showNativeContextMenu,
 } from "../container";
 import type { NativeContextMenuItem } from "../container";
+import { useEnvironments } from "../environment/useEnvironments";
 import { useT } from "../i18n";
 import { ProviderIcon } from "../providers/ProviderIcon";
+import { parseEnvironmentPath } from "../remoteEnvironments";
 import { sessionActivity } from "../session/sessionEvents";
 import { useToast } from "../ui/toast";
 import type { QuickQuotaSummary } from "../usage/quickQuota";
@@ -490,6 +493,7 @@ export function SessionRail({
     onEnd: () => setDragging(false),
   });
 
+  const { environments: remoteEnvironments } = useEnvironments();
   const projectNames = new Map(
     projects.map((project) => [project.path, project.name])
   );
@@ -504,9 +508,13 @@ export function SessionRail({
   const archived = [...archivedSessions].toSorted(
     (a, b) => b.created_at - a.created_at
   );
+  // Pull-request status comes from GitHub through this machine; remote folders have none.
   const gitTargetPaths = [
     ...new Set(
-      recent.slice(0, 48).map((session) => session.worktree_path ?? session.cwd)
+      recent
+        .slice(0, 48)
+        .map((session) => session.worktree_path ?? session.cwd)
+        .filter((path) => parseEnvironmentPath(path) === null)
     ),
   ];
   const gitTargetKey = gitTargetPaths.join("\u0000");
@@ -1040,6 +1048,24 @@ export function SessionRail({
           #{pullRequest.number}
         </span>
       ) : null;
+    const remoteEnvironmentName =
+      s.environment_id == null
+        ? null
+        : (remoteEnvironments.find(
+            (environment) => environment.id === s.environment_id
+          )?.name ?? t("environment.remote"));
+    const remoteBadge =
+      remoteEnvironmentName === null ? null : (
+        <span
+          data-session-environment={s.environment_id}
+          title={remoteEnvironmentName}
+          aria-label={remoteEnvironmentName}
+          className="text-fine text-foreground/55 flex max-w-24 shrink-0 items-center gap-0.5 leading-4"
+        >
+          <Server className="size-2.5 shrink-0" aria-hidden="true" />
+          <span className="truncate">{remoteEnvironmentName}</span>
+        </span>
+      );
     const provenanceInSummary = pullRequest === null;
     const showWorkspaceLine = pullRequest !== null;
 
@@ -1192,11 +1218,16 @@ export function SessionRail({
         action: "archive",
       },
       { type: "separator" },
-      {
-        type: "item",
-        label: t("rail.revealWorkingDirectory"),
-        action: "reveal-working-directory",
-      },
+      // A folder on another machine cannot be revealed in this Mac's Finder.
+      ...(s.environment_id == null
+        ? [
+            {
+              type: "item",
+              label: t("rail.revealWorkingDirectory"),
+              action: "reveal-working-directory",
+            } as const,
+          ]
+        : []),
       {
         type: "item",
         label: t("rail.copyWorkingDirectory"),
@@ -1516,6 +1547,7 @@ export function SessionRail({
                       >
                         {shortAge(lastActiveAt, ageNow)}
                       </time>
+                      {remoteBadge}
                       {provenanceInSummary ? checkoutBadge : null}
                     </div>
 
@@ -1536,6 +1568,7 @@ export function SessionRail({
                             </span>
                           </>
                         ) : null}
+                        {remoteBadge}
                         {checkoutBadge}
                         {pullRequestBadge}
                       </div>
@@ -1619,14 +1652,16 @@ export function SessionRail({
               </ContextMenuGroup>
               <ContextMenuSeparator />
               <ContextMenuGroup>
-                <ContextMenuItem
-                  onClick={() =>
-                    void revealWorkingDirectory(s.worktree_path ?? s.cwd)
-                  }
-                >
-                  <FolderOpen />
-                  {t("rail.revealWorkingDirectory")}
-                </ContextMenuItem>
+                {s.environment_id == null && (
+                  <ContextMenuItem
+                    onClick={() =>
+                      void revealWorkingDirectory(s.worktree_path ?? s.cwd)
+                    }
+                  >
+                    <FolderOpen />
+                    {t("rail.revealWorkingDirectory")}
+                  </ContextMenuItem>
+                )}
                 <ContextMenuItem
                   onClick={() =>
                     void copyToClipboard(
