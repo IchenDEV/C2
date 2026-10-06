@@ -934,9 +934,9 @@ pub async fn bind_and_serve_with_web_ui(
     } else {
         app.route("/", get(index)).route("/pair", get(index))
     }
-    .layer(axum::middleware::map_response(no_store_headers))
     .layer(remote_client_cors())
-    .layer(axum::middleware::from_fn(remote::remote_access_guard));
+    .layer(axum::middleware::from_fn(remote::remote_access_guard))
+    .layer(axum::middleware::map_response(no_store_headers));
 
     let listener = TcpListener::bind(addr).await?;
     let local = listener.local_addr()?;
