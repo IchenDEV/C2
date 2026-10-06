@@ -5151,7 +5151,8 @@ impl Engine {
             }
         }
 
-        self.revoke_host_mcp_session(session);
+        // `live_sessions` is held: the old runtime (and its bearer) is replaced just below.
+        self.revoke_host_mcp_credentials(session);
         let old_runtime = live_sessions.remove(session);
         callback_active.store(true, Ordering::Release);
         self.untrack_starting_client(&client);
@@ -5441,10 +5442,17 @@ impl Engine {
         }
     }
 
-    fn revoke_host_mcp_session(&self, session: &str) {
+    /// Registry-only revoke: safe while the caller already holds `state.sessions`
+    /// (re-locking that std `Mutex` on the same thread deadlocks).
+    fn revoke_host_mcp_credentials(&self, session: &str) {
         if let Ok(mut registry) = self.state.host_mcp.registry().lock() {
             registry.revoke_session(session);
         }
+    }
+
+    /// Takes `state.sessions`: never call it with that guard held.
+    fn revoke_host_mcp_session(&self, session: &str) {
+        self.revoke_host_mcp_credentials(session);
         if let Some(runtime) = self.state.sessions.lock().unwrap().get_mut(session) {
             runtime.host_mcp_bearer = None;
         }

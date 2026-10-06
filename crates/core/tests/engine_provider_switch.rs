@@ -327,6 +327,17 @@ async fn concurrent_switches_have_one_owner_and_one_durable_result() {
     ];
     let (engine, mut rx) = Engine::with_store(providers, SkillLibrary::new(vec![]), store.clone());
     let session = create_session(&engine, &mut rx, ProviderId::Grok).await;
+    let credentials = engine.host_mcp_state().registry();
+    let (_, old_bearer) = credentials
+        .lock()
+        .unwrap()
+        .issue(codetwo_core::HostMcpScope {
+            session_id: session.clone(),
+            provider_id: "grok".into(),
+            capabilities: codetwo_core::HostMcpCapability::default_read_only_set(),
+        })
+        .unwrap();
+    assert!(credentials.lock().unwrap().resolve(&old_bearer).is_some());
 
     let (first, second) = tokio::join!(
         engine.switch_provider(&session, ProviderId::Pi, None),
@@ -343,6 +354,7 @@ async fn concurrent_switches_have_one_owner_and_one_durable_result() {
         store.get_session(&session).unwrap().unwrap().provider,
         ProviderId::Pi
     );
+    assert!(credentials.lock().unwrap().resolve(&old_bearer).is_none());
     engine.shutdown();
 }
 
@@ -525,19 +537,30 @@ async fn unavailable_history_refuses_switch_instead_of_silently_losing_context()
 #[tokio::test]
 async fn failed_first_prompt_keeps_continuation_for_retry() {
     let store = Arc::new(Store::open_in_memory().unwrap());
+    // A broken connection is replaced after Unknown. Keep the fail-once fixture
+    // state outside its process so a fresh runtime does not fail its first request again.
+    let fixture = tempfile::tempdir().unwrap();
+    let failed_marker = fixture.path().join("failed-once");
+    let marker_literal = serde_json::to_string(&failed_marker.to_string_lossy()).unwrap();
     let mut target = provider(ProviderId::Pi, "Fail once", TARGET_AGENT);
     target.launch.args[1] = TARGET_AGENT
+        // Reconnection may restore the target's own cursor; only a source cursor is foreign.
+        .replace(
+            "used_old_cursor = True",
+            "used_old_cursor = message[\"params\"].get(\"sessionId\") != \"target-session\"",
+        )
         .replace(
             "used_old_cursor = False",
-            "used_old_cursor = False\nfailed = False",
+            &format!("used_old_cursor = False\nimport os\nfailed = os.path.exists({marker_literal})"),
         )
         .replace(
             "        prompt = json.dumps",
-            r#"        if not failed:
+            &format!(r#"        if not failed:
             failed = True
-            send({"jsonrpc":"2.0","id":mid,"error":{"code":-32000,"message":"temporary failure"}})
+            open({marker_literal}, "w").close()
+            send({{"jsonrpc":"2.0","id":mid,"error":{{"code":-32000,"message":"temporary failure"}}}})
             continue
-        prompt = json.dumps"#,
+        prompt = json.dumps"#),
         );
     let (engine, mut rx) = Engine::with_store(
         vec![provider(ProviderId::Grok, "Source", SOURCE_AGENT), target],
@@ -554,17 +577,25 @@ async fn failed_first_prompt_keeps_continuation_for_retry() {
         .submit(prompt(&session, "second user request", "failure"))
         .await
         .unwrap();
+    let mut broken = false;
     loop {
+        let event = next_event(&mut rx).await;
+        if matches!(&event, Event::ThreadDisposition { session: routed, disposition: codetwo_core::ThreadDisposition::Broken } if routed == &session)
+        {
+            broken = true;
+        }
         if let Event::Error {
             terminal: true,
             message,
             ..
-        } = next_event(&mut rx).await
+        } = event
         {
             assert!(message.contains("temporary failure"));
             break;
         }
     }
+    assert!(broken, "unknown outcome must discard the failed runtime");
+    assert!(failed_marker.is_file());
     assert!(store.handoff_context(&session).unwrap().is_some());
     assert_eq!(
         run_turn(&engine, &mut rx, &session, "second user request", "retry").await,
