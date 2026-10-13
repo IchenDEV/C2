@@ -1,0 +1,59 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>共享 Agent 讨论原型</title><style>
+*{box-sizing:border-box}body{margin:0;font:14px/1.55 var(--font-sans,system-ui);color:var(--foreground,#222)}.muted{color:var(--muted-foreground,#666)}.bar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:14px}button,select,input{font:inherit;color:inherit;border:1px solid var(--border,#ddd);border-radius:8px;background:var(--card,#fafafa);padding:7px 10px}button{cursor:pointer}button:hover{background:var(--accent-surface,#eef)}.grid{display:grid;grid-template-columns:230px minmax(0,1fr);gap:12px}.panel{background:var(--card,#fafafa);border:1px solid var(--border,#ddd);border-radius:12px;padding:16px;min-width:0}.task{display:block;text-align:left;width:100%;margin-top:10px}.task.active{border-color:var(--primary,#5865da)}.tag{font-size:12px;color:var(--muted-foreground,#666)}.messages{min-height:160px;max-height:300px;overflow:auto;margin:16px 0}.message{margin:8px 0;padding:8px 10px;background:var(--secondary,#eee);border-radius:8px;white-space:pre-wrap;overflow-wrap:anywhere}.message b{display:block;font-size:12px}.input{display:flex;gap:8px}.input input{min-width:0;flex:1}h3{margin:0 0 10px;font-size:17px}small{display:block;margin-top:8px}.note{font-size:12px;margin:12px 0}.status{padding:2px 7px;border-radius:6px;background:var(--accent-surface,#eef)}.ico{display:inline-flex;align-items:center;gap:6px;flex-wrap:wrap}.av{width:22px;height:22px;display:inline-grid;place-items:center;color:#fff;font-size:12px;font-weight:700;flex:none}.sq{border-radius:6px}.ci{border-radius:50%}.di{border-radius:4px;transform:rotate(45deg)}.di>i{transform:rotate(-45deg);font-style:normal}svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;flex:none}details.meta{margin-top:6px}details.meta summary{cursor:pointer;display:flex;align-items:center;gap:8px;min-height:28px;list-style:none}details.meta summary::-webkit-details-marker{display:none}details.meta p{margin:4px 0 0;font-size:12px;overflow-wrap:anywhere}.row{display:flex;align-items:center;gap:8px;min-width:0}.row b{overflow-wrap:anywhere}.sim{font-size:11px;border:1px dashed var(--border,#ddd);border-radius:4px;padding:0 4px}@media(max-width:570px){.grid{grid-template-columns:1fr}.messages{min-height:110px}.task{padding:10px}}
+</style><body>
+<div class="bar"><b>CodeTwo · 一起使用 Agent</b><span class="muted">讨论原型，仅在页面内模拟</span></div>
+<div class="bar"><label>切换参与者 <select id="person"><option value="host">我</option><option value="a">阿青</option><option value="b">小周</option></select></label><button id="new">新建任务（默认公开）</button><span id="count" class="muted"></span></div>
+<div class="grid"><section class="panel"><h3>同一个项目的任务</h3><div id="tasks"></div><small class="muted">每个任务有 visibility 属性，新任务默认 public；public 不能改回 private。任务主人只是归属标记，不限制别人参与。点图标行可看全名与设备详情。</small></section><section class="panel"><div id="header"></div><div class="bar"><button id="stop">停止 Agent</button><button id="visibility" hidden>公开此私有任务（不可撤回）</button></div><div id="messages" class="messages"></div><form class="input" id="send"><input id="text" placeholder="直接参与这段对话…" autocomplete="off"><button>发送给 Agent</button></form><small class="muted">大家使用相同操作。消息带署名，Agent 仍在那台共享机器上执行。</small></section></div>
+<p class="note muted">仅保留的既有 private 示例按“仅创建者可见”模拟，不自动公开，也不能新建 private；机器主人能否看 private 待定。页面过滤演示不证明服务器 private 过滤已实现。</p>
+<script>
+const names={host:'我',a:'阿青',b:'小周'};
+const initial=[
+{id:1,title:'写一段产品介绍',visibility:'public',createdBy:'a',device:'模拟 · 云 Mac',running:true,messages:[{by:'阿青',text:'先帮我写一个开头。'},{by:'Agent',text:'你希望这段介绍写给谁看？'}]},
+{id:2,title:'整理网页结构',visibility:'public',createdBy:'host',device:'模拟 · 云 VM',running:true,messages:[{by:'我',text:'先梳理页面结构。'}]},
+{id:3,title:'个人备忘',visibility:'private',createdBy:'host',device:'模拟 · 云 Mac',running:false,messages:[{by:'我',text:'这是一份模拟的私有任务。'}]}
+];
+let tasks=structuredClone(initial),person='host',selected=1;
+const P={host:{c:'#2f6fed',i:'我',s:'ci'},a:{c:'#d9480f',i:'青',s:'sq'},b:{c:'#2b8a3e',i:'周',s:'di'}};
+const I={mac:'<svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="11" rx="1.5"/><path d="M2 19h20"/></svg>',vm:'<svg viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="7" rx="1.5"/><rect x="4" y="13" width="16" height="7" rx="1.5"/><path d="M8 6.5h.01M8 16.5h.01"/></svg>',pub:'<svg viewBox="0 0 24 24"><circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="6" r="2.5"/><circle cx="18" cy="18" r="2.5"/><path d="M8.2 10.8l7.6-3.6M8.2 13.2l7.6 3.6"/></svg>',pri:'<svg viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 018 0v3"/></svg>'};
+const dev=t=>t.device.includes('VM')?'vm':'mac';
+function icons(t){const o=names[t.createdBy],p=P[t.createdBy],e=document.createElement('span');e.className='ico';
+ const lab=[['av '+p.s,'主人：'+o],['',(t.device)+'（模拟设备）'],['',t.visibility==='public'?'public 公开：所有人可参与':'private 私有：仅创建者可见']];
+ const a=document.createElement('span');a.className='av '+p.s;a.style.background=p.c;a.title=a.ariaLabel='主人：'+o;a.setAttribute('role','img');const ai=document.createElement('i');ai.textContent=p.i;ai.style.fontStyle='normal';a.append(ai);
+ const d=document.createElement('span');d.className='dv';d.dataset.dev=dev(t);d.innerHTML=I[dev(t)];d.title=d.ariaLabel=lab[1][1];d.setAttribute('role','img');
+ const v=document.createElement('span');v.className='vis';v.dataset.vis=t.visibility;v.innerHTML=t.visibility==='public'?I.pub:I.pri;v.title=v.ariaLabel=lab[2][1];v.setAttribute('role','img');
+ const m=document.createElement('span');m.className='sim';m.textContent='模拟';m.title='设备为模拟，非真实跨设备';
+ e.append(a,d,v,m);return e}
+function metaBox(t,id){const x=document.createElement('details');x.className='meta';if(id)x.id=id;const s=document.createElement('summary');s.append(icons(t));s.title=s.ariaLabel='轻触查看主人、设备、可见性详情';const p=document.createElement('p');p.className='tag';p.textContent='主人：'+names[t.createdBy]+' · 设备：'+t.device+'（模拟） · '+t.visibility;x.append(s,p);return x}
+const byId=id=>document.getElementById(id);
+const visible=()=>tasks.filter(t=>t.visibility==='public'||t.createdBy===person);
+const current=()=>tasks.find(t=>t.id===selected);
+function render(){
+ const list=visible();if(!list.some(t=>t.id===selected)) selected=list[0]?.id;
+ byId('tasks').replaceChildren();
+ for(const t of list){const w=document.createElement('div');w.className='panel task'+(t.id===selected?' active':'');w.style.padding='10px';const b=document.createElement('button');b.className='tt';b.style.cssText='width:100%;text-align:left;border:0;padding:2px 0;background:none';b.textContent=t.title;b.onclick=()=>{selected=t.id;render()};w.append(b,metaBox(t));byId('tasks').append(w)}
+ byId('count').textContent=names[person]+'看到 '+list.length+' 个任务';
+ const t=current();byId('header').replaceChildren();byId('messages').replaceChildren();if(!t)return;
+ const h=document.createElement('h3');h.textContent=t.title;const status=document.createElement('span');status.className='status';status.textContent=t.running?'Agent 运行中':'Agent 已停止';const meta=metaBox(t,'meta');byId('header').append(h,status,meta);
+ for(const m of t.messages){const d=document.createElement('div');d.className='message';const b=document.createElement('b');b.textContent=m.by;d.append(b,document.createTextNode(m.text));byId('messages').append(d)}
+ byId('stop').textContent=t.running?'停止 Agent':'继续 Agent';byId('visibility').hidden=t.visibility!=='private';
+}
+byId('person').onchange=e=>{person=e.target.value;render()};
+byId('stop').onclick=()=>{current().running=!current().running;render()};
+byId('visibility').onclick=()=>{const t=current();if(t.visibility==='private')t.visibility='public';render()};
+byId('new').onclick=()=>{const t={id:Math.max(...tasks.map(t=>t.id))+1,title:'新的协作任务',visibility:'public',createdBy:person,device:'模拟 · 云 Mac',running:true,messages:[]};tasks.push(t);selected=t.id;render()};
+byId('send').onsubmit=e=>{e.preventDefault();const text=byId('text').value.trim();if(!text)return;current().messages.push({by:names[person],text});byId('text').value='';render()};
+// Exercise the actual handlers. These checks validate this simulation only.
+render();
+byId('person').value='b';byId('person').dispatchEvent(new Event('change'));
+if(visible().some(t=>t.id===3))throw Error('Private task leaked in simulation');
+if(document.getElementById('claim'))throw Error('Claim UI remains');const mt=byId('meta');if(!mt.textContent.includes('主人：阿青')||!mt.textContent.includes('模拟')||!mt.querySelector('[data-dev]').ariaLabel.includes('模拟')||!mt.querySelector('.av').title.includes('阿青'))throw Error('Owner/device icon label failed');if(new Set(Object.values(P).map(p=>p.c+p.s)).size!==3||I.mac===I.vm)throw Error('Icons not distinct');const sm=mt.querySelector('summary');sm.click();if(!mt.open)throw Error('Details did not expand');sm.click();if(mt.open)throw Error('Details did not collapse');const owner0=current().createdBy;
+byId('text').value='我也来参与一下。';byId('send').dispatchEvent(new Event('submit',{cancelable:true}));
+if(current().messages.at(-1).by!=='小周')throw Error('Attribution failed');
+byId('stop').click();if(current().running)throw Error('Shared control failed');byId('stop').click();if(!current().running||current().createdBy!==owner0)throw Error('Continue or owner changed');byId('stop').click();
+byId('new').click();if(current().createdBy!=='b'||!current().device.includes('模拟'))throw Error('New task default owner failed');if(current().visibility!=='public')throw Error('New task not public');byId('visibility').click();if(current().visibility!=='public')throw Error('Public reverted');tasks.pop();selected=1;render();
+byId('person').value='host';byId('person').dispatchEvent(new Event('change'));selected=3;render();if(byId('visibility').hidden)throw Error('Publish missing');const o3=current().createdBy;byId('visibility').click();if(current().visibility!=='public'||current().createdBy!==o3)throw Error('Publish failed');byId('visibility').click();if(current().visibility!=='public'||!byId('visibility').hidden)throw Error('Public reverted');selected=1;render();
+byId('person').value='a';byId('person').dispatchEvent(new Event('change'));
+if(current().messages.at(-1).by!=='小周')throw Error('Shared state failed');
+tasks=structuredClone(initial);person='host';selected=1;byId('person').value='host';render();
+console.log('PASS: simulation default public, one-way publish, private filtering, owner and simulated device labels, attributed message, shared stop/continue keeping owner, shared state');
+</script></body></html>
