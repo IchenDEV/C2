@@ -1750,6 +1750,24 @@ pre {
   box-shadow: inset 0 calc(-1 * var(--hairline-width)) 0 var(--border);
 }
 
+/* Sharing adds a nickname, link and visibility/follow controls beside the session actions. When the
+   pane is too narrow for one strip the toolbar drops to its own right-aligned row instead of
+   clipping; the strip keeps its normal one-row height whenever everything fits. */
+.session-header.window-titlebar {
+  height: auto;
+  min-height: var(--ds-titlebar-height);
+  flex-wrap: wrap;
+  row-gap: 0.25rem;
+  padding-block: 0.25rem;
+}
+
+.session-header .session-header-toolbar {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  max-width: 100%;
+  margin-left: auto;
+}
+
 /* One theme-owned tone for the whole toolbar, including hover/open states. Portalled menus
    retain their own colors; disabled buttons keep the shared opacity treatment. */
 .session-header-toolbar,

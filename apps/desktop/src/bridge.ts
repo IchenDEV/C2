@@ -518,6 +518,15 @@ export interface SessionInfo {
   worktree_identity?: Record<string, unknown> | null;
   /** True once the user discarded this session's isolated checkout. Old rows read as false. */
   worktree_discarded?: boolean;
+  /**
+   * Canonical ShareStore metadata attached by the filtered list: `visibility` + the creator's
+   * current nickname, or `legacy` for an unowned local-only task. Absent for non-shared hosts.
+   */
+  share?: {
+    visibility?: "public" | "private";
+    creator_name?: string;
+    legacy?: boolean;
+  };
   permission_mode: PermissionMode;
   sandbox_policy: Sandbox;
   acp_session_id: string | null;
@@ -886,7 +895,8 @@ export function describeBlock(b: DocBlock): string {
 export type CoreEvent =
   | {
       event: "task_snapshot_changed";
-      session: null;
+      /** Every session subject of the task; the host delivers it only to viewers of ALL of them. */
+      sessions: string[];
       task_id: string;
       revision: number;
     }
@@ -898,6 +908,12 @@ export type CoreEvent =
       worktree_path?: string | null;
       worktree_baseline?: ResolvedWorktreeBaseline | null;
       request_id?: string | null;
+    }
+  | {
+      event: "session_share_changed";
+      session: string;
+      kind: "message_author" | "follow" | "visibility" | "revoked";
+      revision: number;
     }
   | { event: "memory_context"; session: string; receipt: MemoryReceipt }
   | { event: "session_title_changed"; session: string; title: string }
@@ -996,6 +1012,7 @@ export type CoreEvent =
       request_id?: string | null;
       position: number;
     }
+  | { event: "prompts_cancelled"; session: string; request_ids: string[] }
   | {
       event: "steer_accepted";
       session: string;
@@ -1137,6 +1154,8 @@ export interface TranscriptEntry {
   part: Part;
   created_at?: number;
   started_at?: number;
+  /** Canonical durable author of a shared-session user row (backend `sessions.transcript`). */
+  author?: { actor: string; nickname: string; request_id?: string | null };
 }
 
 /** A page never begins in the middle of a user turn. `next_before` is exclusive. */
@@ -2220,7 +2239,8 @@ export async function newSession(
   initialModel?: string | null,
   transient = false,
   initialReasoningEffort?: string | null,
-  parallelTask?: { taskId: string; goal: string } | null
+  parallelTask?: { taskId: string; goal: string } | null,
+  visibility: "public" | "private" = "public"
 ): Promise<void> {
   const environmentId = environmentRegistry.activeId();
   if (coreAvailable && environmentId != null) {
@@ -2250,6 +2270,7 @@ export async function newSession(
       transient,
       reasoning_effort: initialReasoningEffort ?? null,
       environment_id: environmentId,
+      visibility,
     });
     return;
   }
@@ -2283,6 +2304,7 @@ export async function newSession(
       model: initialModel ?? null,
       transient,
       reasoning_effort: initialReasoningEffort ?? null,
+      visibility,
     });
   }
 }
@@ -4366,13 +4388,15 @@ export async function remotePairingLink(
   clientProtocol: RemoteClientProtocol = "c2",
   ttlSecs?: number
 ): Promise<RemotePairingLink | null> {
-  return inDesktop
-    ? await call<RemotePairingLink>("remote.pairing_link", {
-        endpoint_id: endpointId ?? null,
-        client_protocol: clientProtocol,
-        ttl_secs: ttlSecs ?? null,
-      })
-    : null;
+  // Paired browsers ask their own server (same origin they reached it at); the server mints the
+  // link from its existing auth state. Without a Core transport there is nothing to ask.
+  if (!inDesktop && !coreAvailable) return null;
+  return await call<RemotePairingLink>("remote.pairing_link", {
+    endpoint_id: endpointId ?? null,
+    client_protocol: clientProtocol,
+    ttl_secs: ttlSecs ?? null,
+    ...(inDesktop ? {} : { base_url: window.location.origin }),
+  });
 }
 
 export async function remoteDevices(): Promise<RemoteDevice[]> {

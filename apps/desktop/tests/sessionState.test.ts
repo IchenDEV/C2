@@ -467,6 +467,32 @@ describe("session event isolation", () => {
     expect(turns[1].queuePosition).toBeUndefined();
   });
 
+  test("drops only queued rows Core cancelled and keeps running turns", () => {
+    const running = { ...newTurn("active", "active-request"), accepted: true };
+    const turns = [
+      running,
+      { ...newTurn("mine", "cancelled-request"), delivery: "queued" as const },
+      { ...newTurn("other", "kept-request"), delivery: "queued" as const },
+    ];
+    const next = applyEvent(turns, {
+      event: "prompts_cancelled",
+      session: "session-a",
+      request_ids: ["cancelled-request", "active-request"],
+    });
+    expect(next.map((turn) => turn.requestId)).toEqual([
+      "active-request",
+      "kept-request",
+    ]);
+    expect(next[0].endedAt).toBeUndefined();
+    expect(
+      applyEvent(next, {
+        event: "prompts_cancelled",
+        session: "session-a",
+        request_ids: ["unknown"],
+      })
+    ).toBe(next);
+  });
+
   test("moves the stream boundary to a provider-accepted steering prompt", () => {
     const active = { ...newTurn("active", "active-request"), accepted: true };
     const steer = {

@@ -1547,6 +1547,28 @@ export function SessionRail({
                       >
                         {shortAge(lastActiveAt, ageNow)}
                       </time>
+                      {s.share && (
+                        <span
+                          data-session-share={s.share.visibility ?? "local"}
+                          title={
+                            s.share.creator_name != null &&
+                            s.share.creator_name !== ""
+                              ? `${shareLabel(s.share)} · ${s.share.creator_name}`
+                              : shareLabel(s.share)
+                          }
+                          className="text-fine flex max-w-[45%] min-w-0 shrink items-center gap-1 truncate"
+                        >
+                          <span className="shrink-0 uppercase">
+                            {shareLabel(s.share)}
+                          </span>
+                          {s.share.creator_name != null &&
+                            s.share.creator_name !== "" && (
+                              <span className="min-w-0 truncate">
+                                · {s.share.creator_name}
+                              </span>
+                            )}
+                        </span>
+                      )}
                       {remoteBadge}
                       {provenanceInSummary ? checkoutBadge : null}
                     </div>
@@ -2619,4 +2641,9 @@ export function SessionRail({
       </aside>
     </>
   );
+}
+
+function shareLabel(share: NonNullable<SessionInfo["share"]>): string {
+  if (share.legacy === true || share.visibility == null) return "Local only";
+  return share.visibility === "public" ? "Public" : "Private";
 }

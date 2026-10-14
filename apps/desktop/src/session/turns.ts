@@ -147,6 +147,8 @@ export interface Turn {
   id: number;
   /** Durable user-row boundary. Present for turns reconstructed from a transcript page. */
   transcriptStartSeq?: number;
+  /** Display name of the canonical author of this user message (shared sessions only). */
+  authorName?: string;
   /** Prompt correlation id when the core/client supplied one. */
   requestId?: string;
   /** False for an optimistic local row until its matching TurnStarted arrives. */
@@ -436,6 +438,9 @@ function appendToolContent(
  * Fold a streamed event into the turn list. Text accumulates into the open turn rather than
  * appending a new row, and tool calls are upserted by id so status updates in place.
  */
+/** Text of a row created for another actor's turn before the canonical transcript is read. */
+export const REMOTE_TURN_PLACEHOLDER = "(started elsewhere)";
+
 export function applyEvent(
   turns: Turn[],
   ev: CoreEvent,
@@ -454,6 +459,22 @@ export function applyEvent(
     ev.event === "permission_request"
   ) {
     return turns;
+  }
+
+  // Core cancelled these queued deliveries in its store. Drop exactly those rows that are still
+  // waiting; an accepted/running turn (this actor's or another's) keeps its own state.
+  if (ev.event === "prompts_cancelled") {
+    const cancelled = new Set(ev.request_ids);
+    const kept = turns.filter(
+      (turn) =>
+        !(
+          turn.delivery === "queued" &&
+          !turn.accepted &&
+          turn.requestId != null &&
+          cancelled.has(turn.requestId)
+        )
+    );
+    return kept.length === turns.length ? turns : kept;
   }
 
   const requestId =
@@ -483,14 +504,19 @@ export function applyEvent(
         streamBoundaryKnown: true,
         delivery: undefined,
         queuePosition: undefined,
+        // Own optimistic rows get their canonical seq here too; without it a later transcript read
+        // cannot tell this turn from an unknown one and collapses its Cancelled duration to 0s.
+        transcriptStartSeq: ev.transcript_seq ?? list[match].transcriptStartSeq,
       };
       delete accepted.endedAt;
       list[match] = accepted;
       return list;
     }
-    const remote = newTurn("(started elsewhere)", requestId);
+    const remote = newTurn(REMOTE_TURN_PLACEHOLDER, requestId);
     remote.accepted = true;
     remote.streamBoundaryKnown = true;
+    // The canonical prompt row carries this seq, so a later transcript read replaces the placeholder.
+    remote.transcriptStartSeq = ev.transcript_seq ?? undefined;
     return [...turns, remote];
   }
 
@@ -563,6 +589,12 @@ export function applyEvent(
     return [...turns, notice];
   }
 
+  // A terminal event with no running turn is a duplicate/late close (e.g. the provider's own
+  // `cancelled` after another actor's Stop). It must never fabricate a new row.
+  if (ev.event === "turn_ended" && !turns.some((turn) => isRunning(turn))) {
+    return turns;
+  }
+
   // Backward compatibility for event producers that predate `turn_started`: activity after an
   // ended transcript still starts a fresh remote turn instead of mutating the previous one.
   const list = [...turns];
@@ -572,6 +604,21 @@ export function applyEvent(
       if (isRunning(list[index]) && list[index].requestId === activeRequestId) {
         i = index;
         break;
+      }
+    }
+    if (i < 0) {
+      // A canonical row loaded from the transcript carries no request id yet; it is the same
+      // running turn, so bind to it instead of adding a second "(started elsewhere)" row.
+      for (let index = list.length - 1; index >= 0; index -= 1) {
+        const candidate = list[index];
+        if (
+          isRunning(candidate) &&
+          candidate.accepted &&
+          (candidate.requestId == null || candidate.requestId === "")
+        ) {
+          i = index;
+          break;
+        }
       }
     }
     if (i < 0) {
@@ -659,6 +706,18 @@ export function applyEvent(
     case "turn_ended": {
       cur.stopReason = ev.stop_reason;
       cur.endedAt = Date.now();
+      // One session runs one accepted turn at a time: any other accepted-running row (e.g. the
+      // placeholder for another actor's turn that this Stop also ended) is closed by the same
+      // terminal event instead of staying "Working" beside the Cancelled row. Queued rows stay.
+      for (let index = 0; index < list.length; index += 1) {
+        if (index !== i && isRunning(list[index]) && list[index].accepted) {
+          list[index] = {
+            ...list[index],
+            stopReason: ev.stop_reason,
+            endedAt: cur.endedAt,
+          };
+        }
+      }
       break;
     }
     case "error": {
@@ -700,6 +759,10 @@ export function applyEvent(
     }
     case "worktree_discarded": {
       throw new Error('Not implemented yet: "worktree_discarded" case');
+    }
+    case "session_share_changed": {
+      // Share changes refresh the share record and transcript; they carry no turn state.
+      break;
     }
   }
 
@@ -803,20 +866,88 @@ function mergeTurnContent(
 
 /** Merge events received during an async transcript read without dropping or duplicating its tail. */
 export function mergeLoadedTurns(
-  loaded: Turn[],
-  live: Turn[],
+  loadedInput: Turn[],
+  liveInput: Turn[],
   running: boolean
 ): Turn[] {
+  let loaded = loadedInput;
+  let live = liveInput;
+  if (live.length === 0) return loaded;
+  // A transcript read has no stop reason and approximates the end by the last part, so an earlier
+  // turn that was Cancelled with no output would collapse to 0s. A live turn with the same canonical
+  // seq already knows its real terminal status/timing; preserve that, never guess for unknown rows.
+  const knownTerminal = new Map<number, Turn>();
+  for (const turn of live) {
+    if (
+      turn.transcriptStartSeq != null &&
+      turn.endedAt !== undefined &&
+      turn.stopReason != null &&
+      turn.stopReason !== ""
+    )
+      knownTerminal.set(turn.transcriptStartSeq, turn);
+  }
+  loaded = loaded.map((turn, index) => {
+    const known =
+      index === loaded.length - 1 || turn.transcriptStartSeq == null
+        ? undefined
+        : knownTerminal.get(turn.transcriptStartSeq);
+    if (known == null) return turn;
+    return {
+      ...turn,
+      stopReason: known.stopReason,
+      error: turn.error ?? known.error,
+      startedAt: Math.min(turn.startedAt, known.startedAt),
+      endedAt: known.endedAt,
+    };
+  });
+  // Canonical rows are the source of truth: a placeholder for another actor's turn is dropped once
+  // the transcript holds its prompt, except the tail which is merged below so live state survives.
+  const loadedSeqs = new Set(
+    loaded
+      .slice(0, -1)
+      .flatMap((turn) =>
+        turn.transcriptStartSeq == null ? [] : [turn.transcriptStartSeq]
+      )
+  );
+  live = live.filter(
+    (turn) =>
+      !(
+        // A foreign placeholder, or a finished own turn whose terminal state was folded into the
+        // canonical row above, is that row: keeping it would show the same turn twice.
+        (turn.prompt === REMOTE_TURN_PLACEHOLDER ||
+          knownTerminal.get(turn.transcriptStartSeq ?? -1) === turn) &&
+        turn.transcriptStartSeq != null &&
+        loadedSeqs.has(turn.transcriptStartSeq)
+      )
+  );
   if (live.length === 0) return loaded;
   if (loaded.length === 0) return live;
+  const tailSeq = loaded.at(-1)!.transcriptStartSeq;
+  const tailPlaceholder = live.find(
+    (turn) =>
+      turn.prompt === REMOTE_TURN_PLACEHOLDER &&
+      turn.transcriptStartSeq != null &&
+      turn.transcriptStartSeq === tailSeq
+  );
+  if (tailPlaceholder != null) {
+    loaded = [
+      ...loaded.slice(0, -1),
+      { ...loaded.at(-1)!, requestId: tailPlaceholder.requestId },
+    ];
+  }
 
   const loadedTail = loaded.at(-1)!;
-  if (loadedTail.requestId == null || loadedTail.requestId === "")
-    return [...loaded, ...live];
-  const liveIndex = live.findIndex(
-    (turn) => turn.requestId === loadedTail.requestId
-  );
-  if (liveIndex === -1) return [...loaded, ...live];
+  // A foreign start has no request id this client may use, so the seq match above is its only
+  // identity: that placeholder IS the canonical tail and folds into it instead of staying a row.
+  let liveIndex = tailPlaceholder == null ? -1 : live.indexOf(tailPlaceholder);
+  if (liveIndex === -1) {
+    if (loadedTail.requestId == null || loadedTail.requestId === "")
+      return [...loaded, ...live];
+    liveIndex = live.findIndex(
+      (turn) => turn.requestId === loadedTail.requestId
+    );
+    if (liveIndex === -1) return [...loaded, ...live];
+  }
   const liveTurn = live[liveIndex];
 
   let tools = [...loadedTail.tools];
@@ -840,7 +971,7 @@ export function mergeLoadedTurns(
   );
   const merged: Turn = {
     ...loadedTail,
-    requestId: liveTurn.requestId,
+    requestId: liveTurn.requestId ?? loadedTail.requestId,
     accepted: loadedTail.accepted || liveTurn.accepted,
     streamBoundaryKnown: liveTurn.streamBoundaryKnown,
     text: textMerge.deltas.join(""),
@@ -956,6 +1087,15 @@ export function turnsFromTranscript(
         entry.created_at,
         entry.started_at
       );
+      const name = entry.author?.nickname.trim();
+      const last = out.at(-1);
+      if (
+        entry.role === "user" &&
+        name !== undefined &&
+        name !== "" &&
+        last?.transcriptStartSeq === entry.seq
+      )
+        last.authorName = name;
     } else push(entry[1], entry[0]);
   }
   if (out.length > 0 && lastTurnRequestId != null && lastTurnRequestId !== "") {

@@ -397,6 +397,17 @@ impl ArtifactStore {
             .map_err(|_| ArtifactError::InvalidData("artifact is not UTF-8 text".into()))
     }
 
+    /// Sessions that referenced this blob (the only app-level association of an artifact to task
+    /// data), used to apply the share policy to an id presented without its session.
+    pub fn referencing_sessions(&self, artifact_id: &str) -> Result<Vec<String>, ArtifactError> {
+        let conn = self.store.conn.lock().unwrap();
+        let mut statement =
+            conn.prepare("SELECT DISTINCT session_id FROM artifact_refs WHERE artifact_id=?1")?;
+        let rows = statement.query_map([artifact_id], |row| row.get::<_, String>(0))?;
+        rows.collect::<rusqlite::Result<Vec<_>>>()
+            .map_err(ArtifactError::from)
+    }
+
     /// The artifacts a session produced, newest first. Joined through `artifact_refs`, so a blob
     /// shared with another session is only returned for sessions that actually referenced it.
     pub fn list_for_session(&self, session_id: &str) -> Result<Vec<ArtifactRef>, ArtifactError> {

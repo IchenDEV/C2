@@ -61,6 +61,11 @@ const MAX_PERSISTED_COMMAND_RECEIPTS: usize = 2_048;
 struct PersistedCommandReceipt {
     command_id: String,
     sequence: u64,
+    /// `true` once `command_id` is actor-namespaced (`<viewer>/<raw id>`). Receipts written
+    /// before actor scoping deserialize as `false`: their original actor is unknown, so they are
+    /// never replayed (see `dispatch_command`).
+    #[serde(default)]
+    scoped: bool,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -137,10 +142,10 @@ fn validate_compatibility(metadata: &CompatibilityMetadata) -> Result<(), String
     {
         return Err("invalid persisted T3 command receipts".into());
     }
-    let unique_receipts: HashSet<&str> = metadata
+    let unique_receipts: HashSet<(bool, &str)> = metadata
         .command_receipts
         .iter()
-        .map(|receipt| receipt.command_id.as_str())
+        .map(|receipt| (receipt.scoped, receipt.command_id.as_str()))
         .collect();
     if unique_receipts.len() != metadata.command_receipts.len() {
         return Err("duplicate persisted T3 command receipt".into());
@@ -217,6 +222,9 @@ pub struct T3CompatState {
     compatibility_persist_lock: Mutex<()>,
     dispatch_lock: AsyncMutex<()>,
     command_receipts: Mutex<HashMap<String, Result<u64, String>>>,
+    /// Raw command ids persisted before actor scoping; ambiguous, so refused instead of replayed.
+    legacy_command_receipts: HashSet<String>,
+    policy: Mutex<Option<Arc<dyn crate::WebUiCommandCaller>>>,
 }
 
 impl T3CompatState {
@@ -243,7 +251,14 @@ impl T3CompatState {
         let command_receipts = compatibility
             .command_receipts
             .iter()
+            .filter(|receipt| receipt.scoped)
             .map(|receipt| (receipt.command_id.clone(), Ok(receipt.sequence)))
+            .collect();
+        let legacy_command_receipts = compatibility
+            .command_receipts
+            .iter()
+            .filter(|receipt| !receipt.scoped)
+            .map(|receipt| receipt.command_id.clone())
             .collect();
         if let Some(error) = &compatibility_load_error {
             eprintln!("warning: T3 compatibility metadata is unavailable: {error}");
@@ -287,6 +302,8 @@ impl T3CompatState {
             compatibility_persist_lock: Mutex::new(()),
             dispatch_lock: AsyncMutex::new(()),
             command_receipts: Mutex::new(command_receipts),
+            legacy_command_receipts,
+            policy: Mutex::new(None),
         })
     }
 
@@ -328,12 +345,13 @@ impl T3CompatState {
             let mut compatibility = self.compatibility.lock().unwrap();
             compatibility
                 .command_receipts
-                .retain(|receipt| receipt.command_id != command_id);
+                .retain(|receipt| !(receipt.scoped && receipt.command_id == command_id));
             compatibility
                 .command_receipts
                 .push(PersistedCommandReceipt {
                     command_id: command_id.to_string(),
                     sequence,
+                    scoped: true,
                 });
             let excess = compatibility
                 .command_receipts
@@ -664,11 +682,31 @@ impl T3CompatState {
         Ok(())
     }
 
-    fn shell_snapshot(&self, sequence: u64) -> Result<Value, String> {
-        let sessions = self
+    fn session_allowed(&self, viewer: &str, session: &str) -> bool {
+        match self.policy.lock().unwrap().as_ref() {
+            // The one authoritative ShareStore decision (`can_view`): private = creator only,
+            // legacy unowned = local owner only, so a paired T3 device sees neither.
+            Some(policy) => policy.session_visible(viewer, session),
+            // No policy wired. Private/owned metadata can only exist when the engine owns a
+            // ShareStore, so that (not an assumption) is the invariant: an engine WITH a store but
+            // no policy fails closed; an engine without one has no private task to protect.
+            None => self.engine.share_store().is_none(),
+        }
+    }
+
+    /// Install the share policy (the same adapter `/ws` and `/api/web-ui/call` use).
+    pub fn set_share_policy(&self, policy: Arc<dyn crate::WebUiCommandCaller>) {
+        *self.policy.lock().unwrap() = Some(policy);
+    }
+
+    fn shell_snapshot(&self, sequence: u64, viewer: &str) -> Result<Value, String> {
+        let sessions: Vec<Session> = self
             .engine
             .list_sessions()
-            .map_err(|error| error.to_string())?;
+            .map_err(|error| error.to_string())?
+            .into_iter()
+            .filter(|session| self.session_allowed(viewer, &session.id))
+            .collect();
         let mut grouped: BTreeMap<String, Vec<Session>> = BTreeMap::new();
         for session in &sessions {
             grouped
@@ -741,8 +779,16 @@ impl T3CompatState {
         })
     }
 
-    fn thread_snapshot(&self, public_id: &str, sequence: u64) -> Result<Value, String> {
+    fn thread_snapshot(
+        &self,
+        public_id: &str,
+        sequence: u64,
+        viewer: &str,
+    ) -> Result<Value, String> {
         let core_id = self.core_thread_id(public_id);
+        if !self.session_allowed(viewer, &core_id) {
+            return Err(format!("unknown thread: {public_id}"));
+        }
         let session = self
             .engine
             .list_sessions()
@@ -879,8 +925,27 @@ impl T3CompatState {
         Ok(pages.into_iter().flatten().collect())
     }
 
-    async fn dispatch_command(&self, command: Value) -> Result<u64, String> {
-        let command_id = required_string(&command, "commandId")?;
+    async fn dispatch_command(&self, command: Value, viewer: &str) -> Result<u64, String> {
+        // Receipts, idempotency and create requests are actor-scoped: another actor reusing a
+        // command id can neither read this actor's receipt nor replay its created session.
+        let raw_command_id = required_string(&command, "commandId")?;
+        let command_id = format!("{viewer}/{raw_command_id}");
+        // Creator-only private tasks: another actor's private session is indistinguishable from an
+        // unknown one, before any receipt lookup or engine op.
+        if let Some(public_id) = command.get("threadId").and_then(Value::as_str) {
+            let core_id = self.core_thread_id(public_id);
+            // A not-yet-created id is the bootstrap path (creator metadata is registered there);
+            // an existing session must be visible to this actor.
+            let exists = self
+                .engine
+                .list_sessions()
+                .map_err(|error| error.to_string())?
+                .iter()
+                .any(|session| session.id == core_id);
+            if exists && !self.session_allowed(viewer, &core_id) {
+                return Err(format!("unknown thread: {public_id}"));
+            }
+        }
         if let Some(receipt) = self
             .command_receipts
             .lock()
@@ -889,6 +954,14 @@ impl T3CompatState {
             .cloned()
         {
             return receipt;
+        }
+        // A receipt from before actor scoping carries no actor provenance. Replaying it could
+        // answer another actor's command, and re-executing could repeat a mutation, so the retry
+        // is refused without touching the engine; the client must inspect the task state first.
+        if self.legacy_command_receipts.contains(&raw_command_id) {
+            return Err(format!(
+                "command {raw_command_id} has an ambiguous pre-upgrade receipt (its original actor is unknown) and was not replayed or re-run; check the task's current state first, and only then start a deliberate new operation if it is still needed, because the earlier command may already have completed"
+            ));
         }
         // A mobile reconnect can retry the same create command while the first socket is still
         // active. Serialize commands and recheck the receipt after acquiring the gate so one public
@@ -903,7 +976,7 @@ impl T3CompatState {
         {
             return receipt;
         }
-        match self.dispatch_uncached(&command_id, command).await {
+        match self.dispatch_uncached(&command_id, command, viewer).await {
             Ok(sequence) => {
                 // The mobile outbox retries the same command id after reconnects. Keep completed
                 // receipts beside the durable public-thread aliases so a response-loss + server
@@ -919,7 +992,12 @@ impl T3CompatState {
         }
     }
 
-    async fn dispatch_uncached(&self, command_id: &str, command: Value) -> Result<u64, String> {
+    async fn dispatch_uncached(
+        &self,
+        command_id: &str,
+        command: Value,
+        viewer: &str,
+    ) -> Result<u64, String> {
         let command_type = required_string(&command, "type")?;
         match command_type.as_str() {
             "thread.turn.start" => {
@@ -959,7 +1037,8 @@ impl T3CompatState {
                 let core_id = if known {
                     self.core_thread_id(&public_id)
                 } else {
-                    self.create_thread(command_id, &public_id, &command).await?
+                    self.create_thread(command_id, &public_id, &command, viewer)
+                        .await?
                 };
                 let doc = vec![DocBlock::Text { text }];
                 self.submit_prompt_and_wait(core_id, doc, command_id.to_string(), message_id)
@@ -1048,6 +1127,7 @@ impl T3CompatState {
         command_id: &str,
         public_id: &str,
         command: &Value,
+        viewer: &str,
     ) -> Result<String, String> {
         let create = command
             .pointer("/bootstrap/createThread")
@@ -1130,6 +1210,16 @@ impl T3CompatState {
             .map_err(|error| format!("could not encode T3 session receipt: {error}"))?;
         let request_id = format!("t3-create:{encoded_receipt}");
         let mut event_rx = self.events.subscribe();
+        // Creator metadata (default public) is durable before the session exists, exactly like
+        // `/ws` creates; otherwise a T3-made task would be unowned legacy and invisible to its creator.
+        match self.policy.lock().unwrap().as_ref() {
+            Some(policy) => policy.register_created(viewer, &request_id),
+            // Never create an ownerless task under a ShareStore it cannot be registered with.
+            None if self.engine.share_store().is_some() => {
+                return Err("T3 share policy is not wired; refusing to create an unowned task".into());
+            }
+            None => {}
+        }
         self.engine
             .submit(Op::NewSession {
                 provider,
@@ -1406,10 +1496,10 @@ async fn websocket_ticket(State(state): State<Arc<T3CompatState>>, headers: Head
 }
 
 async fn shell_snapshot(State(state): State<Arc<T3CompatState>>, headers: HeaderMap) -> Response {
-    if !authorized(&state, &headers, "orchestration:read") {
+    let Some(viewer) = authorized(&state, &headers, "orchestration:read") else {
         return (StatusCode::UNAUTHORIZED, "invalid bearer").into_response();
-    }
-    match state.shell_snapshot(state.sequence.load(Ordering::SeqCst)) {
+    };
+    match state.shell_snapshot(state.sequence.load(Ordering::SeqCst), &viewer) {
         Ok(snapshot) => Json(snapshot).into_response(),
         Err(error) => (StatusCode::INTERNAL_SERVER_ERROR, error).into_response(),
     }
@@ -1420,10 +1510,10 @@ async fn thread_snapshot(
     AxumPath(thread_id): AxumPath<String>,
     headers: HeaderMap,
 ) -> Response {
-    if !authorized(&state, &headers, "orchestration:read") {
+    let Some(viewer) = authorized(&state, &headers, "orchestration:read") else {
         return (StatusCode::UNAUTHORIZED, "invalid bearer").into_response();
-    }
-    match state.thread_snapshot(&thread_id, state.sequence.load(Ordering::SeqCst)) {
+    };
+    match state.thread_snapshot(&thread_id, state.sequence.load(Ordering::SeqCst), &viewer) {
         Ok(snapshot) => Json(snapshot).into_response(),
         Err(error) if error.starts_with("unknown thread:") => {
             (StatusCode::NOT_FOUND, error).into_response()
@@ -1437,10 +1527,10 @@ async fn dispatch_http(
     headers: HeaderMap,
     Json(command): Json<Value>,
 ) -> Response {
-    if !authorized(&state, &headers, "orchestration:operate") {
+    let Some(viewer) = authorized(&state, &headers, "orchestration:operate") else {
         return (StatusCode::UNAUTHORIZED, "invalid bearer").into_response();
-    }
-    match state.dispatch_command(command).await {
+    };
+    match state.dispatch_command(command, &viewer).await {
         Ok(sequence) => Json(json!({ "sequence": sequence })).into_response(),
         Err(error) => (StatusCode::BAD_REQUEST, error).into_response(),
     }
@@ -1455,15 +1545,17 @@ fn bearer_from(headers: &HeaderMap) -> Option<&str> {
         .map(str::trim)
 }
 
-fn authorized(state: &T3CompatState, headers: &HeaderMap, required_scope: &str) -> bool {
+/// The authorized device id when the bearer carries `required_scope`.
+fn authorized(state: &T3CompatState, headers: &HeaderMap, required_scope: &str) -> Option<String> {
     bearer_from(headers)
         .and_then(|bearer| state.auth.authorize_bearer_profile(bearer))
-        .is_some_and(|authorization| {
+        .filter(|authorization| {
             authorization
                 .scopes
                 .iter()
                 .any(|scope| scope == required_scope)
         })
+        .map(|authorization| authorization.device_id)
 }
 
 #[derive(Clone)]
@@ -1548,7 +1640,7 @@ pub async fn handle_socket(
                                 let _ = sender.send(Message::Close(None)).await;
                                 return;
                             }
-                            if !handle_rpc_frame(&mut sender, &mut subscriptions, &state, &scopes, frame).await {
+                            if !handle_rpc_frame(&mut sender, &mut subscriptions, &state, &scopes, &device_id, frame).await {
                                 return;
                             }
                         }
@@ -1579,7 +1671,7 @@ pub async fn handle_socket(
                         subscription.pending_update = true;
                         continue;
                     }
-                    let value = subscription_value(&state, &subscription.kind, sequence);
+                    let value = subscription_value(&state, &subscription.kind, sequence, &device_id);
                     if let Some(value) = value {
                         if send_chunk(&mut sender, &subscription.request_id, value).await.is_err() {
                             return;
@@ -1597,6 +1689,7 @@ async fn handle_rpc_frame<S>(
     subscriptions: &mut Vec<Subscription>,
     state: &Arc<T3CompatState>,
     scopes: &[String],
+    viewer: &str,
     frame: Value,
 ) -> bool
 where
@@ -1616,7 +1709,7 @@ where
                     subscriptions[index].pending_update = false;
                     let sequence = state.sequence.load(Ordering::SeqCst);
                     if let Some(value) =
-                        subscription_value(state, &subscriptions[index].kind, sequence)
+                        subscription_value(state, &subscriptions[index].kind, sequence, viewer)
                     {
                         if send_chunk(sender, &request_id, value).await.is_err() {
                             return false;
@@ -1712,7 +1805,7 @@ where
         }
         "orchestration.subscribeShell" => {
             let sequence = state.sequence.load(Ordering::SeqCst);
-            match state.shell_snapshot(sequence) {
+            match state.shell_snapshot(sequence, viewer) {
                 Ok(snapshot) => {
                     if send_chunk(
                         sender,
@@ -1752,7 +1845,7 @@ where
             };
             let thread_id = thread_id.to_string();
             let sequence = state.sequence.load(Ordering::SeqCst);
-            match state.thread_snapshot(&thread_id, sequence) {
+            match state.thread_snapshot(&thread_id, sequence, viewer) {
                 Ok(snapshot) => {
                     if send_chunk(
                         sender,
@@ -1779,7 +1872,7 @@ where
                 }
             }
         }
-        "orchestration.dispatchCommand" => match state.dispatch_command(payload).await {
+        "orchestration.dispatchCommand" => match state.dispatch_command(payload, viewer).await {
             Ok(sequence) => send_success(sender, &request_id, json!({ "sequence": sequence }))
                 .await
                 .is_ok(),
@@ -1836,14 +1929,15 @@ fn subscription_value(
     state: &T3CompatState,
     kind: &SubscriptionKind,
     sequence: u64,
+    viewer: &str,
 ) -> Option<Value> {
     match kind {
         SubscriptionKind::Shell => state
-            .shell_snapshot(sequence)
+            .shell_snapshot(sequence, viewer)
             .ok()
             .map(|snapshot| json!({ "kind": "snapshot", "snapshot": snapshot })),
         SubscriptionKind::Thread(thread_id) => state
-            .thread_snapshot(thread_id, sequence)
+            .thread_snapshot(thread_id, sequence, viewer)
             .ok()
             .map(|snapshot| json!({ "kind": "snapshot", "snapshot": snapshot })),
         _ => None,
@@ -2467,15 +2561,64 @@ mod tests {
                 PersistedCommandReceipt {
                     command_id: "duplicate".into(),
                     sequence: 1,
+                    scoped: true,
                 },
                 PersistedCommandReceipt {
                     command_id: "duplicate".into(),
                     sequence: 2,
+                    scoped: true,
                 },
             ],
             ..CompatibilityMetadata::default()
         };
         assert!(validate_compatibility(&metadata).is_err());
+    }
+
+    #[tokio::test]
+    async fn pre_scoping_command_receipt_is_refused_not_replayed_or_reexecuted() {
+        let directory = tempfile::tempdir().unwrap();
+        // A receipt written before actor scoping: raw id, no `scoped` flag.
+        std::fs::write(
+            directory.path().join("t3-compatibility.json"),
+            serde_json::to_vec(&json!({
+                "version": COMPATIBILITY_STATE_VERSION,
+                "commandReceipts": [{"commandId": "old-cmd", "sequence": 7}],
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+        let auth = Arc::new(AuthState::load(Some(directory.path().join("devices.json"))));
+        let (engine, rx) = Engine::new(Vec::new(), codetwo_core::SkillLibrary::new(Vec::new()));
+        let engine = Arc::new(engine);
+        let state =
+            Arc::new(T3CompatState::new(engine.clone(), crate::fanout(rx), auth).unwrap());
+
+        for viewer in ["device-a", "device-b"] {
+            let error = state
+                .dispatch_command(
+                    json!({"commandId": "old-cmd", "type": "thread.turn.start",
+                           "threadId": "t", "message": {"text": "x", "messageId": "m"}}),
+                    viewer,
+                )
+                .await
+                .expect_err("ambiguous legacy receipt must not be replayed as success");
+            assert!(error.contains("ambiguous pre-upgrade receipt"), "{error}");
+            assert!(error.contains("check the task's current state first"), "{error}");
+            assert!(!error.contains("resend"), "no blind resend advice: {error}");
+        }
+        assert!(engine.list_sessions().unwrap().is_empty(), "no mutation ran");
+
+        // Persisting a new scoped receipt keeps the legacy one (still refused after reload) and a
+        // scoped id equal to the legacy raw string is a distinct receipt, not a duplicate.
+        state.persist_command_receipt("device-a/old-cmd", 9).unwrap();
+        let (reloaded, error) =
+            load_compatibility(Some(&directory.path().join("t3-compatibility.json")));
+        assert!(error.is_none(), "{error:?}");
+        assert_eq!(reloaded.command_receipts.len(), 2);
+        assert!(reloaded
+            .command_receipts
+            .iter()
+            .any(|receipt| !receipt.scoped && receipt.command_id == "old-cmd"));
     }
 
     #[tokio::test]

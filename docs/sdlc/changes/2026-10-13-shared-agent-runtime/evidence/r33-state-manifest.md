@@ -1,0 +1,7 @@
+# R33 state manifest (PARTIAL)
+Time 2026-10-14 00:44:41-00:54:41 +08. Worktree HEAD 926ebdb5 (dirty preserved); main f94b88b4 not edited.
+Fixture share_fixture port 52943, r19 fx-data+proj, pid 35950 (own pgid, SIGTERM exact group, stopped). Core rebuilt (cargo build share_fixture 'Finished'; exit code NOT captured: zsh PIPESTATUS blank).
+dist-web: .local/agent-work/20261013-full-share-e2e-r33/dist-web (vite built, exit not captured); index.html sha256 b28d01b537839bab2ffdfaaac96a95dd19a8cf37828e71f3473528b0628f17ab.
+Sources sha256: event.rs 4ecaa8affeee9d475c1613abd3dc2d8949c0ae6368e6f0a48b2dcbebdea27091; engine.rs f2aef37f0307489a6c91373501aeb625bd244d5e0ec22f5cb45d14b2062aef8f; turns.ts bfe4fb31a5ffb47fc3d4ba855861a4e80223ddf9dc3d3aed989a595e901e863d; bridge.ts 30f63c082f48151234e36e2cbdad8c0e4f3757db97eac57c69a69f45bf4ec1b2; prompt_delivery.rs 92226a379e101c3e6026109f1e35da9d86982415538096416da757a13feb5260; sessionState.test.ts df312a1d58ecc5f250a69b274cb026aef70a9b1b95a84e9f94857c6f211d653d.
+PNG r33-C-paired-localhost-empty.png 59307 bytes sha256 231666bfd94608eac0679d446f060b1f188f661653dad0e92c84ec8bd91f136a: 1280x800 incognito T3 tab, origin http://localhost:52943, pair link consumed (POST /api/pair 200). Shows only the empty new-task page; NOT acceptance evidence. Console: 4 'not paired' errors before pairing completed; no tokens recorded.
+Only ONE tab: the second preview_open reused the first tab id, so A was overwritten by C. Two-client flow, whoami, Stop/continue/private NOT run.

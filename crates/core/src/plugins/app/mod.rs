@@ -347,6 +347,66 @@ impl CoreApp {
         self.plugin_manager.call(name, args).await
     }
 
+    /// The one share context of this Core (same Arc the remote adapter uses).
+    pub fn share_store(&self) -> Option<Arc<crate::share::ShareStore>> {
+        self.service::<service::EngineService>()
+            .and_then(|engine| engine.share_store())
+    }
+
+    /// Ordinary native local-UI command: same creator-only policy as remote participants, with
+    /// the trusted stable local actor (`local-owner`). Original unshared tasks stay local-only;
+    /// guests' private tasks are denied to the host owner.
+    pub async fn call_local(&self, name: &str, args: Value) -> Result<Value, KernelError> {
+        self.call_local_scoped(None, name, args).await
+    }
+
+    pub async fn call_local_in_project(
+        &self,
+        project_path: impl AsRef<std::path::Path>,
+        name: &str,
+        args: Value,
+    ) -> Result<Value, KernelError> {
+        self.call_local_scoped(Some(project_path.as_ref().to_path_buf()), name, args)
+            .await
+    }
+
+    async fn call_local_scoped(
+        &self,
+        project: Option<PathBuf>,
+        name: &str,
+        args: Value,
+    ) -> Result<Value, KernelError> {
+        let Some(share) = self.share_store() else {
+            return match project {
+                Some(path) => self.plugin_manager.call_in_project(path, name, args).await,
+                None => self.plugin_manager.call(name, args).await,
+            };
+        };
+        let manager = self.plugin_manager.clone();
+        let command = name.to_string();
+        // Errors from the policy are plain strings; keep the kernel error type at the boundary.
+        let outcome = crate::share_policy::shared_web_ui_call(&share, "", name, args, move |args| async move {
+            match project {
+                Some(path) => manager.call_in_project(path, &command, args).await,
+                None => manager.call(&command, args).await,
+            }
+            .map_err(|error| error.to_string())
+        })
+        .await;
+        outcome.map_err(|message| KernelError::Config {
+            name: name.to_string(),
+            message,
+        })
+    }
+
+    /// Native local event exit policy for one event (host owner is not exempt from private).
+    pub fn local_event_visible(&self, event: &crate::Event) -> bool {
+        match self.share_store() {
+            Some(share) => crate::share_policy::share_event_visible(&share, "", event),
+            None => true,
+        }
+    }
+
     /// Invoke through one project's command realm, falling back to global commands when the
     /// project has no override. Project child loaders populate the realm lazily.
     pub async fn call_in_project(

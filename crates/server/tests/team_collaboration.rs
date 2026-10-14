@@ -470,3 +470,280 @@ async fn alice_and_bob_converge_and_one_approval_starts_one_execution() {
 
     server.abort();
 }
+
+
+/// A task whose leased Core session is another actor's private session must disappear from every
+/// Team surface for other members (common ShareStore can_view), while the creator and a public
+/// session keep working.
+#[tokio::test]
+async fn private_leased_session_hides_team_task_from_other_members() {
+    let project = git_project();
+    let prompt_log = project.path().join("prompt-log.jsonl");
+    let provider_id = ProviderId::Custom("team-test".into());
+    let mut launch = LaunchSpec::new("python3", ["-u", "-c", TEAM_AGENT]);
+    launch.args.push(prompt_log.to_string_lossy().to_string());
+    let provider = Provider {
+        id: provider_id,
+        display_name: "Team test provider".into(),
+        launch,
+        needs_node: false,
+    };
+    let store = Arc::new(Store::open_in_memory().unwrap());
+    let workspace_id = WorkspaceId::new("workspace-team");
+    let alice = MemberId::new("member-alice");
+    let bob = MemberId::new("member-bob");
+    store
+        .create_workspace(workspace_id.clone(), "CodeTwo Team", 1)
+        .unwrap();
+    store
+        .create_member(&workspace_id, alice.clone(), "Alice", WorkspaceRole::Admin, 2)
+        .unwrap();
+    store
+        .create_member(&workspace_id, bob.clone(), "Bob", WorkspaceRole::Member, 3)
+        .unwrap();
+    let (engine, rx) = Engine::with_store(vec![provider], SkillLibrary::new(vec![]), store.clone());
+    let engine = Arc::new(engine);
+    let share = Arc::new(codetwo_core::share::ShareStore::in_memory());
+    engine.attach_share_store(share.clone());
+    let auth = Arc::new(AuthState::load(None));
+    let (address, _server) = bind_and_serve_with_canvas(
+        engine,
+        fanout(rx),
+        "127.0.0.1:0".parse().unwrap(),
+        auth.clone(),
+        store.clone(),
+        CanvasFeatureGate::default(),
+    )
+    .await
+    .unwrap();
+    let base = format!("http://{address}");
+    let client = Client::new();
+    let (alice_device, alice_bearer) = pair_member(&client, &base, &auth, &alice, "Alice Mac").await;
+    let (_bob_device, bob_bearer) = pair_member(&client, &base, &auth, &bob, "Bob Mac").await;
+
+    let (status, created) = json_response(
+        client
+            .post(format!("{base}/api/team/v1/tasks"))
+            .bearer_auth(&alice_bearer)
+            .json(&serde_json::json!({
+                "task_id": "task-private", "goal": "Private leased work",
+                "cwd": project.path(), "provider": { "custom": "team-test" },
+                "collaborator_ids": ["member-bob"]
+            }))
+            .send()
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED, "{created}");
+    let (_, suggestion) = json_response(
+        client
+            .post(format!("{base}/api/team/v1/tasks/task-private/suggestions"))
+            .bearer_auth(&bob_bearer)
+            .json(&serde_json::json!({ "expected_revision": 1, "body": "SECRET-SUGGESTION-BODY" }))
+            .send()
+            .await
+            .unwrap(),
+    )
+    .await;
+    let suggestion_id = suggestion["suggestions"][0]["id"].as_str().unwrap().to_string();
+    let (status, approved) = json_response(
+        client
+            .post(format!(
+                "{base}/api/team/v1/tasks/task-private/suggestions/{suggestion_id}/approve"
+            ))
+            .bearer_auth(&alice_bearer)
+            .json(&serde_json::json!({ "command_id": "approve-private", "expected_revision": 2 }))
+            .send()
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{approved}");
+    let session_id = approved["snapshot"]["runtime"]["session_leases"][0]["session_id"]
+        .as_str()
+        .expect("the approved Suggestion attaches an engine session lease")
+        .to_string();
+
+    // Public: Bob sees the leased session id through the Team snapshot (authorized behaviour).
+    let alice_participant = share.participant(&alice_device);
+    share
+        .register_session(&session_id, &alice_participant, codetwo_core::share::Visibility::Public)
+        .unwrap();
+    let public_detail = client
+        .get(format!("{base}/api/team/v1/tasks/task-private"))
+        .bearer_auth(&bob_bearer)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(public_detail.status(), StatusCode::OK);
+    assert!(public_detail.text().await.unwrap().contains(&session_id));
+
+    // Creator makes the session private: every Team route hides it from Bob.
+    share
+        .set_visibility(&session_id, &alice_participant, codetwo_core::share::Visibility::Private)
+        .unwrap();
+    for (method, path, body) in [
+        ("GET", "tasks/task-private", None),
+        (
+            "POST",
+            "tasks/task-private/comments",
+            Some(serde_json::json!({ "expected_revision": 4, "body": "probe" })),
+        ),
+        (
+            "POST",
+            "tasks/task-private/suggestions",
+            Some(serde_json::json!({ "expected_revision": 4, "body": "probe" })),
+        ),
+    ] {
+        let url = format!("{base}/api/team/v1/{path}");
+        let request = if method == "GET" { client.get(url) } else { client.post(url) };
+        let request = request.bearer_auth(&bob_bearer);
+        let response = match body {
+            Some(body) => request.json(&body),
+            None => request,
+        }
+        .send()
+        .await
+        .unwrap();
+        assert_eq!(response.status(), StatusCode::NOT_FOUND, "{method} {path}");
+        let text = response.text().await.unwrap();
+        assert!(!text.contains(&session_id) && !text.contains("SECRET-SUGGESTION-BODY"));
+    }
+    let bob_list = client
+        .get(format!("{base}/api/team/v1/tasks"))
+        .bearer_auth(&bob_bearer)
+        .send()
+        .await
+        .unwrap()
+        .text()
+        .await
+        .unwrap();
+    assert!(!bob_list.contains(&session_id) && !bob_list.contains("task-private"), "{bob_list}");
+    let alice_detail = client
+        .get(format!("{base}/api/team/v1/tasks/task-private"))
+        .bearer_auth(&alice_bearer)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(alice_detail.status(), StatusCode::OK);
+    assert!(alice_detail.text().await.unwrap().contains(&session_id));
+}
+
+/// Typed session fields without a session lease: `assigned_session_id` is set through the Task
+/// Graph (no lease constructor invariant), so the Team surfaces must judge it by the same common
+/// `can_view` policy instead of relying on leases alone.
+#[tokio::test(flavor = "multi_thread")]
+async fn unleased_assigned_private_session_hides_team_task_from_other_members() {
+    use codetwo_core::{TaskGraph, TaskId, WorkItem, WorkItemId, WorkItemStatus};
+    let project = git_project();
+    let prompt_log = project.path().join("prompt-log.jsonl");
+    let provider_id = ProviderId::Custom("team-test".into());
+    let mut launch = LaunchSpec::new("python3", ["-u", "-c", TEAM_AGENT]);
+    launch.args.push(prompt_log.to_string_lossy().to_string());
+    let provider = Provider {
+        id: provider_id,
+        display_name: "Team test provider".into(),
+        launch,
+        needs_node: false,
+    };
+    let store = Arc::new(Store::open_in_memory().unwrap());
+    let workspace_id = WorkspaceId::new("workspace-team");
+    let alice = MemberId::new("member-alice");
+    let bob = MemberId::new("member-bob");
+    store.create_workspace(workspace_id.clone(), "CodeTwo Team", 1).unwrap();
+    store
+        .create_member(&workspace_id, alice.clone(), "Alice", WorkspaceRole::Admin, 2)
+        .unwrap();
+    store
+        .create_member(&workspace_id, bob.clone(), "Bob", WorkspaceRole::Member, 3)
+        .unwrap();
+    let (engine, rx) = Engine::with_store(vec![provider], SkillLibrary::new(vec![]), store.clone());
+    let engine = Arc::new(engine);
+    let share = Arc::new(codetwo_core::share::ShareStore::in_memory());
+    engine.attach_share_store(share.clone());
+    let auth = Arc::new(AuthState::load(None));
+    let (address, _server) = bind_and_serve_with_canvas(
+        engine,
+        fanout(rx),
+        "127.0.0.1:0".parse().unwrap(),
+        auth.clone(),
+        store.clone(),
+        CanvasFeatureGate::default(),
+    )
+    .await
+    .unwrap();
+    let base = format!("http://{address}");
+    let client = Client::new();
+    let (alice_device, alice_bearer) = pair_member(&client, &base, &auth, &alice, "Alice Mac").await;
+    let (_bob_device, bob_bearer) = pair_member(&client, &base, &auth, &bob, "Bob Mac").await;
+    let (status, created) = json_response(
+        client
+            .post(format!("{base}/api/team/v1/tasks"))
+            .bearer_auth(&alice_bearer)
+            .json(&serde_json::json!({
+                "task_id": "task-unleased", "goal": "Unleased assignment",
+                "cwd": project.path(), "provider": { "custom": "team-test" },
+                "collaborator_ids": ["member-bob"]
+            }))
+            .send()
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED, "{created}");
+    // No lease exists, yet a work item can name a (private) session of the creator.
+    let hidden_session = "private-session-no-lease";
+    let alice_participant = share.participant(&alice_device);
+    share
+        .register_session(hidden_session, &alice_participant, codetwo_core::share::Visibility::Private)
+        .unwrap();
+    let task_id = TaskId::new("task-unleased");
+    assert!(store.list_task_session_leases(&task_id).unwrap().is_empty());
+    let graph = TaskGraph {
+        revision: 1,
+        work_items: vec![WorkItem {
+            id: WorkItemId::new("w1"),
+            objective: "assigned without lease".into(),
+            result_contract_conditions: Vec::new(),
+            scenes: Vec::new(),
+            agent_skills: Vec::new(),
+            input_artifacts: Vec::new(),
+            expected_outputs: Vec::new(),
+            completion_evidence: Vec::new(),
+            status: WorkItemStatus::Ready,
+            blocker: None,
+            assigned_session_id: Some(hidden_session.to_string().into()),
+            reason: "test".into(),
+        }],
+        edges: Vec::new(),
+    };
+    store.apply_task_graph(&task_id, 0, &graph, "assign", 10).unwrap();
+
+    let alice_detail = client
+        .get(format!("{base}/api/team/v1/tasks/task-unleased"))
+        .bearer_auth(&alice_bearer)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(alice_detail.status(), StatusCode::OK);
+    assert!(alice_detail.text().await.unwrap().contains(hidden_session), "creator keeps the field");
+    let bob_detail = client
+        .get(format!("{base}/api/team/v1/tasks/task-unleased"))
+        .bearer_auth(&bob_bearer)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(bob_detail.status(), StatusCode::NOT_FOUND);
+    assert!(!bob_detail.text().await.unwrap().contains(hidden_session));
+    let bob_list = client
+        .get(format!("{base}/api/team/v1/tasks"))
+        .bearer_auth(&bob_bearer)
+        .send()
+        .await
+        .unwrap()
+        .text()
+        .await
+        .unwrap();
+    assert!(!bob_list.contains(hidden_session) && !bob_list.contains("task-unleased"), "{bob_list}");
+}
