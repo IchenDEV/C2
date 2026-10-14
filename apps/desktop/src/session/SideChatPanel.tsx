@@ -550,7 +550,8 @@ function TransientChatPanel({
         return;
       }
 
-      if (event.session === null) return;
+      if (event.event === "task_snapshot_changed" || event.session === null)
+        return;
       const tab = tabsRef.current.find(
         (candidate) => candidate.sessionId === event.session
       );

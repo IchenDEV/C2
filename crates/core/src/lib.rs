@@ -73,6 +73,8 @@ pub mod scene_runtime;
 pub mod scene_v2;
 pub mod session;
 pub mod session_import;
+pub mod share;
+pub mod share_policy;
 pub mod skill;
 pub mod source_control;
 pub mod store;

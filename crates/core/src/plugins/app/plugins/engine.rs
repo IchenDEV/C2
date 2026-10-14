@@ -130,6 +130,12 @@ impl Plugin for EnginePlugin {
             ),
         };
         engine.set_private_data_dir(paths.data_dir.clone());
+        // One share context per data directory: native local commands and the remote adapter
+        // resolve to the same Arc through the process registry.
+        match crate::share::shared_store(paths.data_dir.join("session-shares.json")) {
+            Ok(share) => engine.attach_share_store(share),
+            Err(error) => tracing::warn!("share context unavailable: {error}"),
+        }
         let worktree_settings =
             crate::worktree::load_settings(&paths.data_dir).unwrap_or_else(|error| {
                 tracing::warn!("could not load worktree settings: {error}");
@@ -471,6 +477,8 @@ fn register_commands(
         transient: bool,
         #[serde(default)]
         reasoning_effort: Option<String>,
+        #[serde(default)]
+        visibility: Option<crate::share::Visibility>,
     }
     let new_session = engine.clone();
     let worktree_settings_dir = paths.data_dir.clone();
@@ -479,6 +487,8 @@ fn register_commands(
         let settings_dir = worktree_settings_dir.clone();
         async move {
             let mut args: NewSessionArgs = take_args(args)?;
+            args.request_id = engine
+                .prepare_local_create(args.request_id.take(), args.visibility.unwrap_or_default());
             let worktree_settings =
                 crate::worktree::load_settings(&settings_dir).map_err(PluginError::new)?;
             engine.set_worktree_root(
@@ -544,6 +554,8 @@ fn register_commands(
         reasoning_effort: Option<String>,
         task_id: String,
         goal: String,
+        #[serde(default)]
+        visibility: Option<crate::share::Visibility>,
     }
     let new_parallel_task = engine.clone();
     let parallel_worktree_settings_dir = paths.data_dir.clone();
@@ -552,6 +564,11 @@ fn register_commands(
         let settings_dir = parallel_worktree_settings_dir.clone();
         async move {
             let mut args: NewParallelTaskArgs = take_args(args)?;
+            if let Some(id) =
+                engine.prepare_local_create(Some(args.request_id.clone()), args.visibility.unwrap_or_default())
+            {
+                args.request_id = id;
+            }
             let worktree_settings =
                 crate::worktree::load_settings(&settings_dir).map_err(PluginError::new)?;
             engine.set_worktree_root(

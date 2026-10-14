@@ -2,47 +2,70 @@
 id: 2026-10-13-shared-agent-runtime
 schema: 5
 stage: verification
-status: blocked
+status: passed
 owner: research-shared-agent r5 executor
 created: 2026-10-13
 based_on: plan.md
-revision: worktree on fb3cb82964acd3643ccd81f35f73ec0ab0489863 plus other workers' dirty edits; t3_compat.rs sha256 466073e7f1d818e9715271b1d6a6202e52d5a54ba49edf9bdf6d8936538408c7 (equals HEAD)
-verification_mode: owner
-verified_by: r5 executor
-verified_at: 2026-10-13
+revision: worktree research/shared-agent-20261008 on 926ebdb5e1a8ec644cf1f8d4efc02d28a8e9c6ef plus uncommitted sharing changes and other workers' dirty hunks; file hashes in the R36 index
+verification_mode: fresh-context
+verified_by: r38 independent fresh-context reviewer (Agent, not a human; R36 checks reused unchanged)
+verified_at: 2026-10-14
 release_target: none
 cleanup_status: complete
-next_trigger: Provide a complete Ghostty source at commit a887df42c56f6de86c0fe6da9c4eeca37931e083 (GHOSTTY_SOURCE_DIR) or network access to fetch it, then wire and run the draft ordinary-path test.
+next_trigger: Human review of the verified local candidate; commit, push, PR, release or rollout need their own authorization.
 ---
 
 # Verification: Shared Agent Runtime
 
 ## Verification
 
-- AC-1: PASS — static trace by reading `apps/desktop/src/coreTransport.ts` (`/api/web-ui/call`, `/api/pair`, `/api/ws-ticket`, `/ws?ticket=`) and `crates/server/src/lib.rs` (`web_ui_call`, `require_device`, `KernelWebUiCommands::call` with unused `_device_id`, `ws_handler`); T3 routes (`wsTicket`, `/api/orchestration/dispatch`) are served only by `t3_compat`. Reading, not a runtime test.
-- AC-2: PASS — `git apply -R --check` then `git apply -R` of the live diff (sha 6c9f54b7… equals the R4 patch); afterwards `git diff --stat -- crates/server` is empty and `t3_compat.rs` sha256 is 466073e7….
-- AC-3: BLOCKED — `curl -L https://github.com/ghostty-org/ghostty/archive/a887df42….tar.gz` exited 6 "Could not resolve host: github.com" (a resolver/connectivity failure in that runtime; not a quoted permission rejection; raw output kept in private local logs); no retry, no escalation, no clone. `zig` 0.15.2 exists at /opt/homebrew/bin/zig; `libghostty-vt-sys/build.rs` needs `GHOSTTY_SOURCE_DIR` with `build.zig`. The R4 `libsqlite3-sys` bindings-copy error and the cargo target outside the workspace are not retried (use `--target-dir` inside the scratch next time). No cargo command ran in r5, so no compile or test result exists.
-- AC-4: PASS — The draft ordinary-path test (kept in private local scratch, not published, outside the runnable tree) is an uncompiled, unrun draft (HTTP bearer -> `WebUiCommandCaller`, spoofed body/header, rejected bearer). Persistence proposal in Spec is unapplied. Neither counts as tested.
+Current evidence index with full SHA256/bytes, exact exits and labelled images:
+[evidence/final-verification-r36.md](evidence/final-verification-r36.md), UI run
+[evidence/r37-current-ui.md](evidence/r37-current-ui.md), independent review
+[evidence/r38-final-review.md](evidence/r38-final-review.md). Historical reviewed reports stay
+immutable: [r14](evidence/r14-manifest.md), [r20](evidence/r20-manifest.md), [r21](evidence/r21-manifest.md),
+[r22](evidence/r22-manifest.md), [r23](evidence/r23-manifest.md), [r24](evidence/r24-manifest.md),
+[r25](evidence/r25-manifest.md), privacy audits [r26](evidence/r26-privacy-audit.md), [r27](evidence/r27-privacy-audit.md),
+[r28](evidence/r28-privacy-audit.md), [r29](evidence/r29-privacy-audit.md), [r30](evidence/r30-privacy-audit.md),
+[r31](evidence/r31-ui-manifest.md), [r32](evidence/r32-state-manifest.md), [r33](evidence/r33-state-manifest.md),
+[r34](evidence/r34-state-manifest.md), [r35](evidence/r35-state-manifest.md).
 
-SDLC and docs gates: final-diff exit codes are summarized in [../2026-10-07-shared-agent-research/evidence/handoff.md](../2026-10-07-shared-agent-research/evidence/handoff.md).
+- AC-1: PASS — Core/server tests in the [R36 index](evidence/final-verification-r36.md) (`share_policy::private_session_is_denied_to_guest_and_host_on_every_command_exit`, `ShareStore::can_view`) and the [r26-r30 audits](evidence/r30-privacy-audit.md): public default, private creator-only including host, legacy local-only.
+- AC-2: PASS — R36 targeted run, [index](evidence/final-verification-r36.md): `cargo check -p codetwo-napi -p codetwo-desktop-host` exit 0; Core prompt_delivery/native_share/share_authorship/share_boundaries/share_device_sync_memory/share_store_failclosed/share_create_atomic and lib share exit 0; server lib/share_policy/t3_share_privacy/team_collaboration/web_ui_commands/ws_share_parity/pairing_link exit 0. R38 re-hashed all 44 source files: identical to R36.
+- AC-3: PASS — durable authors and actor-scoped request ids, `share_authorship` and `ws_share_parity` in the [R36 index](evidence/final-verification-r36.md).
+- AC-4: PASS with fixture limits — real paired UI with two isolated browser clients ([r14](evidence/r14-manifest.md), [r20](evidence/r20-manifest.md), [r31](evidence/r31-ui-manifest.md), [r34](evidence/r34-state-manifest.md), [r35](evidence/r35-state-manifest.md)); zero-fee ACP fixture.
+- AC-5: PASS — [R37](evidence/r37-current-ui.md) on the R36 bundle (re-read in R38 with the PNGs): creator A made a fresh public task private while C viewed it; A stayed Working with Stop and stopped it from the UI (Cancelled 37s); C's pane and rail cleared and other public tasks stayed; 390 px dark header renders. Actors come from the fixture store (creator `device:a892063c-261d-475d-b62d-ed91d4e61f70`, C `0dc01bcf-...`, absent from the record) plus `native_share` `share.whoami` and `share_policy` actor-spoofing tests. Manual `share.whoami` and a direct C hidden-task HTTP call were NOT run; R36 server tests cover that boundary.
+- AC-6: PASS — [R38](evidence/r38-final-review.md) independent fresh-context Agent review: records, 44 source hashes, policy/tests and R37 PNGs read; the high-risk design fields reuse the user's existing decisions (see spec.md). This is Agent verification, not human review or rollout approval.
+- UI gates R36: `bun test` 132 pass over 9 files, `tsc --noEmit` and fresh `vite build --mode web` exit 0 (hashes in the index); the bundle was rendered in R37.
+- Checker gates: see [r38-final-review.md](evidence/r38-final-review.md) for the final `sdlc --worktree`, `docs.ts` and `git diff --check` exits run after the last record change.
 
-Verdict: blocked (NOT_IMPLEMENTED). Ordinary UI actor propagation (the ordinary route `/api/web-ui/call` -> `KernelWebUiCommands` drops `device_id`), per-actor receipts, private visibility, nicknames and claiming are NOT implemented.
-Residual risk: no executed server tests; `KernelWebUiCommands` still drops the device id; inner SQLite receipt keys unchanged; draft test may need adjustment when compiled (device-sync routes must be enabled for pairing).
+Integration R41 (2026-10-14): the user said "merge" and handed over the offline original author's
+dependencies, which supersedes the old author-wait and local-only hold for this sharing change only.
+The sharing source was re-applied on current `main` fb3cb829 (the 15-file records commit 926ebdb5 plus the
+sharing diff), without the paused visualization work. The one baseline-dependent `engine.rs` hunk was
+merged by hand: the unrelated read-only `prompt_delivery` baseline additions are not part of this branch.
+On the final diff, `codetwo-core` prompt_delivery and the six share suites, `codetwo-server` share_policy,
+t3_share_privacy, ws_share_parity, pairing_link, team_collaboration and web_ui_commands, `cargo check`
+for NAPI and desktop host, `tsc --noEmit`, `vite build --mode web`, and the four affected UI test files
+(83 pass) all exit 0. The full desktop `bun test` has 10 failures in two assistant React test files that
+pass on their own both with and without this change; the full run was not compared against plain main. Earlier R36-R38 evidence is still the record for UI renders
+and the fixture runs; no new render was done in R41. Independent review, PR and merge follow separately.
+
+Verdict: verified.
+Residual risk: bounded local candidate only. No native steer (fixture ACP lacks it), no paid Agent, cloud, CI or deployment evidence; application visibility is not OS isolation; cross-host handoff without creator provenance stays local/unshared and remote activation is unsupported; manual `share.whoami` and direct hidden-task HTTP refusal were not run in the UI; the rail shows `Completed` for a Cancelled turn (pre-existing generic label, low severity, not fixed); the storage file and event wire details were not separately human-reviewed; no human review or release is approved; the user's R41 takeover authorizes the commit, push, feature PR and merge only after independent review.
 
 ## Cleanup
 
-Removed: the empty failed download file in the private local scratch.
-Retained: private local task directories (archived patches, logs, draft test), not published.
+Removed: nothing of others'; R38 started no process (R37 fixture group 21151 already stopped, port 52943 free).
+Retained: ignored private task directories (R36 and R38 archives of the exact previous four records, logs, dist-web, R38 parent-user-decisions-v1.json), Ghostty deps and cargo-target.
 Retention owner: parent coordinator.
-Cleanup trigger: after the next increment is accepted or this change is abandoned.
-Processes: none started in r5 (only one short `curl`, exited); no cargo, Core, service or preview.
-Evidence: the private scratch directory was empty after removal; `git status --short crates/server` is empty.
+Cleanup trigger: final acceptance or abandonment of this change.
+Processes: none left from R36, R37 or R38.
+Evidence: index above; main `/Users/chenli/projects/codeTwo` branch `refactor/architecture-simplification` HEAD f94b88b4c1307013f280c01d0c08f382eaf275f1 clean; worktree HEAD 926ebdb5e1a8ec644cf1f8d4efc02d28a8e9c6ef dirty, retained.
 
 ## Review and release
 
-Approval: pending.
+Approval: human review pending; none claimed. The user's product/privacy decisions are the existing design decisions in spec.md; no rollout, migration, publication or release approval.
 Rollback: See plan.md.
-Release: No release requested; merge and external actions require their own authorization.
+Release: No release requested; commit, push, PR and merge need their own authorization.
 Feedback: Link an Incident and regression Eval when a real failure occurs.
-
-Not done: no server or two-browser test ran, the T3/mobile patch is withdrawn, and compilation is blocked by the missing exact Ghostty source plus a download DNS failure. No high-risk approval or pass is claimed.

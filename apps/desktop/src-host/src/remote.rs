@@ -190,7 +190,8 @@ struct RemoteRuntime {
     events: broadcast::Sender<Event>,
     canvas_gate: codetwo_core::CanvasFeatureGate,
     device_sync: Option<Arc<DeviceSyncRuntime>>,
-    web_ui_commands: Arc<codetwo_server::KernelWebUiCommands>,
+    plugin_manager: Arc<PluginManager>,
+    share_store: Arc<codetwo_core::share::ShareStore>,
     auth_path: PathBuf,
     lifecycle: Mutex<RemoteLifecycle>,
 }
@@ -287,10 +288,21 @@ impl Plugin for RemotePlugin {
     }
 
     async fn apply(&self, ctx: Context, _config: Value) -> PluginResult {
-        let web_ui_commands = Arc::new(codetwo_server::KernelWebUiCommands::new(
-            ctx.get::<PluginManager>()
-                .ok_or_else(|| PluginError::new("plugin manager is unavailable"))?,
-        ));
+        // Share metadata lives next to the device auth file in the same data directory.
+        // Same Arc the native local adapter uses (engine-attached), never a second store.
+        let share_store = match ctx
+            .get::<codetwo_core::plugins::EngineService>()
+            .and_then(|engine| engine.share_store())
+        {
+            Some(store) => store,
+            None => codetwo_core::share::shared_store(
+                self.auth_path.with_file_name("session-shares.json"),
+            )
+            .map_err(|error| PluginError::new(format!("session share store: {error}")))?,
+        };
+        let plugin_manager = ctx
+            .get::<PluginManager>()
+            .ok_or_else(|| PluginError::new("plugin manager is unavailable"))?;
         let runtime = Arc::new(RemoteRuntime {
             engine: ctx
                 .get::<EngineService>()
@@ -312,7 +324,8 @@ impl Plugin for RemotePlugin {
                 .ok_or_else(|| PluginError::new("canvas service is unavailable"))?
                 .gate,
             device_sync: ctx.get::<DeviceSyncRuntime>(),
-            web_ui_commands,
+            plugin_manager,
+            share_store,
             auth_path: self.auth_path.clone(),
             lifecycle: Mutex::new(RemoteLifecycle::default()),
         });
@@ -352,6 +365,14 @@ impl Plugin for RemotePlugin {
                     .device_sync
                     .clone()
                     .map(|device_sync| device_sync as Arc<dyn codetwo_server::DeviceSyncHttp>);
+                // Same engine/share store as native; pairing links mint from this exact auth Arc.
+                let web_ui_commands = Arc::new(
+                    codetwo_server::KernelWebUiCommands::with_share_store(
+                        service.plugin_manager.clone(),
+                        service.share_store.clone(),
+                    )
+                    .with_pairing(auth.clone()),
+                );
                 let bound = codetwo_server::bind_and_serve_with_web_ui(
                     service.engine.clone(),
                     service.events.clone(),
@@ -360,7 +381,7 @@ impl Plugin for RemotePlugin {
                     service.store.clone(),
                     service.canvas_gate,
                     device_sync_http,
-                    Some(service.web_ui_commands.clone()),
+                    Some(web_ui_commands),
                     None,
                 )
                 .await;

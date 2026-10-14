@@ -3176,6 +3176,9 @@ struct EngineState {
     provider_switches: Mutex<HashSet<SessionId>>,
     pending_creation_options: Mutex<HashMap<String, SessionCreationOptions>>,
     pending_parallel_tasks: Mutex<HashMap<String, PendingParallelTask>>,
+    /// Shared share-policy context (same Arc the remote adapter uses). Session metadata is
+    /// committed here inside `emit`, before `SessionCreated` reaches any subscriber.
+    share: Mutex<Option<Arc<crate::share::ShareStore>>>,
     /// Provider processes that have spawned but are not yet a fully initialized session.
     starting_clients: Mutex<Vec<RuntimeHandle>>,
     shutting_down: AtomicBool,
@@ -3491,6 +3494,7 @@ impl Engine {
             provider_switches: Mutex::new(HashSet::new()),
             pending_creation_options: Mutex::new(HashMap::new()),
             pending_parallel_tasks: Mutex::new(HashMap::new()),
+            share: Mutex::new(None),
             starting_clients: Mutex::new(Vec::new()),
             shutting_down: AtomicBool::new(false),
             activity,
@@ -5529,12 +5533,27 @@ impl Engine {
     }
 
     pub fn cancel_pending_prompts(&self, session: &str) -> Result<(), String> {
-        self.state
+        let cancelled = self
+            .state
             .store
             .as_ref()
             .ok_or("delivery needs a Store")?
             .cancel_session_deliveries(session)
-            .map_err(|e| e.to_string())
+            .map_err(|e| e.to_string())?;
+        // Only the queued rows that were actually cancelled lose their author intent; an
+        // unrelated running turn's intent (and any preserved queue) is untouched.
+        if let Some(share) = self.share_store() {
+            for id in &cancelled {
+                share.drop_author(id);
+            }
+        }
+        if !cancelled.is_empty() {
+            self.emit(Event::PromptsCancelled {
+                session: session.into(),
+                request_ids: cancelled,
+            });
+        }
+        Ok(())
     }
     pub fn delivery_position(&self, id: &str) -> Result<usize, String> {
         self.state
@@ -5543,6 +5562,52 @@ impl Engine {
             .ok_or("delivery needs a Store")?
             .delivery_position(id)
             .map_err(|e| e.to_string())
+    }
+    /// Attach the process-wide share context for this Core's data directory.
+    pub fn attach_share_store(&self, share: Arc<crate::share::ShareStore>) {
+        let events = self.state.events.clone();
+        share.set_notifier(Arc::new(move |change| {
+            let _ = events.send(Event::SessionShareChanged {
+                session: change.session,
+                kind: change.kind.to_string(),
+                revision: change.revision,
+            });
+        }));
+        *self.state.share.lock().unwrap() = Some(share);
+    }
+    /// Bind the accepted author intent for `request_id` to the real canonical transcript row.
+    fn bind_message_author(&self, session: &str, seq: Option<i64>, request_id: Option<&str>) {
+        let (Some(seq), Some(request_id), Some(share)) = (seq, request_id, self.share_store())
+        else {
+            return;
+        };
+        if let Err(error) = share.record_message_author(session, seq, request_id) {
+            tracing::warn!("share message author commit failed: {error}");
+        }
+    }
+    pub fn share_store(&self) -> Option<Arc<crate::share::ShareStore>> {
+        self.state.share.lock().unwrap().clone()
+    }
+    /// Declare creator/visibility for a create BEFORE dispatch. The native local UI is the
+    /// `local-owner` participant; an intent already registered by an adapter (remote) wins.
+    /// Returns the request id the create must be dispatched with.
+    pub fn prepare_local_create(
+        &self,
+        request_id: Option<String>,
+        visibility: crate::share::Visibility,
+    ) -> Option<String> {
+        let Some(share) = self.share_store() else {
+            return request_id;
+        };
+        let id = match request_id {
+            Some(id) if !id.is_empty() => id,
+            _ => format!("local-create:{}", uuid::Uuid::new_v4()),
+        };
+        if !share.has_pending(&id) {
+            let owner = share.participant("");
+            share.expect_create(&id, &owner, visibility);
+        }
+        Some(id)
     }
     pub fn current_turn(&self, session: &str) -> Option<String> {
         self.session_activity(session).and_then(|a| match a.state {
@@ -5789,6 +5854,7 @@ impl Engine {
                 message: error.to_string(),
                 unknown: true,
             })?;
+        self.bind_message_author(session, transcript_seq, request_id.as_deref());
         self.emit(Event::SteerAccepted {
             session: session.to_string(),
             request_id,
@@ -6408,6 +6474,23 @@ impl Engine {
                     }
                 };
                 let mut sess = Session::new(provider, cwd.clone());
+                // Transaction boundary for creation: creator + visibility are durable BEFORE any
+                // runtime, worktree or Task/session content exists. A failure here aborts with
+                // nothing persisted, so a new private task can never reopen as unowned legacy
+                // (host-visible). A later failure only leaves an unreferenced share record.
+                if let (Some(share), Some(request_id)) =
+                    (self.share_store(), request_id.as_deref())
+                {
+                    if let Err(error) = share.claim_created(request_id, &sess.id) {
+                        self.emit(Event::Error {
+                            session: None,
+                            message: format!("couldn't record session sharing: {error}"),
+                            terminal: true,
+                            request_id: Some(request_id.to_string()),
+                        });
+                        return Ok(());
+                    }
+                }
                 sess.model = model;
                 sess.transient = creation_options.transient;
                 let initial_policy = initial_policy.unwrap_or_default();
@@ -6942,6 +7025,9 @@ impl Engine {
                 } else {
                     (None, false)
                 };
+                if !replayed {
+                    self.bind_message_author(&session, transcript_seq, request_id.as_deref());
+                }
                 if replayed {
                     drop(turn_lease);
                     // The original accepted turn may already be finished. Reusing TurnStarted for
@@ -8230,6 +8316,34 @@ impl Engine {
     }
 
     fn emit(&self, event: Event) {
+        // Commit share metadata (creator + visibility) BEFORE the creation event is observable,
+        // independent of whether any client is subscribed.
+        if let Event::SessionCreated {
+            session,
+            request_id: Some(request_id),
+            ..
+        } = &event
+        {
+            let share = self.state.share.lock().unwrap().clone();
+            if let Some(share) = share {
+                if let Err(error) = share.claim_created(request_id, session) {
+                    tracing::warn!("share metadata commit failed: {error}");
+                }
+            }
+        }
+        // A terminally rejected request never reaches the transcript: roll back its author intent
+        // (a no-op once the intent was bound to a real row), so no false author is left behind.
+        if let Event::Error {
+            session: Some(_),
+            terminal: true,
+            request_id: Some(request_id),
+            ..
+        } = &event
+        {
+            if let Some(share) = self.share_store() {
+                share.drop_author(request_id);
+            }
+        }
         // Ingestion into the external-MCP ring happens inside the sender, once per event.
         let _ = self.state.events.send(event);
     }

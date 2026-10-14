@@ -362,7 +362,15 @@ async fn run_inner(
             store,
             canvas_gate,
             None,
-            Some(Arc::new(KernelWebUiCommands::new(plugin_manager))),
+            Some(Arc::new(
+                KernelWebUiCommands::with_share_store(
+                    plugin_manager,
+                    // The engine's own share context, not a second copy of the same file.
+                    codetwo_core::share::shared_store(data_dir.join("session-shares.json"))
+                        .map_err(|error| format!("session share store: {error}"))?,
+                )
+                .with_pairing(auth.clone()),
+            )),
             web_ui_dir,
         )
         .await

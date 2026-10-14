@@ -115,9 +115,21 @@ pub enum Event {
     /// A member-visible collaboration snapshot changed. Clients refetch by Task id; the event does
     /// not duplicate comments or Suggestions into the execution stream.
     TaskSnapshotChanged {
-        /// Kept null so existing session-event consumers can safely treat this as a global event.
-        session: Option<SessionId>,
+        /// Every session subject of the task (leases and graph assignments). One canonical event;
+        /// the common share policy requires ALL of them to be viewable. Empty only for a task
+        /// with no session subject (local owner / legacy).
+        #[serde(default)]
+        sessions: Vec<SessionId>,
         task_id: TaskId,
+        revision: u64,
+    },
+    /// Session share metadata changed (`kind`: `visibility` | `revoked` | `follow` |
+    /// `message_author`). Carries no metadata: clients invalidate `share.get` and, for
+    /// `message_author`, the transcript read. `revoked` (public -> private) reaches every
+    /// participant so they drop the session; all other kinds reach only viewers of the session.
+    SessionShareChanged {
+        session: SessionId,
+        kind: String,
         revision: u64,
     },
     SessionCreated {
@@ -258,6 +270,12 @@ pub enum Event {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         request_id: Option<String>,
         position: usize,
+    },
+    /// Queued prompt deliveries the store actually moved to `cancelled` (Stop). Emitted only
+    /// when at least one row changed; carries the real ids so clients drop exactly those rows.
+    PromptsCancelled {
+        session: SessionId,
+        request_ids: Vec<String>,
     },
     SteerAccepted {
         session: SessionId,

@@ -195,6 +195,15 @@ describe("macOS window chrome contract", () => {
     );
   });
 
+  test("wraps the pane header instead of clipping sharing controls and session actions", () => {
+    expect(styles).toMatch(
+      /\.session-header\.window-titlebar\s*\{[^}]*height:\s*auto;[^}]*min-height:\s*var\(--ds-titlebar-height\);[^}]*flex-wrap:\s*wrap;/su
+    );
+    expect(styles).toMatch(
+      /\.session-header \.session-header-toolbar\s*\{[^}]*flex-wrap:\s*wrap;[^}]*max-width:\s*100%;[^}]*margin-left:\s*auto;/su
+    );
+  });
+
   test("keeps dock controls in the window strip and workspace actions in the pane header", () => {
     expect(styles).toMatch(
       /\.window-titlebar\s*\{[^}]*height:\s*var\(--ds-titlebar-height\);/su

@@ -205,9 +205,19 @@ impl Store {
         Ok(())
     }
 
-    pub fn cancel_session_deliveries(&self, session: &str) -> Result<(), StoreError> {
-        self.conn.lock().unwrap().execute("UPDATE prompt_deliveries SET state='cancelled',outcome='Session control changed' WHERE session_id=?1 AND state='queued'", [session])?;
-        Ok(())
+    /// Cancel the session's queued deliveries; returns the ids actually cancelled so callers can
+    /// release per-delivery state (e.g. pending share-author intents) for exactly those rows.
+    pub fn cancel_session_deliveries(&self, session: &str) -> Result<Vec<String>, StoreError> {
+        let conn = self.conn.lock().unwrap();
+        let ids = {
+            let mut stmt = conn.prepare(
+                "SELECT id FROM prompt_deliveries WHERE session_id=?1 AND state='queued'",
+            )?;
+            let rows = stmt.query_map([session], |row| row.get::<_, String>(0))?;
+            rows.collect::<Result<Vec<_>, _>>()?
+        };
+        conn.execute("UPDATE prompt_deliveries SET state='cancelled',outcome='Session control changed' WHERE session_id=?1 AND state='queued'", [session])?;
+        Ok(ids)
     }
 
     pub fn delivery_position(&self, id: &str) -> Result<usize, StoreError> {

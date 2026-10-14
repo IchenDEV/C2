@@ -56,7 +56,7 @@ impl Plugin for HostEventsPlugin {
     }
 
     fn inject(&self) -> Injection {
-        Injection::required(["bus"])
+        Injection::required(["bus", "engine"])
     }
 
     fn description(&self) -> Option<&str> {
@@ -101,10 +101,20 @@ impl Plugin for HostEventsPlugin {
             .ok_or_else(|| PluginError::new("event bus is unavailable"))?
             .subscribe();
         let host = self.host.clone();
+        let share = ctx
+            .get::<codetwo_core::plugins::EngineService>()
+            .and_then(|engine| engine.share_store());
         ctx.spawn(async move {
             loop {
                 match engine_events.recv().await {
                     Ok(event) => {
+                        // Native renderer exit: same creator-only policy as remote; the host
+                        // owner is the trusted `local-owner` actor, not a privileged observer.
+                        if let Some(share) = &share {
+                            if !codetwo_core::share_policy::share_event_visible(share, "", &event) {
+                                continue;
+                            }
+                        }
                         let _ = host.emit("engine-event", event);
                     }
                     Err(broadcast::error::RecvError::Lagged(count)) => {

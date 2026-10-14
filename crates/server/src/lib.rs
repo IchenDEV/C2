@@ -56,9 +56,10 @@ use tower_http::services::{ServeDir, ServeFile};
 
 use codetwo_core::device_sync::DeviceSyncDocument;
 use codetwo_core::plugins::PluginManager;
+pub use codetwo_core::share_policy::{share_event_visible, shared_web_ui_call, SHARE_DENIED};
 use codetwo_core::worktree::WorktreeBaseline;
 use codetwo_core::{
-    CanvasDraft, CanvasDraftUpdate, CanvasError, CanvasFeatureGate, CanvasFreezeInput,
+    AttentionItem, CanvasDraft, CanvasDraftUpdate, CanvasError, CanvasFeatureGate, CanvasFreezeInput,
     CanvasRevision, CanvasStaticAsset, DocBlock, Engine, Event, MemberId, Op, ParallelTaskCreation,
     PortableTaskHandoff, ProviderConfiguration, ProviderId, ResultContract, Session, SessionId,
     SharedTaskSnapshot, Store, StoreError, SuggestionApprovalReceipt, SuggestionId, Task,
@@ -97,6 +98,62 @@ pub trait WebUiCommandCaller: Send + Sync + 'static {
         args: serde_json::Value,
         project_path: Option<String>,
     ) -> Result<serde_json::Value, String>;
+
+    /// Share policy for live exits (welcome snapshot, events, WS ops). Default-deny: an adapter
+    /// that never wired the share policy must not expose private-task data by accident. Adapters
+    /// that intentionally have no sharing (test doubles) override this to `true` explicitly.
+    fn session_visible(&self, _device_id: &str, _session: &str) -> bool {
+        false
+    }
+
+    /// Declare an exact-id, default-public create for secondary adapters (T3 compat) that match
+    /// `SessionCreated.request_id` verbatim, so creator metadata exists before the session does.
+    fn register_created(&self, _device_id: &str, _request_id: &str) {}
+
+    /// Event-level policy (includes session-less events and create-race metadata claim).
+    /// Default-deny for the same reason as [`Self::session_visible`].
+    fn event_visible(&self, _device_id: &str, _event: &Event) -> bool {
+        false
+    }
+
+    /// Declare a WS create before it is submitted; returns the request id to submit with.
+    fn prepare_create(&self, _device_id: &str, request_id: Option<String>) -> Option<String> {
+        request_id
+    }
+
+    /// Like [`Self::prepare_create`] with the optional WS `visibility` (default public). Private
+    /// is part of the creation intent, never a public-then-toggle. Err = reject before create.
+    fn prepare_create_with_visibility(
+        &self,
+        device_id: &str,
+        request_id: Option<String>,
+        visibility: Option<serde_json::Value>,
+    ) -> Result<Option<String>, String> {
+        let _ = visibility;
+        Ok(self.prepare_create(device_id, request_id))
+    }
+
+    /// Register the trusted actor's author intent for a WS prompt (also covers queue/steer, which
+    /// the engine decides from run state). Returns the scoped delivery id to submit with.
+    fn prepare_authored(
+        &self,
+        _device_id: &str,
+        _session: &str,
+        request_id: Option<String>,
+    ) -> Result<codetwo_core::share_policy::PreparedAuthoredOp, String> {
+        Ok(codetwo_core::share_policy::PreparedAuthoredOp::passthrough(request_id))
+    }
+
+    /// Journal an accepted authored op, or roll back its intent when dispatch failed.
+    fn finish_authored(
+        &self,
+        _device_id: &str,
+        _session: &str,
+        _kind: &str,
+        _prepared: &codetwo_core::share_policy::PreparedAuthoredOp,
+        _accepted: bool,
+    ) {
+    }
 }
 
 /// Shared host adapter for the paired full React renderer.
@@ -105,11 +162,65 @@ pub trait WebUiCommandCaller: Send + Sync + 'static {
 /// and root/project Kernel dispatch cannot drift between launch surfaces.
 pub struct KernelWebUiCommands {
     plugin_manager: Arc<PluginManager>,
+    share: Arc<codetwo_core::share::ShareStore>,
+    /// Existing auth instance used to mint one-time pairing links for `remote.pairing_link`.
+    auth: Option<Arc<AuthState>>,
 }
 
 impl KernelWebUiCommands {
+    /// In-memory share metadata (not persisted); production wiring uses [`Self::with_share_store`].
     pub fn new(plugin_manager: Arc<PluginManager>) -> Self {
-        Self { plugin_manager }
+        Self::with_share_store(
+            plugin_manager,
+            Arc::new(codetwo_core::share::ShareStore::in_memory()),
+        )
+    }
+
+    pub fn with_share_store(
+        plugin_manager: Arc<PluginManager>,
+        share: Arc<codetwo_core::share::ShareStore>,
+    ) -> Self {
+        Self {
+            plugin_manager,
+            share,
+            auth: None,
+        }
+    }
+
+    /// Let authenticated browser devices mint a one-time pairing link from the same
+    /// [`AuthState`] the server authenticates with (no second credential store).
+    pub fn with_pairing(mut self, auth: Arc<AuthState>) -> Self {
+        self.auth = Some(auth);
+        self
+    }
+
+    fn pairing_link(&self, args: serde_json::Value) -> Result<serde_json::Value, String> {
+        let auth = self
+            .auth
+            .as_ref()
+            .ok_or_else(|| "pairing links are unavailable on this host".to_string())?;
+        let base = args
+            .get("base_url")
+            .and_then(|value| value.as_str())
+            .unwrap_or_default();
+        // The browser's own origin is the URL it actually reached us at; accept a bare
+        // http(s) origin only so the response can never point at a path or other scheme.
+        let valid = (base.starts_with("http://") || base.starts_with("https://"))
+            && !base.contains(['#', '?', ' '])
+            && base.trim_end_matches('/').matches('/').count() == 2;
+        if !valid {
+            return Err("base_url must be the http(s) origin of this server".to_string());
+        }
+        let ttl = auth.effective_pairing_ttl(DEFAULT_PAIRING_TTL);
+        let token = auth.issue_pairing_token(ttl);
+        let url = pairing_url_for_endpoint(base, &token);
+        Ok(serde_json::json!({
+            "endpoint_id": "browser-origin",
+            "url": url,
+            "token": token,
+            "expires_in": ttl.as_secs(),
+            "qr_svg": "",
+        }))
     }
 }
 
@@ -179,30 +290,109 @@ fn web_ui_command_allowed(name: &str) -> bool {
 
 #[async_trait::async_trait]
 impl WebUiCommandCaller for KernelWebUiCommands {
+    fn session_visible(&self, device_id: &str, session: &str) -> bool {
+        let actor = self.share.participant(device_id);
+        self.share.can_view(session, &actor)
+    }
+
+    fn register_created(&self, device_id: &str, request_id: &str) {
+        let actor = self.share.participant(device_id);
+        self.share
+            .expect_create(request_id, &actor, codetwo_core::share::Visibility::Public);
+    }
+
+    fn event_visible(&self, device_id: &str, event: &Event) -> bool {
+        share_event_visible(&self.share, device_id, event)
+    }
+
+    fn prepare_create(&self, device_id: &str, request_id: Option<String>) -> Option<String> {
+        self.prepare_create_with_visibility(device_id, request_id, None)
+            .ok()
+            .flatten()
+    }
+
+    fn prepare_create_with_visibility(
+        &self,
+        device_id: &str,
+        request_id: Option<String>,
+        visibility: Option<serde_json::Value>,
+    ) -> Result<Option<String>, String> {
+        let visibility: codetwo_core::share::Visibility = match visibility {
+            None | Some(serde_json::Value::Null) => Default::default(),
+            Some(value) => serde_json::from_value(value)
+                .map_err(|_| "visibility must be public or private".to_string())?,
+        };
+        let actor = self.share.participant(device_id);
+        // Same actor namespace as `shared_web_ui_call` creation: two actors using one client id
+        // are independent and the host cannot spell a device's scoped id.
+        let id = match request_id {
+            Some(id)
+                if !id.is_empty()
+                    && codetwo_core::share_policy::client_id_allowed(&actor, &id) =>
+            {
+                codetwo_core::share::scoped_request_id(&actor, &id)
+            }
+            _ => format!("share-create:{}", uuid::Uuid::new_v4()),
+        };
+        self.share.expect_create(&id, &actor, visibility);
+        Ok(Some(id))
+    }
+
+    fn prepare_authored(
+        &self,
+        device_id: &str,
+        session: &str,
+        request_id: Option<String>,
+    ) -> Result<codetwo_core::share_policy::PreparedAuthoredOp, String> {
+        codetwo_core::share_policy::prepare_authored_op(&self.share, device_id, session, request_id)
+    }
+
+    fn finish_authored(
+        &self,
+        device_id: &str,
+        session: &str,
+        kind: &str,
+        prepared: &codetwo_core::share_policy::PreparedAuthoredOp,
+        accepted: bool,
+    ) {
+        if let Err(error) = codetwo_core::share_policy::finish_authored_op(
+            &self.share, device_id, session, kind, prepared, accepted,
+        ) {
+            tracing::warn!("share op journal failed: {error}");
+        }
+    }
+
     async fn call(
         &self,
-        _device_id: &str,
+        device_id: &str,
         name: &str,
         args: serde_json::Value,
         project_path: Option<String>,
     ) -> Result<serde_json::Value, String> {
-        if !web_ui_command_allowed(name) {
+        if name == "remote.pairing_link" {
+            return self.pairing_link(args);
+        }
+        if !web_ui_command_allowed(name) && !name.starts_with("share.") {
             return Err(format!(
                 "command is unavailable in the browser renderer: {name}"
             ));
         }
-
-        if let Some(project_path) = project_path {
-            self.plugin_manager
-                .call_in_project(project_path, name, args)
-                .await
-                .map_err(|error| error.to_string())
-        } else {
-            self.plugin_manager
-                .call(name, args)
-                .await
-                .map_err(|error| error.to_string())
-        }
+        let manager = self.plugin_manager.clone();
+        let command = name.to_string();
+        shared_web_ui_call(&self.share, device_id, name, args, move |args| async move {
+            if let Some(project_path) = project_path {
+                manager
+                    .call_in_project(project_path, &command, args)
+                    .await
+                    .map_err(|error| error.to_string())
+            } else {
+                manager
+                    .call(&command, args)
+                    .await
+                    .map_err(|error| error.to_string())
+            }
+        })
+        .await
     }
 }
 
@@ -794,6 +984,9 @@ pub async fn bind_and_serve_with_web_ui(
         t3_compat::T3CompatState::new(engine.clone(), events.clone(), auth.clone())
             .map_err(|error| std::io::Error::new(std::io::ErrorKind::InvalidData, error))?,
     );
+    if let Some(commands) = web_ui_commands.clone() {
+        t3.set_share_policy(commands);
+    }
     let handoff = Arc::new(
         TaskHandoffManager::new(store.clone(), engine.clone(), Some(events.clone()))
             .map_err(|error| std::io::Error::new(std::io::ErrorKind::InvalidData, error))?,
@@ -1056,11 +1249,22 @@ async fn device_sync_snapshot(State(st): State<Arc<ServerState>>, headers: Heade
     let Some(device_sync) = &st.device_sync else {
         return (StatusCode::NOT_FOUND, "C2 device sync is unavailable").into_response();
     };
-    if let Err(response) = require_c2_device(&st, &headers) {
-        return response;
-    }
+    let peer_device_id = match require_c2_device(&st, &headers) {
+        Ok(device_id) => device_id,
+        Err(response) => return response,
+    };
     match device_sync.snapshot() {
-        Ok(replica) => Json(DeviceSyncSnapshotReply { replica }).into_response(),
+        Ok(mut replica) => {
+            // Only what the authenticated peer device may view (common can_view) is served.
+            if let Some(share) = st.engine.share_store() {
+                codetwo_core::share_policy::redact_device_sync_document(
+                    &share,
+                    &peer_device_id,
+                    &mut replica.document,
+                );
+            }
+            Json(DeviceSyncSnapshotReply { replica }).into_response()
+        }
         Err(error) => (StatusCode::BAD_REQUEST, error).into_response(),
     }
 }
@@ -1079,8 +1283,19 @@ async fn write_device_sync_snapshot(
     let Some(device_sync) = &st.device_sync else {
         return (StatusCode::NOT_FOUND, "C2 device sync is unavailable").into_response();
     };
-    if let Err(response) = require_c2_device(&st, &headers) {
-        return response;
+    let peer_device_id = match require_c2_device(&st, &headers) {
+        Ok(device_id) => device_id,
+        Err(response) => return response,
+    };
+    if let Some(share) = st.engine.share_store() {
+        if let Err(error) = codetwo_core::share_policy::check_device_sync_write(
+            &share,
+            &peer_device_id,
+            &body.document,
+        )
+        {
+            return (StatusCode::BAD_REQUEST, error).into_response();
+        }
     }
     match device_sync.write_snapshot(&body.document, &body.expected_version) {
         Ok(result) => {
@@ -1196,13 +1411,57 @@ struct AcceptHandoffBody {
     destination: String,
 }
 
+/// One outward answer for every handoff refusal that would otherwise tell a noncreator whether a
+/// private session exists. Carries no session id, fence or state text.
+const HANDOFF_UNAVAILABLE: &str = "task handoff target is not available";
+
+/// A handoff step on an existing target is refused outwardly (and before any store mutation) unless
+/// the actual authenticated caller may view it under the common ShareStore decision. With sharing
+/// configured this includes historical unowned sessions: they are local/unshared, never public.
+/// Callers refuse a session unknown to the store with the same answer. Without any ShareStore
+/// context (bare unshared server) the ordinary behavior is preserved.
+fn handoff_target_hidden(
+    share: Option<&codetwo_core::share::ShareStore>,
+    device_id: &str,
+    session: &str,
+) -> bool {
+    share.is_some_and(|share| !share.can_view(session, &share.participant(device_id)))
+}
+
+fn handoff_target_refusal(
+    st: &ServerState,
+    device_id: &str,
+    session: &str,
+) -> Option<Response> {
+    let known = matches!(st.store.get_session(session), Ok(Some(_)));
+    let share = st.engine.share_store();
+    if !known || handoff_target_hidden(share.as_deref(), device_id, session) {
+        return Some((StatusCode::CONFLICT, HANDOFF_UNAVAILABLE).into_response());
+    }
+    None
+}
+
 async fn accept_handoff(
     State(st): State<Arc<ServerState>>,
     headers: HeaderMap,
     Json(body): Json<AcceptHandoffBody>,
 ) -> Response {
-    if let Err(response) = require_t3_scope(&st, &headers, "orchestration:operate") {
-        return response;
+    let authorization = match require_t3_scope(&st, &headers, "orchestration:operate") {
+        Ok(authorization) => authorization,
+        Err(response) => return response,
+    };
+    // Insert-only acceptance of an unknown id stays valid; an id that already names a session
+    // the caller cannot view is refused without touching it or echoing its id.
+    if handoff_target_hidden(
+        st.engine.share_store().as_deref(),
+        &authorization.device_id,
+        &body.handoff.session_id,
+    ) || handoff_target_hidden(
+        st.engine.share_store().as_deref(),
+        &authorization.device_id,
+        &body.handoff.session.id,
+    ) {
+        return (StatusCode::BAD_REQUEST, HANDOFF_UNAVAILABLE).into_response();
     }
     match st.handoff.accept(&body.handoff, &body.destination) {
         Ok(result) => Json(result).into_response(),
@@ -1226,6 +1485,9 @@ async fn activate_handoff(
         Ok(authorization) => authorization,
         Err(response) => return response,
     };
+    if let Some(refusal) = handoff_target_refusal(&st, &authorization.device_id, &body.session) {
+        return refusal;
+    }
     match st.handoff.activate(&body.session, &handoff_id, body.epoch) {
         Ok(()) => {
             if authorization.ephemeral_handoff {
@@ -1252,8 +1514,12 @@ async fn rollback_handoff(
     headers: HeaderMap,
     Json(body): Json<RollbackHandoffBody>,
 ) -> Response {
-    if let Err(response) = require_t3_scope(&st, &headers, "orchestration:operate") {
-        return response;
+    let authorization = match require_t3_scope(&st, &headers, "orchestration:operate") {
+        Ok(authorization) => authorization,
+        Err(response) => return response,
+    };
+    if let Some(refusal) = handoff_target_refusal(&st, &authorization.device_id, &body.session) {
+        return refusal;
     }
     match st
         .handoff
@@ -1454,9 +1720,10 @@ async fn artifact_download(
     headers: HeaderMap,
     Path(id): Path<String>,
 ) -> Response {
-    if let Err(response) = require_device(&st, &headers, None) {
-        return response;
-    }
+    let device_id = match require_device(&st, &headers, None) {
+        Ok(device_id) => device_id,
+        Err(response) => return response,
+    };
     let Some(artifacts) = codetwo_core::ArtifactStore::from_store(st.store.clone()) else {
         return (
             StatusCode::SERVICE_UNAVAILABLE,
@@ -1464,6 +1731,26 @@ async fn artifact_download(
         )
             .into_response();
     };
+    // An artifact id is not a capability: it is visible only through a task the device may view.
+    // A ShareStore without a wired policy denies.
+    let Ok(sessions) = artifacts.referencing_sessions(&id) else {
+        return (StatusCode::INTERNAL_SERVER_ERROR, "artifact unavailable").into_response();
+    };
+    // No referencing session (e.g. its task was deleted, which drops refs but keeps the blob) is
+    // no authority: with sharing enabled that fails closed; without a ShareStore no task is private.
+    let allowed = if sessions.is_empty() {
+        st.engine.share_store().is_none() && st.web_ui_commands.is_none()
+    } else {
+        match &st.web_ui_commands {
+            Some(policy) => sessions
+                .iter()
+                .any(|session| policy.session_visible(&device_id, session)),
+            None => st.engine.share_store().is_none(),
+        }
+    };
+    if !allowed {
+        return (StatusCode::NOT_FOUND, "artifact not found").into_response();
+    }
     let reference = match artifacts.metadata(&id) {
         Ok(reference) => reference,
         Err(codetwo_core::artifact::ArtifactError::NotFound) => {
@@ -1749,6 +2036,49 @@ fn team_actor(st: &ServerState, headers: &HeaderMap) -> Result<MemberId, Respons
     }
 }
 
+/// Common ShareStore policy for Team task surfaces: a task whose leased engine session the
+/// requesting device may not view (e.g. another actor's private session) is indistinguishable
+/// from an unknown task, so its session ids and content never reach a member. Without a share
+/// store (no sharing configured) nothing is restricted. Lease read errors fail closed.
+fn team_task_visible(st: &ServerState, headers: &HeaderMap, task_id: &TaskId) -> bool {
+    let Some(share) = st.engine.share_store() else {
+        return true;
+    };
+    let Some(authorization) =
+        bearer_from(headers).and_then(|bearer| st.auth.authorize_member_bearer(bearer))
+    else {
+        return false;
+    };
+    let actor = share.participant(&authorization.device_id);
+    let leases_visible = match st.store.list_task_session_leases(task_id) {
+        Ok(leases) => leases
+            .iter()
+            .all(|lease| share.can_view(lease.session_id.as_str(), &actor)),
+        Err(_) => false,
+    };
+    if !leases_visible {
+        return false;
+    }
+    // Typed session fields (`execution_session_id`, `assigned_session_id`, activity
+    // `session_id`) may name a session with no lease: judge the member's own snapshot by the
+    // same common policy. A snapshot error leaks nothing (the handler repeats that error).
+    match st
+        .store
+        .shared_task_snapshot(task_id, &MemberId::new(authorization.member_id))
+    {
+        Ok(snapshot) => serde_json::to_value(&snapshot).is_ok_and(|value| {
+            !codetwo_core::share_policy::value_references_hidden_session(&share, &actor, &value)
+        }),
+        Err(_) => true,
+    }
+}
+
+fn team_task_not_found(task_id: &TaskId) -> Response {
+    team_store_error(StoreError::TaskNotFound {
+        task_id: task_id.as_str().to_string(),
+    })
+}
+
 fn team_store_error(error: StoreError) -> Response {
     let status = match error {
         StoreError::TaskNotFound { .. } | StoreError::SuggestionNotFound { .. } => {
@@ -1768,9 +2098,31 @@ fn team_store_error(error: StoreError) -> Response {
         .into_response()
 }
 
+/// Task ids and revisions are metadata of the task's sessions: ONE canonical event names every
+/// subject session (leases and graph assignments) and the common `share_event_visible` /
+/// `can_view` decision requires ALL of them, including for the local owner. Only a task with no
+/// session subject at all stays session-less (local owner / legacy). A subject lookup error
+/// publishes nothing (fail closed).
 fn publish_task_snapshot(st: &ServerState, task_id: &TaskId, revision: u64) {
+    let mut subjects: Vec<String> = Vec::new();
+    match st.store.list_task_session_leases(task_id) {
+        Ok(leases) => subjects.extend(leases.iter().map(|l| l.session_id.as_str().to_string())),
+        Err(_) => return,
+    }
+    match st.store.get_task_graph(task_id) {
+        Ok(graph) => subjects.extend(
+            graph
+                .work_items
+                .iter()
+                .filter_map(|item| item.assigned_session_id.as_ref())
+                .map(|id| id.as_str().to_string()),
+        ),
+        Err(_) => return,
+    }
+    subjects.sort();
+    subjects.dedup();
     let _ = st.events.send(Event::TaskSnapshotChanged {
-        session: None,
+        sessions: subjects.into_iter().map(Into::into).collect(),
         task_id: task_id.clone(),
         revision,
     });
@@ -1809,7 +2161,10 @@ async fn team_tasks(State(st): State<Arc<ServerState>>, headers: HeaderMap) -> R
         Err(response) => return response,
     };
     match st.store.list_shared_tasks(&actor_id) {
-        Ok(tasks) => Json(tasks).into_response(),
+        Ok(mut tasks) => {
+            tasks.retain(|task| team_task_visible(&st, &headers, &task.runtime.task_id));
+            Json(tasks).into_response()
+        }
         Err(error) => team_store_error(error),
     }
 }
@@ -1820,7 +2175,14 @@ async fn team_attention(State(st): State<Arc<ServerState>>, headers: HeaderMap) 
         Err(response) => return response,
     };
     match st.store.list_attention_items(&actor_id) {
-        Ok(items) => Json(items).into_response(),
+        Ok(mut items) => {
+            items.retain(|item| match item {
+                AttentionItem::PendingSuggestion { task_id, .. } => {
+                    team_task_visible(&st, &headers, task_id)
+                }
+            });
+            Json(items).into_response()
+        }
         Err(error) => team_store_error(error),
     }
 }
@@ -1834,7 +2196,11 @@ async fn team_task(
         Ok(actor_id) => actor_id,
         Err(response) => return response,
     };
-    match st.store.shared_task_snapshot(&TaskId::new(id), &actor_id) {
+    let task_id = TaskId::new(id);
+    if !team_task_visible(&st, &headers, &task_id) {
+        return team_task_not_found(&task_id);
+    }
+    match st.store.shared_task_snapshot(&task_id, &actor_id) {
         Ok(snapshot) => Json(snapshot).into_response(),
         Err(error) => team_store_error(error),
     }
@@ -1909,6 +2275,9 @@ async fn team_add_comment(
         Err(response) => return response,
     };
     let task_id = TaskId::new(id);
+    if !team_task_visible(&st, &headers, &task_id) {
+        return team_task_not_found(&task_id);
+    }
     match st.store.add_task_comment(
         &task_id,
         &actor_id,
@@ -1935,6 +2304,9 @@ async fn team_create_suggestion(
         Err(response) => return response,
     };
     let task_id = TaskId::new(id);
+    if !team_task_visible(&st, &headers, &task_id) {
+        return team_task_not_found(&task_id);
+    }
     match st.store.create_task_suggestion(
         &task_id,
         &actor_id,
@@ -1961,6 +2333,9 @@ async fn team_approve_suggestion(
         Err(response) => return response,
     };
     let task_id = TaskId::new(id);
+    if !team_task_visible(&st, &headers, &task_id) {
+        return team_task_not_found(&task_id);
+    }
     let suggestion_id = SuggestionId::new(suggestion_id);
     let approval = match st.store.approve_task_suggestion(
         &task_id,
@@ -2341,6 +2716,9 @@ async fn handle_socket(socket: WebSocket, st: Arc<ServerState>, device_id: Strin
                         .unwrap_or(true)
                 });
             }
+            if let Some(gate) = &st.web_ui_commands {
+                sessions.retain(|session| gate.session_visible(&device_id, &session.id));
+            }
             Outbound::Sessions { sessions }
         }
         Err(error) => Outbound::SessionsError {
@@ -2355,6 +2733,8 @@ async fn handle_socket(socket: WebSocket, st: Arc<ServerState>, device_id: Strin
     let ev_out = out_tx.clone();
     let event_store = st.store.clone();
     let event_member_id = team_member_id.clone();
+    let event_gate = st.web_ui_commands.clone();
+    let event_device_id = device_id.clone();
     let event_task = tokio::spawn(async move {
         loop {
             match ev_rx.recv().await {
@@ -2388,6 +2768,11 @@ async fn handle_socket(socket: WebSocket, st: Arc<ServerState>, device_id: Strin
                             continue;
                         }
                     }
+                    if let Some(gate) = &event_gate {
+                        if !gate.event_visible(&event_device_id, &ev) {
+                            continue;
+                        }
+                    }
                     if ev_out.send(Outbound::Event { event: ev }).await.is_err() {
                         break;
                     }
@@ -2401,8 +2786,25 @@ async fn handle_socket(socket: WebSocket, st: Arc<ServerState>, device_id: Strin
     });
 
     // Drain the outbound lane into the socket.
+    let drain_gate = st.web_ui_commands.clone();
+    let drain_device_id = device_id.clone();
     let mut send_task = tokio::spawn(async move {
         while let Some(out) = out_rx.recv().await {
+            // Queued-but-unsent content is judged against the CURRENT share policy at the socket
+            // exit, so a public -> private change can't deliver already-buffered private content.
+            if let Some(gate) = &drain_gate {
+                let allowed = match &out {
+                    Outbound::Event { event } => gate.event_visible(&drain_device_id, event),
+                    Outbound::Transcript { session, .. }
+                    | Outbound::TranscriptError { session, .. } => {
+                        gate.session_visible(&drain_device_id, session)
+                    }
+                    _ => true,
+                };
+                if !allowed {
+                    continue;
+                }
+            }
             let msg = serde_json::to_string(&out).unwrap_or_default();
             if sender.send(Message::Text(msg)).await.is_err() {
                 break;
@@ -2415,13 +2817,13 @@ async fn handle_socket(socket: WebSocket, st: Arc<ServerState>, device_id: Strin
     // that future on disconnect would release the core turn lease without a terminal event and
     // strand every other connected frontend in a false running state. A bounded, ordered worker
     // preserves per-client message ordering and finishes already accepted work after disconnect.
-    let (in_tx, mut in_rx) = mpsc::channel::<Inbound>(16);
+    let (in_tx, mut in_rx) = mpsc::channel::<(Inbound, Option<serde_json::Value>)>(16);
     let work_engine = st.engine.clone();
     let work_out = out_tx.clone();
     let work_member_id = team_member_id.clone();
     let work_device_id = device_id.clone();
     let _work_task = tokio::spawn(async move {
-        while let Some(inbound) = in_rx.recv().await {
+        while let Some((inbound, wire_visibility)) = in_rx.recv().await {
             match inbound {
                 Inbound::Op(op) => {
                     let (session, request_id) = match &op {
@@ -2471,6 +2873,24 @@ async fn handle_socket(socket: WebSocket, st: Arc<ServerState>, device_id: Strin
                             .await;
                         continue;
                     }
+                    if let (Some(gate), Some(session_id)) = (&st.web_ui_commands, op_session_id(&op)) {
+                        if !gate.session_visible(&work_device_id, session_id) {
+                            // Answer the requester without naming a session they cannot view: a
+                            // session-less error delivered only under the actor's own pending id.
+                            let request_id = gate.prepare_create(&work_device_id, request_id);
+                            let _ = work_out
+                                .send(Outbound::Event {
+                                    event: Event::Error {
+                                        session: None,
+                                        message: SHARE_DENIED.into(),
+                                        terminal: true,
+                                        request_id,
+                                    },
+                                })
+                                .await;
+                            continue;
+                        }
+                    }
                     if let Err(error) = validate_canvas_op(&st, &work_device_id, &op) {
                         let _ = work_out
                             .send(Outbound::Event {
@@ -2487,7 +2907,89 @@ async fn handle_socket(socket: WebSocket, st: Arc<ServerState>, device_id: Strin
                     // A submit error (for example a missing provider binary) does not necessarily
                     // reach the engine event stream. Give the initiating remote client the same
                     // command-result feedback as Desktop while it remains connected.
-                    if let Err(error) = work_engine.submit(op).await {
+                    let mut op = op;
+                    let mut prepared_op = None;
+                    if let Some(gate) = &st.web_ui_commands {
+                        match &mut op {
+                            Op::NewSession { request_id: create_id, .. } => {
+                                match gate.prepare_create_with_visibility(
+                                    &work_device_id,
+                                    create_id.take(),
+                                    wire_visibility.clone(),
+                                ) {
+                                    Ok(id) => *create_id = id,
+                                    Err(message) => {
+                                        // Answer the actor's own rejected create: the error is
+                                        // session-less, so it is delivered only under the actor's
+                                        // scoped pending id (fail closed for every other device).
+                                        let request_id =
+                                            gate.prepare_create(&work_device_id, request_id);
+                                        let _ = work_out
+                                            .send(Outbound::Event {
+                                                event: Event::Error {
+                                                    session,
+                                                    message,
+                                                    terminal: true,
+                                                    request_id,
+                                                },
+                                            })
+                                            .await;
+                                        continue;
+                                    }
+                                }
+                            }
+                            Op::Prompt {
+                                session: prompt_session,
+                                request_id: prompt_id,
+                                ..
+                            } => match gate.prepare_authored(
+                                &work_device_id,
+                                prompt_session,
+                                prompt_id.take(),
+                            ) {
+                                Ok(prepared) => {
+                                    *prompt_id = prepared.request_id.clone();
+                                    prepared_op = Some(("prompt", prompt_session.clone(), prepared));
+                                }
+                                Err(message) => {
+                                    let _ = work_out
+                                        .send(Outbound::Event {
+                                            event: Event::Error {
+                                                session,
+                                                message,
+                                                terminal: true,
+                                                request_id,
+                                            },
+                                        })
+                                        .await;
+                                    continue;
+                                }
+                            },
+                            Op::Cancel { session: cancel_session } => {
+                                if let Ok(prepared) = gate.prepare_authored(
+                                    &work_device_id,
+                                    cancel_session,
+                                    None,
+                                ) {
+                                    prepared_op = Some(("cancel", cancel_session.clone(), prepared));
+                                }
+                            }
+                            _ => {}
+                        }
+                    }
+                    let submitted = work_engine.submit(op).await;
+                    if let (Some(gate), Some((kind, op_session, prepared))) =
+                        (&st.web_ui_commands, &prepared_op)
+                    {
+                        gate.finish_authored(
+                            &work_device_id,
+                            op_session,
+                            kind,
+                            prepared,
+                            submitted.is_ok(),
+                        );
+                    }
+                    if let Err(error) = submitted {
                         let _ = work_out
                             .send(Outbound::Event {
                                 event: Event::Error {
@@ -2506,6 +3008,18 @@ async fn handle_socket(socket: WebSocket, st: Arc<ServerState>, device_id: Strin
                     limit,
                     request_id,
                 }) => {
+                    if let Some(gate) = &st.web_ui_commands {
+                        if !gate.session_visible(&work_device_id, &session) {
+                            let _ = work_out
+                                .send(Outbound::TranscriptError {
+                                    session,
+                                    request_id,
+                                    message: SHARE_DENIED.into(),
+                                })
+                                .await;
+                            continue;
+                        }
+                    }
                     if let Some(member_id) = &work_member_id {
                         if !st
                             .store
@@ -2576,6 +3090,11 @@ async fn handle_socket(socket: WebSocket, st: Arc<ServerState>, device_id: Strin
                                         .unwrap_or(true)
                                 });
                             }
+                            if let Some(gate) = &st.web_ui_commands {
+                                sessions.retain(|session| {
+                                    gate.session_visible(&work_device_id, &session.id)
+                                });
+                            }
                             Outbound::Sessions { sessions }
                         }
                         Err(error) => Outbound::SessionsError {
@@ -2594,7 +3113,17 @@ async fn handle_socket(socket: WebSocket, st: Arc<ServerState>, device_id: Strin
             if let Message::Text(text) = msg {
                 match serde_json::from_str::<Inbound>(&text) {
                     Ok(inbound) => {
-                        if in_tx.send(inbound).await.is_err() {
+                        // Optional backward-compatible `visibility` on `new_session` (default
+                        // public) rides next to the typed Op so it reaches creation intent.
+                        let visibility = match &inbound {
+                            Inbound::Op(Op::NewSession { .. }) => serde_json::from_str::<
+                                serde_json::Value,
+                            >(&text)
+                            .ok()
+                            .and_then(|value| value.get("visibility").cloned()),
+                            _ => None,
+                        };
+                        if in_tx.send((inbound, visibility)).await.is_err() {
                             break;
                         }
                     }
@@ -3399,6 +3928,115 @@ mod tests {
         server.abort();
     }
 
+    /// R27: a C2 sync peer is an authenticated share participant; private and historical
+    /// unowned sessions, transcripts and session memory are neither served to it nor writable by
+    /// it (old-red: all were).
+    #[tokio::test]
+    async fn c2_device_sync_never_sends_or_accepts_private_task_data() {
+        use codetwo_core::provider::ProviderId;
+        use codetwo_core::session::{Part, Role, Session};
+        let store = Arc::new(Store::open_in_memory().unwrap());
+        let (engine, events) =
+            Engine::with_store(Vec::new(), SkillLibrary::new(Vec::new()), store.clone());
+        let share = Arc::new(codetwo_core::share::ShareStore::in_memory());
+        engine.attach_share_store(share.clone());
+        let alice = share.participant("alice");
+        for (id, visibility, text) in [
+            ("pub-s", codetwo_core::share::Visibility::Public, "PUBLIC-TEXT"),
+            ("priv-s", codetwo_core::share::Visibility::Private, "PRIVATE-SECRET"),
+        ] {
+            let mut session = Session::new(ProviderId::Codex, "/workspace");
+            session.id = id.into();
+            store.upsert_session(&session).unwrap();
+            store
+                .append_part(
+                    id,
+                    Role::User,
+                    &Part::Prompt { text: text.into(), display: text.into() },
+                )
+                .unwrap();
+            share.register_session(id, &alice, visibility).unwrap();
+        }
+        // Historical unowned session: no ShareStore record, must stay local/unshared.
+        let mut legacy = Session::new(ProviderId::Codex, "/workspace");
+        legacy.id = "legacy-s".into();
+        store.upsert_session(&legacy).unwrap();
+        store
+            .append_part(
+                "legacy-s",
+                Role::User,
+                &Part::Prompt { text: "LEGACY-SECRET".into(), display: "LEGACY-SECRET".into() },
+            )
+            .unwrap();
+        let events = super::fanout(events);
+        let auth = Arc::new(super::AuthState::load(None));
+        let token = auth.issue_c2_pairing_token(Duration::from_secs(60));
+        let sync: Arc<dyn DeviceSyncHttp> =
+            Arc::new(TestDeviceSync { store: store.clone(), id: "server-id".into() });
+        let (address, server) = super::bind_and_serve_with_services(
+            Arc::new(engine),
+            events,
+            "127.0.0.1:0".parse().unwrap(),
+            auth,
+            store.clone(),
+            codetwo_core::CanvasFeatureGate::default(),
+            Some(sync),
+        )
+        .await
+        .unwrap();
+        let base = format!("http://{address}/api/device-sync/v1");
+        let client = reqwest::Client::new();
+        let paired: serde_json::Value = client
+            .post(format!("{base}/pair"))
+            .json(&serde_json::json!({"token": token, "device_name": "Peer", "device_id": "peer-id"}))
+            .send()
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        let bearer = paired["bearer"].as_str().unwrap().to_string();
+
+        let body = client
+            .get(format!("{base}/snapshot"))
+            .bearer_auth(&bearer)
+            .send()
+            .await
+            .unwrap()
+            .text()
+            .await
+            .unwrap();
+        assert!(body.contains("PUBLIC-TEXT"), "public task still syncs");
+        assert!(!body.contains("PRIVATE-SECRET") && !body.contains("priv-s"), "private leaked: {body}");
+        assert!(!body.contains("LEGACY-SECRET") && !body.contains("legacy-s"), "legacy leaked: {body}");
+
+        // A write that names the private task is refused before it reaches the store.
+        let full = store.device_sync_snapshot("peer").unwrap();
+        assert!(full.sessions.iter().any(|s| s.id == "priv-s"));
+        let put = client
+            .put(format!("{base}/snapshot"))
+            .bearer_auth(&bearer)
+            .json(&serde_json::json!({"document": full, "expected_version": "x"}))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(put.status(), reqwest::StatusCode::BAD_REQUEST);
+        assert_eq!(put.text().await.unwrap(), "session not found");
+        // Same for a document that names only the historical unowned session.
+        let mut only_legacy = store.device_sync_snapshot("peer").unwrap();
+        only_legacy.sessions.retain(|s| s.id == "legacy-s");
+        only_legacy.parts.retain(|p| p.session_id == "legacy-s");
+        let put = client
+            .put(format!("{base}/snapshot"))
+            .bearer_auth(&bearer)
+            .json(&serde_json::json!({"document": only_legacy, "expected_version": "x"}))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(put.status(), reqwest::StatusCode::BAD_REQUEST);
+        server.abort();
+    }
+
     #[tokio::test]
     async fn authenticated_handoff_routes_move_one_writable_task() {
         let source_workspace = tempfile::tempdir().unwrap();
@@ -3483,5 +4121,300 @@ mod tests {
             "activation consumes the task-transfer credential"
         );
         server.abort();
+    }
+
+    /// Inbound duplicate/activate/rollback against an existing creator-private session of the
+    /// same id must neither read nor overwrite it; the creator keeps it private.
+    #[tokio::test]
+    async fn authenticated_handoff_collision_never_touches_existing_private_session() {
+        let source_workspace = tempfile::tempdir().unwrap();
+        git(source_workspace.path(), &["init", "-q"]);
+        git(source_workspace.path(), &["config", "user.email", "test@codetwo.local"]);
+        git(source_workspace.path(), &["config", "user.name", "C2 Test"]);
+        std::fs::write(source_workspace.path().join("task.txt"), "before\n").unwrap();
+        git(source_workspace.path(), &["add", "task.txt"]);
+        git(source_workspace.path(), &["commit", "-qm", "baseline"]);
+        std::fs::write(source_workspace.path().join("task.txt"), "incoming\n").unwrap();
+
+        let source_data = tempfile::tempdir().unwrap();
+        let target_data = tempfile::tempdir().unwrap();
+        let source_store =
+            Arc::new(Store::open(source_data.path().join("codetwo.db").to_str().unwrap()).unwrap());
+        let target_store =
+            Arc::new(Store::open(target_data.path().join("codetwo.db").to_str().unwrap()).unwrap());
+        let incoming = Session::new(
+            ProviderId::Codex,
+            source_workspace.path().to_string_lossy().into_owned(),
+        );
+        source_store.upsert_session(&incoming).unwrap();
+        // The destination already owns a session with the same id: the creator's private task.
+        let mut existing = incoming.clone();
+        existing.title = "creator private task".into();
+        existing.cwd = "/creator/private/cwd".into();
+        target_store.upsert_session(&existing).unwrap();
+        let before = serde_json::to_value(target_store.get_session(&incoming.id).unwrap().unwrap()).unwrap();
+
+        let (source_engine, _) =
+            Engine::with_store(Vec::new(), SkillLibrary::new(Vec::new()), source_store.clone());
+        let (target_engine, target_events) =
+            Engine::with_store(Vec::new(), SkillLibrary::new(Vec::new()), target_store.clone());
+        let share = Arc::new(codetwo_core::share::ShareStore::in_memory());
+        let creator = share.participant("creator-device");
+        let other = share.participant("other-device");
+        share
+            .register_session(&incoming.id, &creator, codetwo_core::share::Visibility::Private)
+            .unwrap();
+        target_engine.attach_share_store(share.clone());
+        let target_events = super::fanout(target_events);
+        let auth = Arc::new(super::AuthState::load(None));
+        let pairing = auth.issue_t3_pairing_token(Duration::from_secs(60));
+        let paired = auth
+            .try_pair_with_profile_options(
+                &pairing,
+                "task transfer",
+                Some(Duration::from_secs(60)),
+                vec!["orchestration:operate".into()],
+                true,
+            )
+            .unwrap()
+            .unwrap();
+        let (address, server) = super::bind_and_serve_with_canvas(
+            Arc::new(target_engine),
+            target_events,
+            "127.0.0.1:0".parse().unwrap(),
+            auth.clone(),
+            target_store.clone(),
+            codetwo_core::CanvasFeatureGate::default(),
+        )
+        .await
+        .unwrap();
+        let source =
+            TaskHandoffManager::new(source_store.clone(), Arc::new(source_engine), None).unwrap();
+        let handoff = source.prepare(&incoming.id).await.unwrap();
+        let target_parent = tempfile::tempdir().unwrap();
+        let destination = target_parent.path().join("collision");
+        let base = format!("http://{address}");
+        let client = reqwest::Client::new();
+
+        let duplicate = client
+            .post(format!("{base}/api/codetwo/handoffs"))
+            .bearer_auth(&paired.bearer)
+            .json(&serde_json::json!({ "handoff": handoff, "destination": destination }))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(duplicate.status(), reqwest::StatusCode::BAD_REQUEST);
+        let activate = client
+            .post(format!("{base}/api/codetwo/handoffs/{}/activate", handoff.id))
+            .bearer_auth(&paired.bearer)
+            .json(&serde_json::json!({ "session": incoming.id, "epoch": handoff.epoch }))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(activate.status(), reqwest::StatusCode::CONFLICT);
+        let rollback = client
+            .post(format!("{base}/api/codetwo/handoffs/{}/rollback", handoff.id))
+            .bearer_auth(&paired.bearer)
+            .json(&serde_json::json!({
+                "session": incoming.id, "epoch": handoff.epoch, "destination": destination
+            }))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(rollback.status(), reqwest::StatusCode::CONFLICT);
+        let hidden_activate = (activate.status(), activate.text().await.unwrap());
+        let hidden_rollback = (rollback.status(), rollback.text().await.unwrap());
+        let hidden_accept_body = duplicate.text().await.unwrap();
+
+        // A session id that does not exist at all must be refused with the SAME outward answer.
+        let unknown = "no-such-session-id";
+        let unknown_activate = client
+            .post(format!("{base}/api/codetwo/handoffs/{}/activate", handoff.id))
+            .bearer_auth(&paired.bearer)
+            .json(&serde_json::json!({ "session": unknown, "epoch": handoff.epoch }))
+            .send()
+            .await
+            .unwrap();
+        let unknown_activate = (unknown_activate.status(), unknown_activate.text().await.unwrap());
+        let unknown_rollback = client
+            .post(format!("{base}/api/codetwo/handoffs/{}/rollback", handoff.id))
+            .bearer_auth(&paired.bearer)
+            .json(&serde_json::json!({
+                "session": unknown, "epoch": handoff.epoch, "destination": destination
+            }))
+            .send()
+            .await
+            .unwrap();
+        let unknown_rollback = (unknown_rollback.status(), unknown_rollback.text().await.unwrap());
+        assert_eq!(hidden_activate, unknown_activate, "hidden private vs unknown activate");
+        assert_eq!(hidden_rollback, unknown_rollback, "hidden private vs unknown rollback");
+        assert!(
+            !hidden_accept_body.contains(&incoming.id)
+                && !hidden_activate.1.contains(&incoming.id)
+                && !hidden_rollback.1.contains(&incoming.id),
+            "refusals never echo the private session id"
+        );
+
+        let after = serde_json::to_value(target_store.get_session(&incoming.id).unwrap().unwrap()).unwrap();
+        assert_eq!(after, before, "the existing session is not overwritten, activated or deleted");
+        assert!(share.can_view(&incoming.id, &creator), "creator keeps the private session");
+        assert!(!share.can_view(&incoming.id, &other), "it stays private to others");
+        assert!(
+            auth.authorize_bearer_profile(&paired.bearer).is_some(),
+            "a refused activation does not consume the credential"
+        );
+        server.abort();
+    }
+
+    /// Handoff target visibility follows the common ShareStore decision for the actual caller,
+    /// including historical unowned sessions (local/unshared). Without a ShareStore: unchanged.
+    #[test]
+    fn handoff_target_hidden_follows_common_can_view() {
+        use codetwo_core::share::{ShareStore, Visibility};
+        let share = ShareStore::in_memory();
+        let creator = share.participant("creator-device");
+        share.register_session("priv", &creator, Visibility::Private).unwrap();
+        share.register_session("pub", &creator, Visibility::Public).unwrap();
+        assert!(super::handoff_target_hidden(Some(&share), "other-device", "priv"));
+        assert!(super::handoff_target_hidden(Some(&share), "", "priv"), "local owner is not exempt");
+        assert!(!super::handoff_target_hidden(Some(&share), "creator-device", "priv"));
+        assert!(!super::handoff_target_hidden(Some(&share), "other-device", "pub"));
+        // Historical unowned session: local/unshared, hidden from any paired device, not public.
+        assert!(super::handoff_target_hidden(Some(&share), "other-device", "legacy-unowned"));
+        assert!(super::handoff_target_hidden(Some(&share), "creator-device", "legacy-unowned"));
+        assert!(!super::handoff_target_hidden(Some(&share), "", "legacy-unowned"));
+        assert!(!super::handoff_target_hidden(None, "other-device", "priv"), "bare server unchanged");
+    }
+
+    /// Task snapshot events carry the task's subject session, so the common event policy hides a
+    /// private task's id/revision from the local owner too, while public tasks stay visible.
+    #[tokio::test]
+    async fn task_snapshot_events_follow_subject_session_visibility_for_local_owner() {
+        use codetwo_core::share::Visibility;
+        use codetwo_core::{
+            ProviderConfiguration, ResultContract, Task, TaskBudget, TaskGraph, TaskId,
+            TaskStatus, WorkItem, WorkItemId, WorkItemStatus,
+        };
+        let store = Arc::new(Store::open_in_memory().unwrap());
+        let make_task = |id: &str| Task {
+            id: TaskId::new(id),
+            status: TaskStatus::Active,
+            result_contract: ResultContract {
+                goal: "g".into(),
+                required_deliverables: vec!["d".into()],
+                completion_conditions: vec!["c".into()],
+                boundaries: Vec::new(),
+                known_risks: Vec::new(),
+                unresolved_facts: Vec::new(),
+            },
+            provider_configuration: ProviderConfiguration {
+                provider: ProviderId::Codex,
+                model: None,
+                reasoning_effort: None,
+            },
+            budget: TaskBudget {
+                max_cost_microusd: None,
+                max_tokens: None,
+                max_duration_seconds: None,
+            },
+        };
+        let assign = |task: &str, sessions: &[&str]| {
+            store.create_task(&make_task(task), 1).unwrap();
+            let work_items = if sessions.is_empty() { vec![None] } else { sessions.iter().map(|s| Some(*s)).collect() };
+            let graph = TaskGraph {
+                revision: 1,
+                work_items: work_items.into_iter().enumerate().map(|(i, session)| WorkItem {
+                    id: WorkItemId::new(format!("w{i}")),
+                    objective: "o".into(),
+                    result_contract_conditions: Vec::new(),
+                    scenes: Vec::new(),
+                    agent_skills: Vec::new(),
+                    input_artifacts: Vec::new(),
+                    expected_outputs: Vec::new(),
+                    completion_evidence: Vec::new(),
+                    status: WorkItemStatus::Ready,
+                    blocker: None,
+                    assigned_session_id: session.map(str::to_string),
+                    reason: "r".into(),
+                }).collect(),
+                edges: Vec::new(),
+            };
+            store.apply_task_graph(&TaskId::new(task), 0, &graph, "a", 2).unwrap();
+        };
+        assign("task-private", &["sess-private"]);
+        assign("task-public", &["sess-public"]);
+        assign("task-public2", &["sess-public", "sess-public-b"]);
+        assign("task-mixed", &["sess-public", "sess-private"]);
+        assign("task-two-private", &["sess-private", "sess-private-b"]);
+        assign("task-none", &[]);
+
+        let (engine, rx) =
+            Engine::with_store(Vec::new(), SkillLibrary::new(Vec::new()), store.clone());
+        let events = super::fanout(rx);
+        let share = Arc::new(codetwo_core::share::ShareStore::in_memory());
+        let creator = share.participant("creator-device");
+        share.register_session("sess-private", &creator, Visibility::Private).unwrap();
+        share.register_session("sess-public", &creator, Visibility::Public).unwrap();
+        share.register_session("sess-public-b", &creator, Visibility::Public).unwrap();
+        let creator_b = share.participant("creator-b-device");
+        share.register_session("sess-private-b", &creator_b, Visibility::Private).unwrap();
+        let engine = Arc::new(engine);
+        let auth = Arc::new(super::AuthState::load(None));
+        let state = super::ServerState {
+            handoff: Arc::new(
+                TaskHandoffManager::new(store.clone(), engine.clone(), Some(events.clone()))
+                    .unwrap(),
+            ),
+            t3: Arc::new(
+                super::t3_compat::T3CompatState::new(engine.clone(), events.clone(), auth.clone())
+                    .unwrap(),
+            ),
+            engine,
+            events: events.clone(),
+            auth,
+            store: store.clone(),
+            canvas_gate: codetwo_core::CanvasFeatureGate::default(),
+            terminals: Arc::new(super::terminal::TerminalRegistry::default()),
+            device_sync: None,
+            web_ui_commands: None,
+        };
+        let mut rx = events.subscribe();
+        for task in ["task-private", "task-public", "task-public2", "task-mixed", "task-two-private", "task-none"] {
+            super::publish_task_snapshot(&state, &TaskId::new(task), 7);
+        }
+        let mut seen: std::collections::HashMap<String, (codetwo_core::Event, usize)> = std::collections::HashMap::new();
+        while let Ok(event) = rx.try_recv() {
+            if let codetwo_core::Event::TaskSnapshotChanged { task_id, sessions, .. } = event.clone() {
+                let entry = seen.entry(task_id.as_str().to_string()).or_insert((event, 0));
+                entry.1 += 1;
+                assert_eq!(entry.1, 1, "one canonical event per task, not one per session");
+                let _ = sessions;
+            }
+        }
+        // ALL subjects must authorize: a viewer of one public session of a mixed task is denied.
+        let (mixed, _) = &seen["task-mixed"];
+        assert!(!super::share_event_visible(&share, "", mixed), "local owner is not exempt");
+        assert!(!super::share_event_visible(&share, "other-device", mixed), "public-session viewer must not learn mixed task");
+        assert!(!super::share_event_visible(&share, "creator-b-device", mixed), "a private creator of another session is not enough");
+        assert!(super::share_event_visible(&share, "creator-device", mixed));
+        // Two distinct private creators: neither alone may see it.
+        let (two, _) = &seen["task-two-private"];
+        assert!(!super::share_event_visible(&share, "creator-device", two));
+        assert!(!super::share_event_visible(&share, "creator-b-device", two));
+        assert!(!super::share_event_visible(&share, "", two));
+        // All-public multi-subject updates keep flowing.
+        let (pub2, _) = &seen["task-public2"];
+        assert!(super::share_event_visible(&share, "other-device", pub2));
+        assert!(super::share_event_visible(&share, "", pub2));
+        let (private_event, _) = &seen["task-private"];
+        assert!(!super::share_event_visible(&share, "", private_event), "local owner is not exempt");
+        assert!(!super::share_event_visible(&share, "other-device", private_event));
+        assert!(super::share_event_visible(&share, "creator-device", private_event));
+        let (public_event, _) = &seen["task-public"];
+        assert!(super::share_event_visible(&share, "", public_event), "public task updates still flow");
+        assert!(super::share_event_visible(&share, "other-device", public_event));
+        let (none_event, _) = &seen["task-none"];
+        assert!(matches!(none_event, codetwo_core::Event::TaskSnapshotChanged { sessions, .. } if sessions.is_empty()));
+        assert!(super::share_event_visible(&share, "", none_event), "legacy session-less task stays local");
     }
 }

@@ -55,8 +55,9 @@ pub async fn core_call(name: String, args: String) -> Result<String> {
     let args: Value =
         serde_json::from_str(&args).map_err(|e| Error::from_reason(format!("invalid JSON: {e}")))?;
 
+    // Ordinary native UI: creator-only policy with the trusted local actor.
     let result = app
-        .call(&name, args)
+        .call_local(&name, args)
         .await
         .map_err(|e| Error::from_reason(e.to_string()))?;
 
@@ -80,7 +81,7 @@ pub async fn core_call_in_project(
         serde_json::from_str(&args).map_err(|e| Error::from_reason(format!("invalid JSON: {e}")))?;
 
     let result = app
-        .call_in_project(&project_path, &name, args)
+        .call_local_in_project(&project_path, &name, args)
         .await
         .map_err(|e| Error::from_reason(e.to_string()))?;
 

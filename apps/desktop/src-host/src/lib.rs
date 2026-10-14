@@ -339,10 +339,10 @@ pub async fn run() -> Result<(), String> {
                 let result = match params {
                     Ok(params) => match params.project_path {
                         Some(project_path) => {
-                            core.call_in_project(project_path, &params.name, params.args)
+                            core.call_local_in_project(project_path, &params.name, params.args)
                                 .await
                         }
-                        None => core.call(&params.name, params.args).await,
+                        None => core.call_local(&params.name, params.args).await,
                     }
                     .map_err(|error| error.to_string()),
                     Err(error) => Err(error),

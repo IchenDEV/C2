@@ -825,6 +825,14 @@ export const TurnCard = memo(
                 </DropdownMenu>
               )}
               <div className="rounded-module bg-secondary text-prose text-secondary-foreground max-w-[86%] px-3.5 py-2">
+                {turn.authorName && (
+                  <div
+                    className="text-muted-foreground mb-0.5 text-xs"
+                    data-message-author
+                  >
+                    {turn.authorName}
+                  </div>
+                )}
                 {promptImages.length > 0 && (
                   <div
                     data-prompt-images

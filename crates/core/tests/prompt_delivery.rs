@@ -160,6 +160,27 @@ for line in sys.stdin:
         1
     );
     engine.cancel_pending_prompts(&session).unwrap();
+    // The store truth ("later" was queued -> cancelled) is also announced, with the real id.
+    assert_eq!(
+        store.prompt_delivery("later").unwrap().unwrap().state,
+        "cancelled"
+    );
+    let cancelled = tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            if let Some(Event::PromptsCancelled {
+                session: ended,
+                request_ids,
+            }) = events.recv().await
+            {
+                break (ended, request_ids);
+            }
+        }
+    })
+    .await
+    .unwrap();
+    assert_eq!(cancelled, (session.clone(), vec!["later".to_string()]));
+    // Nothing left to cancel: no second, false notification.
+    engine.cancel_pending_prompts(&session).unwrap();
     engine
         .submit(Op::Cancel {
             session: session.clone(),

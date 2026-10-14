@@ -46,6 +46,42 @@ impl WebUiCommandCaller for RecordingCaller {
             "project_path": project_path,
         }))
     }
+
+    // Intentionally unshared test adapter: opts in explicitly (the trait default is deny).
+    fn session_visible(&self, _device_id: &str, _session: &str) -> bool {
+        true
+    }
+
+    fn event_visible(&self, _device_id: &str, _event: &codetwo_core::Event) -> bool {
+        true
+    }
+}
+
+/// A custom caller that implements only `call` (never wired to the share policy) must not expose
+/// any session or event through the live exits: the trait default is deny, not allow.
+struct UnwiredCaller;
+
+#[async_trait::async_trait]
+impl WebUiCommandCaller for UnwiredCaller {
+    async fn call(&self, _: &str, _: &str, _: Value, _: Option<String>) -> Result<Value, String> {
+        Ok(Value::Null)
+    }
+}
+
+#[test]
+fn unwired_custom_caller_denies_sessions_and_events_by_default() {
+    let caller = UnwiredCaller;
+    assert!(!caller.session_visible("device", "any-session"));
+    let event = codetwo_core::Event::SessionShareChanged {
+        session: "any-session".into(),
+        kind: "revoked".into(),
+        revision: 1,
+    };
+    assert!(!caller.event_visible("device", &event));
+    // The explicit unshared adapter still sees both.
+    let open = RecordingCaller::default();
+    assert!(open.session_visible("device", "any-session"));
+    assert!(open.event_visible("device", &event));
 }
 
 async fn http(addr: SocketAddr, bearer: Option<&str>, body: &str) -> (u16, String) {

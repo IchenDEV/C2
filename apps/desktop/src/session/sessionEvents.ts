@@ -141,7 +141,10 @@ export function shouldRenderSessionEvent(
   if (
     event.event === "session_created" ||
     event.event === "session_title_changed" ||
-    event.event === "session_activity_changed"
+    event.event === "session_activity_changed" ||
+    // Task snapshots carry `sessions` (all subjects), not one session; they refetch state and
+    // never render as transcript rows.
+    event.event === "task_snapshot_changed"
   )
     return false;
   // Session creation is broadcast to every connected client. A correlated global failure is

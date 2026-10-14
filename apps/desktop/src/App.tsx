@@ -402,6 +402,20 @@ import type {
   SessionCreationShell,
 } from "./session/sessionEvents";
 import { SessionHeaderActions } from "./session/SessionHeaderActions";
+import { ShareControls } from "./session/ShareControls";
+import {
+  DEFAULT_VISIBILITY,
+  getShare,
+  isShareChangedEvent,
+  scopeEventToSelf,
+  shareEventEffects,
+  whoami,
+} from "./session/share";
+import type {
+  ShareChangedEvent,
+  ShareParticipant,
+  ShareVisibility,
+} from "./session/share";
 import { SessionTitlePair } from "./session/SessionTitlePair";
 import { QuickChatPanel, SideChatPanel } from "./session/SideChatPanel";
 import type { TransientChatSeed } from "./session/SideChatPanel";
@@ -948,6 +962,8 @@ export default function App() {
     setPaneLayout((layout) => setSplitRatio(layout, splitId, ratio));
   };
   const activeSession = paneContents[paneLayout.focused]?.sessionId ?? null;
+  const [newSessionVisibility, setNewSessionVisibility] =
+    useState<ShareVisibility>(DEFAULT_VISIBILITY);
   // A value-only setter shim: every existing caller assigns a concrete id (or null for a draft),
   // and all of them already mirror it into `activeSessionRef` first, so the ref stays authoritative
   // for the event handler while this points the focused pane at the same session.
@@ -2976,6 +2992,21 @@ export default function App() {
     };
   }, [toast]);
 
+  const shareIdentityRef = useRef<ShareParticipant | null>(null);
+  useEffect(() => {
+    let live = true;
+    whoami()
+      .then((value) => {
+        if (live) shareIdentityRef.current = value;
+      })
+      .catch(() => {
+        // Identity unavailable (legacy/headless without share): ids pass through unscoped.
+      });
+    return () => {
+      live = false;
+    };
+  }, []);
+
   const coreEventCallbacks = useLatestRef({
     applyAuthoritativeExecutionPolicy,
     finishPolicyRequest,
@@ -3000,7 +3031,10 @@ export default function App() {
     let unlisten: (() => void) | null = null;
     let disposed = false;
     void (async () => {
-      unlisten = await onEngineEvent((ev: CoreEvent) => {
+      unlisten = await onEngineEvent((rawEvent: CoreEvent) => {
+        // Resolve actor-scoped request ids back to this client's own ids; another participant's
+        // reused clientId becomes null so it can never select or resolve our pending state.
+        const ev = scopeEventToSelf(rawEvent, shareIdentityRef.current);
         const {
           applyAuthoritativeExecutionPolicy,
           finishPolicyRequest,
@@ -3022,6 +3056,10 @@ export default function App() {
         // Shared Task clients refetch the revisioned Task snapshot. The production TaskBoard is
         // still local in this P0 and must not render this control-plane event as transcript data.
         if (ev.event === "task_snapshot_changed") return;
+        if (isShareChangedEvent(ev)) {
+          applyShareChangedRef.current(ev);
+          return;
+        }
         if (ev.event === "session_created") {
           const refreshed = refreshSessions();
           if (!matchesSessionCreation(ev, awaitingSessionRef.current)) return;
@@ -3661,6 +3699,13 @@ export default function App() {
               }
               editorRefs.clearRef.current?.();
             }
+          } else {
+            // Another actor's turn: the placeholder row has no prompt/author, so re-read the
+            // canonical transcript (merge keys on the turn's transcript seq / request id).
+            const pane = paneBoundToSession(paneContentsRef.current, ev.session);
+            if (pane != null && pane !== "") {
+              void selectSession(ev.session, pane, true);
+            }
           }
         }
         const awaitingCreationRequest = awaitingSessionRef.current;
@@ -4055,7 +4100,8 @@ export default function App() {
           currentModel,
           false,
           pendingCreationRef.current?.projectReasoningEffort ?? null,
-          parallelTask
+          parallelTask,
+          newSessionVisibility
         );
       }
     } catch (error) {
@@ -4825,6 +4871,10 @@ export default function App() {
     flushActiveComposerDraft();
     const alreadyBoundPane =
       paneBoundToSession(paneContentsRef.current, id) ?? undefined;
+    // A re-read of the session this pane already shows (e.g. another actor's turn started) must
+    // merge into the live rows, not erase them: a cleared list loses Cancelled status and timing.
+    const rereadsShownSession =
+      paneContentsRef.current[requestedPaneId]?.sessionId === id;
     // Selecting a session already visible elsewhere focuses that pane instead of creating two
     // transcript consumers for one event stream.
     const paneId = alreadyBoundPane ?? requestedPaneId;
@@ -4951,7 +5001,7 @@ export default function App() {
         );
       }
     }
-    if (shouldReloadTranscript) setPaneTurns(paneId, []);
+    if (shouldReloadTranscript && !rereadsShownSession) setPaneTurns(paneId, []);
     // Models belong to a session. The agent only reports its own menu at session/new — which for
     // a session resumed from the store hasn't happened again yet — so start from the provider's
     // built-in list and let the agent's own options replace it when the next turn revives the
@@ -5030,6 +5080,69 @@ export default function App() {
       }
     }
   };
+
+  /**
+   * Applies one `session_share_changed` event to selected pane / transcript / pending-request
+   * state. Revocation discards content immediately for everyone; a participant the backend still
+   * allows (the creator) re-reads afterwards, so a denied reader never keeps stale private turns.
+   */
+  const applyShareChanged = (event: ShareChangedEvent) => {
+    const session = event.session;
+    const pane = paneBoundToSession(paneContentsRef.current, session);
+    for (const effect of shareEventEffects(event)) {
+      if (effect === "drop") {
+        pendingPromptRequestsRef.current.delete(session);
+        setPermissionQueue((previous) =>
+          previous.filter((request) => request.session !== session)
+        );
+        memoryReceiptsBySessionRef.current.delete(session);
+        sessionActivitiesRef.current.delete(session);
+        const hasPane = pane != null && pane !== "";
+        if (hasPane) {
+          setPaneTurns(pane, []);
+          updateTranscriptCursor(pane, null);
+        }
+        void getShare(session).then(
+          // Still allowed (creator): re-read the rail and, if open, the transcript.
+          () => {
+            void refreshSessions();
+            if (hasPane) void selectSession(session, pane, true);
+          },
+          () => {
+            // Denied: the task disappears from every rail/list cache, not only the pane, and the
+            // server list is re-read so the rail agrees with `sessions.list` gating. Only a denied
+            // reader forgets the live turn; the still-allowed creator keeps Core's running state.
+            runningPromptRequestsRef.current.delete(session);
+            latestTurnRequestIdsRef.current.delete(session);
+            updateRunningSession(session, false);
+            const keep = (items: SessionInfo[]) =>
+              items.filter((item) => item.id !== session);
+            setSessions(keep);
+            setArchivedSessions(keep);
+            setPreviews((current) => {
+              const { [session]: _gone, ...rest } = current;
+              return rest;
+            });
+            void refreshSessions();
+            if (!hasPane) return;
+            if (activeSessionRef.current === session) {
+              activeSessionRef.current = null;
+            }
+            setPaneSession(pane, null);
+            toast("This task is no longer shared with you", "error");
+          }
+        );
+      } else if (
+        effect === "refresh-transcript" &&
+        pane != null &&
+        pane !== "" &&
+        focusedPaneRef.current === pane
+      ) {
+        void selectSession(session, pane, true);
+      }
+    }
+  };
+  const applyShareChangedRef = useLatestRef(applyShareChanged);
 
   useEffect(() => {
     let dispose: (() => void) | null = null;
@@ -8445,6 +8558,31 @@ export default function App() {
                               />
                             </div>
 
+                            {activeSession ? (
+                              <ShareControls session={activeSession} />
+                            ) : (
+                              <label className="share-new-visibility flex items-center gap-1 text-xs">
+                                <span className="text-muted-foreground">
+                                  New task visibility
+                                </span>
+                                <select
+                                  aria-label="New task visibility"
+                                  value={newSessionVisibility}
+                                  onChange={(event) =>
+                                    setNewSessionVisibility(
+                                      event.target.value as ShareVisibility
+                                    )
+                                  }
+                                >
+                                  <option value="public">
+                                    Public (everyone can join)
+                                  </option>
+                                  <option value="private">
+                                    Private (only you)
+                                  </option>
+                                </select>
+                              </label>
+                            )}
                             <SessionHeaderActions
                               gitAction={gitAction}
                               actions={scripts}
