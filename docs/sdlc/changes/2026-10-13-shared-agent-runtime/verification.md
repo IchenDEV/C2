@@ -54,6 +54,13 @@ review of the clean integration found nothing in its bounded scope: [r42](eviden
 
 CI fix (R45): the first CI `Validate` run on 4a554bf3 failed at `bun run check` (format on 5 files and 34 lint errors in the sharing UI files, run 38505754099). The fix is format and lint only with no behavior change: the sole new reducer case, `session_share_changed`, is an explicit no-op as before. After it, `bun run check`, `tsc --noEmit`, `vite build` and `bun test --isolate` (1116 pass, 3 skip, 0 fail) exit 0 locally; the CI result of the new head is not claimed here.
 
+CI round 2 (R48): the second `Validate` run (38506558295) on d3dfe28 passed desktop lint, tests and vite but failed
+`cargo check --workspace --all-targets` (E0004): the example `live_demo.rs` did not match the new `SessionShareChanged`
+event. One ignored-event arm was added there (no behavior change). Offline `cargo check --workspace --all-targets` and
+`cargo test --workspace --no-run` both exit 0 locally; the CI result of the new head is not claimed. Independent
+review and rendered UI of the lint delta: [r46](evidence/r46-current-render-review.md) (two browser origins on one Mac,
+not two physical devices). Two rendering observations are open and not attributed to the baseline.
+
 Verdict: verified.
 Residual risk: bounded local candidate only. No native steer (fixture ACP lacks it), no paid Agent, cloud, CI or deployment evidence; application visibility is not OS isolation; cross-host handoff without creator provenance stays local/unshared and remote activation is unsupported; manual `share.whoami` and direct hidden-task HTTP refusal were not run in the UI; the rail shows `Completed` for a Cancelled turn (pre-existing generic label, low severity, not fixed); the storage file and event wire details were not separately human-reviewed; no human review or release is approved; the user's R41 takeover authorizes the commit, push, feature PR and merge only after independent review.
 

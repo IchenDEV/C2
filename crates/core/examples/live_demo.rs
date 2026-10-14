@@ -227,6 +227,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 | Event::SessionCapabilities { .. }
                 | Event::PromptQueued { .. }
                 | Event::PromptsCancelled { .. }
+                | Event::SessionShareChanged { .. }
                 | Event::SteerAccepted { .. }
                 | Event::WorktreeDiscarded { .. }
                 | Event::AssistantAlert { .. } => {}
