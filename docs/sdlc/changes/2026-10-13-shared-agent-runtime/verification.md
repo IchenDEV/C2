@@ -47,9 +47,10 @@ merged by hand: the unrelated read-only `prompt_delivery` baseline additions are
 On the final diff, `codetwo-core` prompt_delivery and the six share suites, `codetwo-server` share_policy,
 t3_share_privacy, ws_share_parity, pairing_link, team_collaboration and web_ui_commands, `cargo check`
 for NAPI and desktop host, `tsc --noEmit`, `vite build --mode web`, and the four affected UI test files
-(83 pass) all exit 0. The full desktop `bun test` has 10 failures in two assistant React test files that
-pass on their own both with and without this change; the full run was not compared against plain main. Earlier R36-R38 evidence is still the record for UI renders
-and the fixture runs; no new render was done in R41. Independent review, PR and merge follow separately.
+(83 pass) all exit 0. The plain full desktop `bun test` has the same 10 failures on base `fb3cb829` and on
+the candidate; the official `bun test --isolate` on the candidate passes (1116 pass, 3 skip, 0 fail). Earlier R36-R38
+evidence is still the record for UI renders and the fixture runs; no new clean-tree render was done. A fresh independent
+review of the clean integration found nothing in its bounded scope: [r42](evidence/r42-clean-integration-review.md).
 
 Verdict: verified.
 Residual risk: bounded local candidate only. No native steer (fixture ACP lacks it), no paid Agent, cloud, CI or deployment evidence; application visibility is not OS isolation; cross-host handoff without creator provenance stays local/unshared and remote activation is unsupported; manual `share.whoami` and direct hidden-task HTTP refusal were not run in the UI; the rail shows `Completed` for a Cancelled turn (pre-existing generic label, low severity, not fixed); the storage file and event wire details were not separately human-reviewed; no human review or release is approved; the user's R41 takeover authorizes the commit, push, feature PR and merge only after independent review.
@@ -65,7 +66,7 @@ Evidence: index above; main `/Users/chenli/projects/codeTwo` branch `refactor/ar
 
 ## Review and release
 
-Approval: human review pending; none claimed. The user's product/privacy decisions are the existing design decisions in spec.md; no rollout, migration, publication or release approval.
+Approval: human review pending; none claimed. The change is large (over 3000 lines and over 100 files), so the repository policy requires human review; the independent Agent review above does not replace it. The user's product/privacy decisions are the existing design decisions in spec.md; no rollout, migration, publication or release approval.
 Rollback: See plan.md.
-Release: No release requested; commit, push, PR and merge need their own authorization.
+Release: No release requested. The user's 2026-10-14 `merge` and takeover authorize the feature commit, push, a draft PR and merge after review and required checks; no cloud, CI or human review result is claimed.
 Feedback: Link an Incident and regression Eval when a real failure occurs.

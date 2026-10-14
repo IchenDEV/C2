@@ -10,7 +10,7 @@ risk: high
 approved_by: chenli (user, claim recorded by the executor; not authenticated)
 approved_at: 2026-10-13
 approval_source: User requests in this session on 2026-10-13 ("进入功能开发，你可以派出 subagent"; "仅创建者可见"; "继续完成"; "开始实现完整分享功能") and the parent briefs for rounds r1-r36. Original user messages (positions 172, 183, 340, 348, 349 of the parent thread) are listed with timestamps in spec.md `design_approval_source`.
-next_trigger: Human review of the verified local candidate; commit, push, PR, release or rollout need their own authorization.
+next_trigger: Human review of the draft PR and required checks, then merge under the 2026-10-14 authorization; release or rollout need their own authorization.
 ---
 
 # Intent: Shared Agent Runtime
@@ -34,7 +34,7 @@ Current decisions (user, recorded as claims, not authenticated):
 ## Authorization actually recorded
 
 Bounded local functional development of this feature, in this worktree only, as given by the user
-requests above. Not authorized and not done: commit, push, PR, release, production or user services,
+requests above. Update 2026-10-14: the user wrote `merge` and said the original author is offline and the Agent now owns the delivery. That authorizes the feature commit, push, a draft PR and merge after independent review and required checks, for this sharing change only. The user's product and privacy decisions above are unchanged. Still not authorized and not done: release, production or user services,
 real user data or auth, invites, payments, installs, network or permission changes. No human code review,
 waiver, or high-risk rollout approval exists or is claimed (the user's product/privacy decisions are the existing design decisions linked in spec.md). The runtime privacy design
 (`private` as creator-only, durable authors, per-actor request ids) touches authorization behavior; it
