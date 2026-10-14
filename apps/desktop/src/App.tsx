@@ -402,7 +402,7 @@ import type {
   SessionCreationShell,
 } from "./session/sessionEvents";
 import { SessionHeaderActions } from "./session/SessionHeaderActions";
-import { ShareControls } from "./session/ShareControls";
+import { SessionTitlePair } from "./session/SessionTitlePair";
 import {
   DEFAULT_VISIBILITY,
   getShare,
@@ -416,7 +416,7 @@ import type {
   ShareParticipant,
   ShareVisibility,
 } from "./session/share";
-import { SessionTitlePair } from "./session/SessionTitlePair";
+import { ShareControls } from "./session/ShareControls";
 import { QuickChatPanel, SideChatPanel } from "./session/SideChatPanel";
 import type { TransientChatSeed } from "./session/SideChatPanel";
 import { StageTrack } from "./session/StageTrack";
@@ -3702,7 +3702,10 @@ export default function App() {
           } else {
             // Another actor's turn: the placeholder row has no prompt/author, so re-read the
             // canonical transcript (merge keys on the turn's transcript seq / request id).
-            const pane = paneBoundToSession(paneContentsRef.current, ev.session);
+            const pane = paneBoundToSession(
+              paneContentsRef.current,
+              ev.session
+            );
             if (pane != null && pane !== "") {
               void selectSession(ev.session, pane, true);
             }
@@ -5001,7 +5004,8 @@ export default function App() {
         );
       }
     }
-    if (shouldReloadTranscript && !rereadsShownSession) setPaneTurns(paneId, []);
+    if (shouldReloadTranscript && !rereadsShownSession)
+      setPaneTurns(paneId, []);
     // Models belong to a session. The agent only reports its own menu at session/new — which for
     // a session resumed from the store hasn't happened again yet — so start from the provider's
     // built-in list and let the agent's own options replace it when the next turn revives the
@@ -8558,7 +8562,7 @@ export default function App() {
                               />
                             </div>
 
-                            {activeSession ? (
+                            {activeSession != null && activeSession !== "" ? (
                               <ShareControls session={activeSession} />
                             ) : (
                               <label className="share-new-visibility flex items-center gap-1 text-xs">
@@ -8570,7 +8574,9 @@ export default function App() {
                                   value={newSessionVisibility}
                                   onChange={(event) =>
                                     setNewSessionVisibility(
-                                      event.target.value as ShareVisibility
+                                      event.target.value === "private"
+                                        ? "private"
+                                        : "public"
                                     )
                                   }
                                 >

@@ -121,9 +121,7 @@ export function ShareControls({
     >
       <span
         className="share-visibility text-muted-foreground"
-        data-visibility={
-          record?.visibility ?? (denied ? "denied" : "local")
-        }
+        data-visibility={record?.visibility ?? (denied ? "denied" : "local")}
       >
         {visibilityLabel(record, legacy, denied)}
       </span>
@@ -132,7 +130,9 @@ export function ShareControls({
           type="button"
           variant="ghost"
           size="compact"
-          onClick={() => void run(() => setShareVisibility(session, next))}
+          onClick={() =>
+            void run(async () => await setShareVisibility(session, next))
+          }
         >
           Make {next}
         </Button>
@@ -144,7 +144,9 @@ export function ShareControls({
           size="compact"
           aria-pressed={followers.following}
           onClick={() =>
-            void run(() => setShareFollow(session, !followers.following))
+            void run(
+              async () => await setShareFollow(session, !followers.following)
+            )
           }
         >
           {followers.following ? "Following" : "Follow"}
@@ -152,7 +154,7 @@ export function ShareControls({
         </Button>
       )}
       <input
-        className="share-nickname bg-transparent w-24 max-w-full min-w-0 rounded border px-1"
+        className="share-nickname rounded-control w-24 max-w-full min-w-0 border bg-transparent px-1"
         aria-label="Your nickname"
         value={nickname}
         onChange={(e) => setNicknameDraft(e.target.value)}
@@ -171,8 +173,10 @@ export function ShareControls({
       >
         Share link
       </Button>
-      {linkState && <span className="text-muted-foreground">{linkState}</span>}
-      {error && (
+      {linkState !== null && linkState !== "" && (
+        <span className="text-muted-foreground">{linkState}</span>
+      )}
+      {error !== null && error !== "" && (
         <span role="alert" className="text-destructive">
           {error}
         </span>

@@ -42,34 +42,37 @@ export type ShareChangeKind =
 export interface ShareChangedEvent {
   event: "session_share_changed";
   session: string;
-  kind: ShareChangeKind | (string & {});
+  kind: string;
   revision: number;
 }
 
-export function whoami(): Promise<ShareParticipant> {
-  return call<ShareParticipant>("share.whoami", null);
+export async function whoami(): Promise<ShareParticipant> {
+  return await call<ShareParticipant>("share.whoami", null);
 }
 
-export function setNickname(nickname: string): Promise<ShareParticipant> {
-  return call<ShareParticipant>("share.set_nickname", { nickname });
+export async function setNickname(nickname: string): Promise<ShareParticipant> {
+  return await call<ShareParticipant>("share.set_nickname", { nickname });
 }
 
-export function getShare(session: string): Promise<ShareRecord> {
-  return call<ShareRecord>("share.get", { session });
+export async function getShare(session: string): Promise<ShareRecord> {
+  return await call<ShareRecord>("share.get", { session });
 }
 
-export function setShareVisibility(
+export async function setShareVisibility(
   session: string,
   visibility: ShareVisibility
 ): Promise<ShareRecord> {
-  return call<ShareRecord>("share.set_visibility", { session, visibility });
+  return await call<ShareRecord>("share.set_visibility", {
+    session,
+    visibility,
+  });
 }
 
-export function setShareFollow(
+export async function setShareFollow(
   session: string,
   follow: boolean
 ): Promise<ShareRecord> {
-  return call<ShareRecord>("share.follow", { session, follow });
+  return await call<ShareRecord>("share.follow", { session, follow });
 }
 
 /**
@@ -81,7 +84,9 @@ export function scopedRequestId(
   actor: string | null | undefined,
   clientId: string
 ): string {
-  return actor ? `${actor}/${clientId}` : clientId;
+  return actor === null || actor === undefined || actor === ""
+    ? clientId
+    : `${actor}/${clientId}`;
 }
 
 export function matchesRequest(
@@ -121,30 +126,35 @@ export function scopeEventToSelf<T extends object>(
   event: T,
   me: ShareParticipant | null
 ): T {
+  const record: Record<string, unknown> = Object.fromEntries(
+    Object.entries(event)
+  );
   const fields = ["request_id", "prompt_request_id"] as const;
   let next: Record<string, unknown> | null = null;
   for (const field of fields) {
-    const value = (event as Record<string, unknown>)[field];
+    const value = record[field];
     if (typeof value !== "string") continue;
     const own = ownClientRequestId(me, value);
     if (own === value) continue;
-    next ??= { ...(event as Record<string, unknown>) };
+    next ??= { ...record };
     next[field] = own;
   }
   // `prompts_cancelled.request_ids` carries the store's actor-scoped ids; keep only this actor's
   // own, mapped back to the client ids its queued rows hold (foreign ids must never match).
-  const ids = (event as Record<string, unknown>).request_ids;
+  const ids = record.request_ids;
   if (Array.isArray(ids)) {
     const own = ids
       .filter((id): id is string => typeof id === "string")
       .map((id) => ownClientRequestId(me, id))
       .filter((id): id is string => id != null);
     if (own.length !== ids.length || own.some((id, i) => id !== ids[i])) {
-      next ??= { ...(event as Record<string, unknown>) };
+      next ??= { ...record };
       next.request_ids = own;
     }
   }
-  return (next ?? event) as T;
+  if (next === null) return event;
+  const scoped: T = { ...event, ...next };
+  return scoped;
 }
 
 export function isShareChangedEvent(
@@ -164,12 +174,15 @@ export function shareEventEffects(
   event: ShareChangedEvent
 ): ShareEventEffect[] {
   switch (event.kind) {
-    case "revoked":
+    case "revoked": {
       return ["drop"];
-    case "message_author":
+    }
+    case "message_author": {
       return ["refresh-share", "refresh-transcript"];
-    default:
+    }
+    default: {
       return ["refresh-share"];
+    }
   }
 }
 
@@ -184,7 +197,7 @@ export function authorForSeq(
 
 export function authorLabel(author: MessageAuthor | null): string | null {
   const name = author?.nickname.trim();
-  return name ? name : null;
+  return name === undefined || name === "" ? null : name;
 }
 
 /** Display names of followers; the viewer is shown as "You". Backend ids never surface. */

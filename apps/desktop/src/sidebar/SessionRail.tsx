@@ -1551,7 +1551,8 @@ export function SessionRail({
                         <span
                           data-session-share={s.share.visibility ?? "local"}
                           title={
-                            s.share.creator_name
+                            s.share.creator_name != null &&
+                            s.share.creator_name !== ""
                               ? `${shareLabel(s.share)} · ${s.share.creator_name}`
                               : shareLabel(s.share)
                           }
@@ -1560,11 +1561,12 @@ export function SessionRail({
                           <span className="shrink-0 uppercase">
                             {shareLabel(s.share)}
                           </span>
-                          {s.share.creator_name && (
-                            <span className="min-w-0 truncate">
-                              · {s.share.creator_name}
-                            </span>
-                          )}
+                          {s.share.creator_name != null &&
+                            s.share.creator_name !== "" && (
+                              <span className="min-w-0 truncate">
+                                · {s.share.creator_name}
+                              </span>
+                            )}
                         </span>
                       )}
                       {remoteBadge}
@@ -2642,6 +2644,6 @@ export function SessionRail({
 }
 
 function shareLabel(share: NonNullable<SessionInfo["share"]>): string {
-  if (share.legacy || !share.visibility) return "Local only";
+  if (share.legacy === true || share.visibility == null) return "Local only";
   return share.visibility === "public" ? "Public" : "Private";
 }

@@ -123,7 +123,11 @@ describe("scopeEventToSelf", () => {
     };
     expect(scopeEventToSelf(event, device).request_ids).toEqual(["c1", "c2"]);
     expect(event.request_ids).toHaveLength(3);
-    const local = { event: "prompts_cancelled", session: "s", request_ids: ["c1"] };
+    const local = {
+      event: "prompts_cancelled",
+      session: "s",
+      request_ids: ["c1"],
+    };
     expect(scopeEventToSelf(local, null)).toBe(local);
   });
 });

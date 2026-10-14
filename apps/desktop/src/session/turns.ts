@@ -760,6 +760,10 @@ export function applyEvent(
     case "worktree_discarded": {
       throw new Error('Not implemented yet: "worktree_discarded" case');
     }
+    case "session_share_changed": {
+      // Share changes refresh the share record and transcript; they carry no turn state.
+      break;
+    }
   }
 
   list[i] = cur;
@@ -862,10 +866,12 @@ function mergeTurnContent(
 
 /** Merge events received during an async transcript read without dropping or duplicating its tail. */
 export function mergeLoadedTurns(
-  loaded: Turn[],
-  live: Turn[],
+  loadedInput: Turn[],
+  liveInput: Turn[],
   running: boolean
 ): Turn[] {
+  let loaded = loadedInput;
+  let live = liveInput;
   if (live.length === 0) return loaded;
   // A transcript read has no stop reason and approximates the end by the last part, so an earlier
   // turn that was Cancelled with no output would collapse to 0s. A live turn with the same canonical
@@ -897,9 +903,11 @@ export function mergeLoadedTurns(
   // Canonical rows are the source of truth: a placeholder for another actor's turn is dropped once
   // the transcript holds its prompt, except the tail which is merged below so live state survives.
   const loadedSeqs = new Set(
-    loaded.slice(0, -1).flatMap((turn) =>
-      turn.transcriptStartSeq == null ? [] : [turn.transcriptStartSeq]
-    )
+    loaded
+      .slice(0, -1)
+      .flatMap((turn) =>
+        turn.transcriptStartSeq == null ? [] : [turn.transcriptStartSeq]
+      )
   );
   live = live.filter(
     (turn) =>
@@ -1083,7 +1091,8 @@ export function turnsFromTranscript(
       const last = out.at(-1);
       if (
         entry.role === "user" &&
-        name &&
+        name !== undefined &&
+        name !== "" &&
         last?.transcriptStartSeq === entry.seq
       )
         last.authorName = name;

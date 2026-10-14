@@ -52,6 +52,8 @@ the candidate; the official `bun test --isolate` on the candidate passes (1116 p
 evidence is still the record for UI renders and the fixture runs; no new clean-tree render was done. A fresh independent
 review of the clean integration found nothing in its bounded scope: [r42](evidence/r42-clean-integration-review.md).
 
+CI fix (R45): the first CI `Validate` run on 4a554bf3 failed at `bun run check` (format on 5 files and 34 lint errors in the sharing UI files, run 38505754099). The fix is format and lint only with no behavior change: the sole new reducer case, `session_share_changed`, is an explicit no-op as before. After it, `bun run check`, `tsc --noEmit`, `vite build` and `bun test --isolate` (1116 pass, 3 skip, 0 fail) exit 0 locally; the CI result of the new head is not claimed here.
+
 Verdict: verified.
 Residual risk: bounded local candidate only. No native steer (fixture ACP lacks it), no paid Agent, cloud, CI or deployment evidence; application visibility is not OS isolation; cross-host handoff without creator provenance stays local/unshared and remote activation is unsupported; manual `share.whoami` and direct hidden-task HTTP refusal were not run in the UI; the rail shows `Completed` for a Cancelled turn (pre-existing generic label, low severity, not fixed); the storage file and event wire details were not separately human-reviewed; no human review or release is approved; the user's R41 takeover authorizes the commit, push, feature PR and merge only after independent review.
 
