@@ -61,6 +61,13 @@ event. One ignored-event arm was added there (no behavior change). Offline `carg
 review and rendered UI of the lint delta: [r46](evidence/r46-current-render-review.md) (two browser origins on one Mac,
 not two physical devices). Two rendering observations are open and not attributed to the baseline.
 
+Delivery correction (R51): the user approved the functional code at head 512a0836dadac04e2936556ebe74b9f6b43b2227
+(quote in the PR body). The local Ready gate then failed because the linked historical research change has a blocked
+verification. The 11 research files were moved unchanged into `evidence/research-archive-20261007/` (the blocked status
+and the unrun prototype stay blocked, nothing is marked passed). The change is docs only: no non-document file differs from
+512a0836, so the approval covers the code; the new head is derived metadata and needs its own CI. See
+[the archive verification](evidence/research-archive-20261007/verification.md).
+
 Verdict: verified.
 Residual risk: bounded local candidate only. No native steer (fixture ACP lacks it), no paid Agent, cloud, CI or deployment evidence; application visibility is not OS isolation; cross-host handoff without creator provenance stays local/unshared and remote activation is unsupported; manual `share.whoami` and direct hidden-task HTTP refusal were not run in the UI; the rail shows `Completed` for a Cancelled turn (pre-existing generic label, low severity, not fixed); the storage file and event wire details were not separately human-reviewed; no human review or release is approved; the user's R41 takeover authorizes the commit, push, feature PR and merge only after independent review.
 

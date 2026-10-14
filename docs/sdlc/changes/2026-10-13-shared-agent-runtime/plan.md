@@ -25,6 +25,12 @@ Files shared with the visualization change (`TranscriptPane.tsx`, `Visualization
 
 R37 ran the current-bundle UI check (creator-private, 390 px header, actors from the store; no source change). R38 was the independent Agent review (AC-6, not human review). Remaining: human review; no commit, push, PR or release is authorized.
 
+Delivery correction (R51, docs only): the historical research change `2026-10-07-shared-agent-research` has a blocked
+verification (its prototype render was never saved), so it cannot be an active Ready change. Its 11 files are moved
+unchanged (git renames, 100 % similarity) to `evidence/research-archive-20261007/` in this change, where its blocked status
+and hypotheses stay as written; the original branch `research/shared-agent-20261008` still holds the same files. This change
+is the only active Change in the PR. No source, test or config differs from the head the user reviewed.
+
 Scratch: ignored private task directories under `.local/agent-work/`, no tracked scratch.
 
 Rollback: nothing is committed. To discard, revert the paths above in the worktree (preserve the visualization hunks); the archived
